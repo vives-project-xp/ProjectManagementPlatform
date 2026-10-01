@@ -1,4 +1,6 @@
+import asyncio
 import os
+from collections.abc import Callable
 from pathlib import Path
 
 import httpx
@@ -52,6 +54,15 @@ def backend_in_process(tmp_path: Path):
     api.use_transport(httpx.ASGITransport(app=backend))
     yield
     api.use_transport(None)
+
+
+async def eventually(check: Callable[[], bool], retries: int = 60) -> None:
+    """Wait until `check()` holds; pages reload their data asynchronously."""
+    for _ in range(retries):
+        if check():
+            return
+        await asyncio.sleep(0.05)
+    assert check()
 
 
 async def log_in(user: User, role: str, password: str | None = None) -> None:

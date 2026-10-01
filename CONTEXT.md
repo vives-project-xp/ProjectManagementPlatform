@@ -35,7 +35,7 @@ A password set by the Superuser that the User must replace at their next login.
 _Avoid_: Default password, reset code
 
 **Starting account**:
-One of the three Users (one per Role) created from the deployment's `logins.txt` the first time the backend starts, never overwritten afterwards; its password from that file counts as a Temporary password. The only sanctioned use of "account" for a User.
+One of the three Users (one per Role) created from the deployment's `logins.txt` the first time the backend starts, never overwritten afterwards; its password from that file counts as a Temporary password. A line is skipped once its email is taken or any User with its Role exists, so editing a starting account (even its email) never brings the original back. The only sanctioned use of "account" for a User.
 _Avoid_: Default user, seed user, admin account
 
 ### Projects

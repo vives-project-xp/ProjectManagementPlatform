@@ -140,8 +140,44 @@ async def programmes(token: str) -> list[str]:
     return await _request("GET", "/api/programmes", token=token)
 
 
-async def list_users(token: str) -> list[dict[str, Any]]:
-    return await _request("GET", "/api/users", token=token)
+async def list_users(
+    token: str, *, role: str | None = None, active: bool | None = None
+) -> list[dict[str, Any]]:
+    filters = []
+    if role:
+        filters.append(f"role={role}")
+    if active is not None:
+        filters.append(f"active={str(active).lower()}")
+    query = f"?{'&'.join(filters)}" if filters else ""
+    return await _request("GET", f"/api/users{query}", token=token)
+
+
+async def get_user(token: str, user_id: int) -> dict[str, Any]:
+    return await _request("GET", f"/api/users/{user_id}", token=token)
+
+
+async def update_user(
+    token: str, user_id: int, fields: dict[str, Any]
+) -> dict[str, Any]:
+    """`fields`: first_name, last_name, email, programme, year (never the Role)."""
+    return await _request("PUT", f"/api/users/{user_id}", token=token, json=fields)
+
+
+async def deactivate_user(token: str, user_id: int) -> dict[str, Any]:
+    return await _request("POST", f"/api/users/{user_id}/deactivate", token=token)
+
+
+async def reactivate_user(token: str, user_id: int) -> dict[str, Any]:
+    return await _request("POST", f"/api/users/{user_id}/reactivate", token=token)
+
+
+async def reset_password(token: str, user_id: int, temporary_password: str) -> None:
+    await _request(
+        "POST",
+        f"/api/users/{user_id}/reset-password",
+        token=token,
+        json={"temporary_password": temporary_password},
+    )
 
 
 async def create_user(token: str, new_user: dict[str, Any]) -> dict[str, Any]:

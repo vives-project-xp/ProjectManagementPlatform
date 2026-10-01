@@ -7,18 +7,19 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from pmp_backend.domain import ProjectStatus, Role
+from pmp_backend.errors import Conflict, NotFound, Refused
 from pmp_backend.models import Project, User
 
 
-class ProjectError(Exception):
+class ProjectError(Refused):
     """A Project could not be saved as asked; the message is fit to show."""
 
 
-class DuplicateTitleError(ProjectError):
+class DuplicateTitleError(ProjectError, Conflict):
     pass
 
 
-class ProjectNotFoundError(ProjectError):
+class ProjectNotFoundError(ProjectError, NotFound):
     pass
 
 
@@ -40,6 +41,20 @@ def active_teachers(session: Session) -> list[User]:
             select(User)
             .where(User.role == Role.TEACHER.value, User.is_active)
             .order_by(User.last_name, User.first_name)
+        )
+    )
+
+
+def active_titles_owned_by(session: Session, user_id: int) -> list[str]:
+    """Titles of the active Projects this User is Product Owner of."""
+    return list(
+        session.scalars(
+            select(Project.title)
+            .where(
+                Project.product_owner_id == user_id,
+                Project.status == ProjectStatus.ACTIVE.value,
+            )
+            .order_by(Project.title)
         )
     )
 

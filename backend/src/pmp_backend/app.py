@@ -1,13 +1,13 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import sessionmaker
 
 from pmp_backend.api import auth, programmes, projects, users
 from pmp_backend.database import is_reachable, make_engine
-from pmp_backend.services.projects import ProjectError
+from pmp_backend.errors import Conflict, NotFound, Refused
 from pmp_backend.services.seeding import seed_starting_accounts
 from pmp_backend.settings import Settings
 
@@ -31,7 +31,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(users.router)
     app.include_router(programmes.router)
     app.include_router(projects.router)
-    app.add_exception_handler(ProjectError, projects.refused)
+
+    @app.exception_handler(Refused)
+    def refused(request: Request, error: Refused) -> JSONResponse:
+        # Services refuse with a message fit to show; only the status differs.
+        if isinstance(error, NotFound):
+            code = status.HTTP_404_NOT_FOUND
+        elif isinstance(error, Conflict):
+            code = status.HTTP_409_CONFLICT
+        else:
+            code = status.HTTP_422_UNPROCESSABLE_CONTENT
+        return JSONResponse({"detail": str(error)}, status_code=code)
 
     @app.get("/api/health")
     def health() -> JSONResponse:
