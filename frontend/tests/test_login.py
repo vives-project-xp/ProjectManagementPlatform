@@ -46,8 +46,7 @@ async def test_new_passwords_must_match(user: User):
 
 
 async def test_student_only_sees_my_project(user: User):
-    await log_in(user, "student")
-    await change_starting_password(user, "student", "my-new-password")
+    await ready_to_work(user, "student")
 
     await user.should_see("My project")
     await user.should_not_see("Projects")

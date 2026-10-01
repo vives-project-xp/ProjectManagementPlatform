@@ -61,7 +61,7 @@ A finished Project, kept read-only for the history overview. Archiving frees its
 _Avoid_: Deleted project, closed project, historical project
 
 **Makers**:
-The fixed record of the Students (name, Programme, Year) who were Members of a Project at the moment it was archived; it never changes afterwards.
+The permanent record of the Students (name, Programme, Year) who were Members of a Project when it was archived. Nobody is ever removed from it: archiving a restored Project again only adds the new Members (a Student already listed is not added twice). Shown as "Made by".
 _Avoid_: History, former members, credits
 
 **Programme**:

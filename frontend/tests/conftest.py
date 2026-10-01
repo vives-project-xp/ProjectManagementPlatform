@@ -119,3 +119,11 @@ async def create_project(
     fill_project_form(user, title, minimum, maximum)
     user.find(marker="create-project").click()
     await user.should_see(f"Project {title} was created.")
+
+
+def choose_student(user: User, name: str) -> None:
+    choice = user.find(marker="student-choice").elements.pop()
+    assert isinstance(choice, ui.select)
+    choice.set_value(
+        next(key for key, label in choice.options.items() if label.startswith(name))
+    )

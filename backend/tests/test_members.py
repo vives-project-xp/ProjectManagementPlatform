@@ -1,60 +1,12 @@
 from fastapi.testclient import TestClient
 
-from tests.conftest import ready_to_work
-
-NEW_STUDENT = {
-    "role": "student",
-    "last_name": "Peeters",
-    "temporary_password": "welcome-student",
-    "programme": "Electronics-ICT",
-    "year": "2",
-}
-
-
-def teacher_id(client: TestClient, headers: dict[str, str]) -> int:
-    teachers = client.get("/api/teachers", headers=headers).json()
-    return next(t["id"] for t in teachers if t["name"] == "Teacher Account")
-
-
-def create_project(
-    client: TestClient, headers: dict[str, str], title: str, minimum=1, maximum=3
-) -> int:
-    response = client.post(
-        "/api/projects",
-        json={
-            "title": title,
-            "product_owner_id": teacher_id(client, headers),
-            "team_size_min": minimum,
-            "team_size_max": maximum,
-        },
-        headers=headers,
-    )
-    assert response.status_code == 201, response.text
-    return response.json()["id"]
-
-
-def create_student(client: TestClient, headers: dict[str, str], first_name: str) -> int:
-    body = NEW_STUDENT | {
-        "first_name": first_name,
-        "email": f"{first_name.lower()}@student.vives.be",
-    }
-    response = client.post("/api/users", json=body, headers=headers)
-    assert response.status_code == 201, response.text
-    return response.json()["id"]
-
-
-def add_member(
-    client: TestClient,
-    headers: dict[str, str],
-    project_id: int,
-    student_id: int,
-    confirm_move: bool = False,
-):
-    return client.post(
-        f"/api/projects/{project_id}/members",
-        json={"student_id": student_id, "confirm_move": confirm_move},
-        headers=headers,
-    )
+from tests.conftest import (
+    add_member,
+    create_project,
+    create_student,
+    ready_to_work,
+    teacher_id,
+)
 
 
 def member_names(client, headers, project_id) -> list[str]:
