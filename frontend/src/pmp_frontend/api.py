@@ -1,6 +1,7 @@
 """The only way the frontend talks to the backend: its REST API over HTTP (ADR 0003)."""
 
 from dataclasses import dataclass
+from typing import Any
 
 import httpx
 
@@ -20,6 +21,38 @@ def _client() -> httpx.AsyncClient:
     return httpx.AsyncClient(base_url=base_url, transport=_transport, timeout=5)
 
 
+class ApiError(Exception):
+    """The backend refused a request; `message` is fit to show to the User."""
+
+    def __init__(self, status_code: int, message: str) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+        self.message = message
+
+    @property
+    def is_unauthorized(self) -> bool:
+        return self.status_code == 401
+
+
+async def _request(
+    method: str, path: str, *, token: str | None = None, json: Any = None
+) -> Any:
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
+    try:
+        async with _client() as client:
+            response = await client.request(method, path, headers=headers, json=json)
+    except httpx.HTTPError as error:
+        raise ApiError(503, "The server cannot be reached. Try again later.") from error
+    if response.is_error:
+        try:
+            detail = response.json().get("detail")
+        except ValueError:
+            detail = None
+        message = detail if isinstance(detail, str) else "Something went wrong."
+        raise ApiError(response.status_code, message)
+    return response.json() if response.content else None
+
+
 @dataclass(frozen=True)
 class Health:
     backend_online: bool
@@ -35,3 +68,51 @@ async def get_health() -> Health:
         # Unreachable, or something answered that is not our backend's JSON.
         return Health(backend_online=False, database_online=False)
     return Health(backend_online=True, database_online=body.get("database") == "ok")
+
+
+@dataclass(frozen=True)
+class CurrentUser:
+    first_name: str
+    last_name: str
+    email: str
+    role: str
+    must_change_password: bool
+
+    @classmethod
+    def of(cls, body: dict[str, Any]) -> "CurrentUser":
+        return cls(
+            first_name=body["first_name"],
+            last_name=body["last_name"],
+            email=body["email"],
+            role=body["role"],
+            must_change_password=body["must_change_password"],
+        )
+
+    @property
+    def full_name(self) -> str:
+        return f"{self.first_name} {self.last_name}"
+
+
+async def login(email: str, password: str) -> tuple[str, CurrentUser]:
+    """The token and the logged-in User."""
+    body = await _request(
+        "POST", "/api/auth/login", json={"email": email, "password": password}
+    )
+    return body["access_token"], CurrentUser.of(body["user"])
+
+
+async def me(token: str) -> CurrentUser:
+    return CurrentUser.of(await _request("GET", "/api/auth/me", token=token))
+
+
+async def change_password(token: str, current_password: str, new_password: str) -> None:
+    await _request(
+        "POST",
+        "/api/auth/change-password",
+        token=token,
+        json={"current_password": current_password, "new_password": new_password},
+    )
+
+
+async def logout(token: str) -> None:
+    await _request("POST", "/api/auth/logout", token=token)

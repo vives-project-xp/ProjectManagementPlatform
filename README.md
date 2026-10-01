@@ -79,10 +79,21 @@ uvx ruff format --check .
 ### Run the whole stack locally
 
 ```bash
-cp .env.example .env                          # then set a POSTGRES_PASSWORD
+cp .env.example .env                          # then set the passwords and secrets
 docker compose up -d --build
 docker compose run --rm backend alembic upgrade head
+docker compose restart backend                # creates the starting accounts
 ```
+
+The starting accounts come from `logins.txt` (gitignored), one `role,email,password` line per Role:
+
+```text
+superuser,superuser@example.com,a-temporary-password
+teacher,teacher@example.com,a-temporary-password
+student,student@example.com,a-temporary-password
+```
+
+They are created when the backend starts, only if they don't exist yet, so changed passwords survive restarts. Every starting account must choose a new password at first login.
 
 Open <https://localhost> (accept the certificate warning; Caddy signs it with its own CA). The backend health check is at <https://localhost/api/health>.
 
@@ -91,5 +102,5 @@ Open <https://localhost> (accept the certificate warning; Caddy signs it with it
 - **CI** (`.github/workflows/ci.yml`) runs lint and all tests on GitHub-hosted runners for every pull request and every push to `main`.
 - **Deploy** (`.github/workflows/deploy.yml`) starts only after CI succeeded for a push to `main`. It runs on the self-hosted runner `px6-vm` on the VM: builds the images, runs the migrations, restarts the services, and fails if `https://10.20.10.33/api/health` does not answer.
 - Pull requests never run on the self-hosted runner (the repository is public).
-- Secrets live only on the VM in `/opt/pmp/.env` (owned by the `github-runner` user); `.env` and `logins.txt` are gitignored.
+- Secrets live only on the VM in `/opt/pmp/.env` and `/opt/pmp/logins.txt` (owned by the `github-runner` user); `.env` and `logins.txt` are gitignored.
 - The live site is <https://10.20.10.33> (VIVES network only). Browsers warn about the certificate until VIVES IT provides a hostname.

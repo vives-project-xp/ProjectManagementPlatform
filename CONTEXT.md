@@ -34,6 +34,10 @@ _Avoid_: Deleted user, removed user
 A password set by the Superuser that the User must replace at their next login.
 _Avoid_: Default password, reset code
 
+**Starting account**:
+One of the three Users (one per Role) created from the deployment's `logins.txt` the first time the backend starts, never overwritten afterwards; its password from that file counts as a Temporary password. The only sanctioned use of "account" for a User.
+_Avoid_: Default user, seed user, admin account
+
 ### Projects
 
 **Project**:
