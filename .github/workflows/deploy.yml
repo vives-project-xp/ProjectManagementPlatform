@@ -62,6 +62,10 @@ jobs:
           docker compose --env-file "$ENV_FILE" logs --tail 50 backend frontend caddy
           exit 1
 
+      - name: Backup and restore test
+        # Proves on every deploy that a fresh backup restores (docs/backups.md).
+        run: docker compose --env-file "$ENV_FILE" exec -T backup sh /backup.sh restore-test
+
       - name: Remove dangling images
         if: always()
         run: docker image prune -f

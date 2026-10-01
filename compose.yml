@@ -31,6 +31,24 @@ services:
       db:
         condition: service_healthy
 
+  # Nightly pg_dump kept for 14 days (ADR 0005, docs/backups.md).
+  backup:
+    image: postgres:16
+    restart: unless-stopped
+    entrypoint: ["sh", "/backup.sh"]
+    environment:
+      PGHOST: db
+      PGUSER: ${POSTGRES_USER}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: ${POSTGRES_DB}
+    volumes:
+      - ./backup/backup.sh:/backup.sh:ro
+      # On the VM, outside the runner's checkout (which is wiped on every deploy).
+      - ${BACKUP_PATH:-/opt/pmp/backups}:/backups
+    depends_on:
+      db:
+        condition: service_healthy
+
   frontend:
     build: ./frontend
     restart: unless-stopped
