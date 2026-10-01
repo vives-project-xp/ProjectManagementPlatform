@@ -30,9 +30,8 @@ async def get_health() -> Health:
     try:
         async with _client() as client:
             response = await client.get("/api/health")
-    except httpx.HTTPError:
+        body = response.json()
+    except (httpx.HTTPError, ValueError):
+        # Unreachable, or something answered that is not our backend's JSON.
         return Health(backend_online=False, database_online=False)
-    return Health(
-        backend_online=True,
-        database_online=response.json().get("database") == "ok",
-    )
+    return Health(backend_online=True, database_online=body.get("database") == "ok")

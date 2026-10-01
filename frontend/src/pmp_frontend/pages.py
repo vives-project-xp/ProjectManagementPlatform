@@ -5,8 +5,14 @@ from pmp_frontend.theme import frame
 
 
 def _status_label(name: str, online: bool) -> None:
-    color = "text-green-8" if online else "text-negative"
-    ui.label(f"{name}: {'online' if online else 'offline'}").classes(color)
+    # Text stays black (house style); only the icon signals status, in VIVES red
+    # when something is offline.
+    with ui.row().classes("items-center gap-2"):
+        if online:
+            ui.icon("check_circle", color="dark")
+        else:
+            ui.icon("error", color="primary")
+        ui.label(f"{name}: {'online' if online else 'offline'}")
 
 
 def register_pages() -> None:

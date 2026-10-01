@@ -10,7 +10,9 @@ ENV UV_COMPILE_BYTECODE=1 \
 WORKDIR /app
 
 # --no-dev: the backend is only a dev dependency (for in-process tests), so the
-# production image contains the frontend alone.
+# production image contains the frontend alone. --frozen instead of --locked: the
+# lock references ../backend, which is outside this build context; CI already
+# checks the lock with `uv sync --locked`.
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 
