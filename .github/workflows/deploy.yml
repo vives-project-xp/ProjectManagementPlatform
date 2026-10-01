@@ -1,0 +1,62 @@
+name: Deploy
+
+# Runs on the self-hosted runner on the VM (ADR 0001), and only after CI passed for
+# a push to main. The repository is public: this workflow must never be triggered
+# by pull requests, or a fork could run code on the VM.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push'
+    runs-on: [self-hosted, vm]
+    env:
+      # Secrets and SITE_ADDRESS live only on the VM.
+      ENV_FILE: /opt/pmp/.env
+      COMPOSE_PROJECT_NAME: pmp
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Build images
+        run: docker compose --env-file "$ENV_FILE" build
+
+      - name: Start database
+        run: docker compose --env-file "$ENV_FILE" up -d --wait db
+
+      - name: Run migrations
+        run: docker compose --env-file "$ENV_FILE" run --rm backend alembic upgrade head
+
+      - name: Start services
+        run: docker compose --env-file "$ENV_FILE" up -d --remove-orphans
+
+      - name: Health check
+        run: |
+          set -a; . "$ENV_FILE"; set +a
+          for attempt in $(seq 1 30); do
+            if curl -fsk "https://$SITE_ADDRESS/api/health"; then
+              echo; echo "Deployed and healthy."; exit 0
+            fi
+            sleep 2
+          done
+          echo "Health check failed after deploy." >&2
+          docker compose --env-file "$ENV_FILE" ps
+          docker compose --env-file "$ENV_FILE" logs --tail 50 backend frontend caddy
+          exit 1
+
+      - name: Remove dangling images
+        if: always()
+        run: docker image prune -f

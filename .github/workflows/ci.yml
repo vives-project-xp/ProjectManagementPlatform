@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Lint
+        run: uvx ruff check .
+      - name: Check formatting
+        run: uvx ruff format --check .
+
+  test:
+    runs-on: ubuntu-latest
+    # Tests run against a real PostgreSQL (docs/coding-standards.md).
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: pmp
+          POSTGRES_PASSWORD: pmp
+          POSTGRES_DB: pmp_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U pmp -d pmp_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql+psycopg://pmp:pmp@localhost:5432/pmp_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+      - name: Backend tests
+        working-directory: backend
+        run: |
+          uv sync --locked
+          uv run pytest
+      - name: Frontend tests
+        working-directory: frontend
+        run: |
+          uv sync --locked
+          uv run pytest

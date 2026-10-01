@@ -1,0 +1,24 @@
+# Secrets: never commit (docs/coding-standards.md)
+.env
+.env.*
+!.env.example
+logins.txt
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+
+# NiceGUI local storage
+.nicegui/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
