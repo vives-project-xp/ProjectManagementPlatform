@@ -2,7 +2,7 @@ from fastapi.responses import RedirectResponse
 from nicegui import app, ui
 from starlette.responses import Response
 
-from pmp_frontend import api, users_page
+from pmp_frontend import api, projects_page, users_page
 from pmp_frontend.shell import (
     TOKEN_KEY,
     ErrorMessage,
@@ -127,14 +127,9 @@ def register_pages() -> None:
         return None
 
     users_page.register()
+    projects_page.register()
 
     # Placeholder screens; later tickets fill them in.
-    _placeholder_page(
-        "/projects",
-        "Projects",
-        {"superuser", "teacher"},
-        "Managing Projects comes in a later version.",
-    )
     _placeholder_page(
         "/members",
         "Members",

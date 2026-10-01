@@ -1,6 +1,6 @@
 """FastAPI dependencies: database session and the logged-in User."""
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request, status
@@ -63,18 +63,24 @@ def current_user(
     return user
 
 
-def superuser(user: Annotated[User, Depends(current_user)]) -> User:
-    """The logged-in User, refused unless they are the Superuser."""
-    if user.role != Role.SUPERUSER:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only the Superuser can do this.",
-        )
-    return user
+def _role_in(*roles: Role) -> Callable[[User], User]:
+    """A dependency giving the logged-in User, refused without one of `roles`."""
+
+    def check(user: Annotated[User, Depends(current_user)]) -> User:
+        if user.role not in roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You don't have access to this.",
+            )
+        return user
+
+    return check
 
 
 TemporaryPasswordUserDep = Annotated[
     User, Depends(current_user_allowing_temporary_password)
 ]
 CurrentUserDep = Annotated[User, Depends(current_user)]
-SuperuserDep = Annotated[User, Depends(superuser)]
+SuperuserDep = Annotated[User, Depends(_role_in(Role.SUPERUSER))]
+# Teachers and the Superuser: everything about Projects and Members (spec #3).
+StaffDep = Annotated[User, Depends(_role_in(Role.SUPERUSER, Role.TEACHER))]

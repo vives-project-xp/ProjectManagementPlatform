@@ -101,10 +101,14 @@ def role_page(
                 return user
             with frame(title, header=lambda: header(user)):
                 if user.role not in roles:
-                    ui.label("No access").classes("text-h4")
-                    ui.label("You don't have access to this page.")
+                    no_access()
                 else:
                     await build(user)
             return None
 
     return register
+
+
+def no_access() -> None:
+    ui.label("No access").classes("text-h4")
+    ui.label("You don't have access to this page.")
