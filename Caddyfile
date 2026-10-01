@@ -1,0 +1,14 @@
+# HTTPS in front of the app (ADR 0001). Until VIVES IT provides a hostname and a
+# certificate, Caddy's internal CA signs the certificate, so browsers warn.
+{
+	# Browsers send no server name (SNI) when connecting to an IP address;
+	# without this Caddy cannot pick the certificate and the handshake fails.
+	default_sni {$SITE_ADDRESS}
+}
+
+{$SITE_ADDRESS} {
+	tls internal
+	encode gzip
+	reverse_proxy /api/* backend:8000
+	reverse_proxy frontend:8080
+}
