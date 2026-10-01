@@ -13,6 +13,8 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
+from pmp_backend.domain import ProjectStatus
+
 
 class Base(DeclarativeBase):
     pass
@@ -69,7 +71,7 @@ class Project(Base):
     product_owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     team_size_min: Mapped[int]
     team_size_max: Mapped[int]
-    status: Mapped[str] = mapped_column(String(20), default="active")
+    status: Mapped[str] = mapped_column(String(20), default=ProjectStatus.ACTIVE.value)
     # Snapshot of the Members at archive time (name, Programme, Year); see #10.
     makers: Mapped[list[dict]] = mapped_column(
         JSONB, default=list, server_default=text("'[]'::jsonb")

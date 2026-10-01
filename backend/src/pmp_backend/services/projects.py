@@ -6,7 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from pmp_backend.domain import Role
+from pmp_backend.domain import ProjectStatus, Role
 from pmp_backend.models import Project, User
 
 
@@ -56,7 +56,7 @@ def get_project(session: Session, project_id: int) -> Project:
 
 
 def create_project(session: Session, fields: ProjectFields) -> Project:
-    project = Project(status="active")
+    project = Project(status=ProjectStatus.ACTIVE.value)
     _apply(session, project, fields)
     session.add(project)
     _commit(session, fields.title)
@@ -102,8 +102,10 @@ def _commit(session: Session, title: str) -> None:
     try:
         session.commit()
     except IntegrityError as error:
-        # Someone else took the title between the check and the save.
         session.rollback()
+        if "uq_projects_title_lower" not in str(error.orig):
+            raise
+        # Someone else took the title between the check and the save.
         raise DuplicateTitleError(
             f"A Project called {title} already exists."
         ) from error

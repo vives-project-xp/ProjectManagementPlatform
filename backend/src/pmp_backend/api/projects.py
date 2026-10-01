@@ -1,9 +1,10 @@
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Request, status
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, StringConstraints
 
-from pmp_backend.api.deps import SessionDep, StaffDep
+from pmp_backend.api.deps import SessionDep, TeacherOrSuperuserDep
 from pmp_backend.models import Project, User
 from pmp_backend.services import projects
 from pmp_backend.services.projects import ProjectFields
@@ -55,48 +56,44 @@ class ProjectIn(BaseModel):
         return ProjectFields(**self.model_dump())
 
 
-def _refused(error: projects.ProjectError) -> HTTPException:
+def refused(request: Request, error: Exception) -> JSONResponse:
+    """Exception handler: a refused Project action as an HTTP error (see app.py)."""
     if isinstance(error, projects.ProjectNotFoundError):
-        return HTTPException(status.HTTP_404_NOT_FOUND, detail=str(error))
-    if isinstance(error, projects.DuplicateTitleError):
-        return HTTPException(status.HTTP_409_CONFLICT, detail=str(error))
-    return HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(error))
+        code = status.HTTP_404_NOT_FOUND
+    elif isinstance(error, projects.DuplicateTitleError):
+        code = status.HTTP_409_CONFLICT
+    else:
+        code = status.HTTP_422_UNPROCESSABLE_CONTENT
+    return JSONResponse({"detail": str(error)}, status_code=code)
 
 
 @router.get("/teachers")
-def teachers(session: SessionDep, staff: StaffDep) -> list[PersonOut]:
+def teachers(session: SessionDep, user: TeacherOrSuperuserDep) -> list[PersonOut]:
     """The active Teachers, to choose a Product Owner from."""
     return [PersonOut.of(teacher) for teacher in projects.active_teachers(session)]
 
 
 @router.get("/projects")
-def list_projects(session: SessionDep, staff: StaffDep) -> list[ProjectOut]:
+def list_projects(session: SessionDep, user: TeacherOrSuperuserDep) -> list[ProjectOut]:
     return [ProjectOut.of(project) for project in projects.list_projects(session)]
 
 
 @router.post("/projects", status_code=status.HTTP_201_CREATED)
-def create_project(body: ProjectIn, session: SessionDep, staff: StaffDep) -> ProjectOut:
-    try:
-        return ProjectOut.of(projects.create_project(session, body.fields()))
-    except projects.ProjectError as error:
-        raise _refused(error) from error
+def create_project(
+    body: ProjectIn, session: SessionDep, user: TeacherOrSuperuserDep
+) -> ProjectOut:
+    return ProjectOut.of(projects.create_project(session, body.fields()))
 
 
 @router.get("/projects/{project_id}")
-def get_project(project_id: int, session: SessionDep, staff: StaffDep) -> ProjectOut:
-    try:
-        return ProjectOut.of(projects.get_project(session, project_id))
-    except projects.ProjectError as error:
-        raise _refused(error) from error
+def get_project(
+    project_id: int, session: SessionDep, user: TeacherOrSuperuserDep
+) -> ProjectOut:
+    return ProjectOut.of(projects.get_project(session, project_id))
 
 
 @router.put("/projects/{project_id}")
 def update_project(
-    project_id: int, body: ProjectIn, session: SessionDep, staff: StaffDep
+    project_id: int, body: ProjectIn, session: SessionDep, user: TeacherOrSuperuserDep
 ) -> ProjectOut:
-    try:
-        return ProjectOut.of(
-            projects.update_project(session, project_id, body.fields())
-        )
-    except projects.ProjectError as error:
-        raise _refused(error) from error
+    return ProjectOut.of(projects.update_project(session, project_id, body.fields()))

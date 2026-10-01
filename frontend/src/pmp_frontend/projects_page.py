@@ -92,7 +92,7 @@ def register() -> None:
             await refresh()
 
         with ui.dialog() as dialog, ui.card().classes("w-full max-w-lg"):
-            ui.label("New project").classes("text-h6")
+            ui.label("New Project").classes("text-h6")
             read_fields = _project_form(teachers)
             error_message = ErrorMessage()
             with ui.row():
@@ -102,7 +102,7 @@ def register() -> None:
         with ui.row().classes("w-full items-center"):
             ui.label("Projects").classes("text-h4")
             ui.space()
-            ui.button("New project", on_click=dialog.open).mark("new-project")
+            ui.button("New Project", on_click=dialog.open).mark("new-project")
         table = ui.table(columns=COLUMNS, rows=[], row_key="id").classes("w-full")
         table.mark("projects")
         table.on(
