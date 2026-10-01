@@ -14,6 +14,11 @@ class Programme(StrEnum):
     ELECTRONICS_ICT = "Electronics-ICT"
 
 
+class ProjectStatus(StrEnum):
+    ACTIVE = "active"
+    ARCHIVED = "archived"
+
+
 class Year(StrEnum):
     FIRST = "1"
     SECOND = "2"

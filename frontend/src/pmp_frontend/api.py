@@ -147,3 +147,29 @@ async def list_users(token: str) -> list[dict[str, Any]]:
 async def create_user(token: str, new_user: dict[str, Any]) -> dict[str, Any]:
     """Create a Teacher or Student; `new_user` matches the backend's create body."""
     return await _request("POST", "/api/users", token=token, json=new_user)
+
+
+async def teachers(token: str) -> list[dict[str, Any]]:
+    """The active Teachers (id and name), to choose a Product Owner from."""
+    return await _request("GET", "/api/teachers", token=token)
+
+
+async def list_projects(token: str) -> list[dict[str, Any]]:
+    return await _request("GET", "/api/projects", token=token)
+
+
+async def get_project(token: str, project_id: int) -> dict[str, Any]:
+    return await _request("GET", f"/api/projects/{project_id}", token=token)
+
+
+async def create_project(token: str, fields: dict[str, Any]) -> dict[str, Any]:
+    """`fields`: title, description, product_owner_id, team_size_min/max."""
+    return await _request("POST", "/api/projects", token=token, json=fields)
+
+
+async def update_project(
+    token: str, project_id: int, fields: dict[str, Any]
+) -> dict[str, Any]:
+    return await _request(
+        "PUT", f"/api/projects/{project_id}", token=token, json=fields
+    )

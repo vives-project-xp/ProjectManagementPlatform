@@ -1,7 +1,19 @@
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, String, func
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    String,
+    Text,
+    func,
+    text,
+)
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+
+from pmp_backend.domain import ProjectStatus
 
 
 class Base(DeclarativeBase):
@@ -39,3 +51,36 @@ class User(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+class Project(Base):
+    __tablename__ = "projects"
+    __table_args__ = (
+        CheckConstraint(
+            "team_size_min >= 1 AND team_size_min <= team_size_max",
+            name="ck_projects_team_size",
+        ),
+        CheckConstraint("status IN ('active', 'archived')", name="ck_projects_status"),
+        # Titles are unique regardless of case, Archived Projects included.
+        Index("uq_projects_title_lower", func.lower(text("title")), unique=True),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    title: Mapped[str] = mapped_column(String(200))
+    description: Mapped[str | None] = mapped_column(Text)
+    product_owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    team_size_min: Mapped[int]
+    team_size_max: Mapped[int]
+    status: Mapped[str] = mapped_column(String(20), default=ProjectStatus.ACTIVE.value)
+    # Snapshot of the Members at archive time (name, Programme, Year); see #10.
+    makers: Mapped[list[dict]] = mapped_column(
+        JSONB, default=list, server_default=text("'[]'::jsonb")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    product_owner: Mapped[User] = relationship(lazy="joined")
