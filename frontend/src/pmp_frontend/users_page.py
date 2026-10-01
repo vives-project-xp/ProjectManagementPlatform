@@ -6,8 +6,14 @@ from nicegui import ui
 from starlette.responses import Response
 
 from pmp_frontend import api
-from pmp_frontend.shell import ErrorMessage, guard, header, no_access, role_page, token
-from pmp_frontend.theme import frame
+from pmp_frontend.shell import (
+    ErrorMessage,
+    guard,
+    no_access,
+    page_frame,
+    role_page,
+    token,
+)
 
 ROLES = {"teacher": "Teacher", "student": "Student"}
 ROLE_FILTER = {"": "All", "superuser": "Superuser"} | ROLES
@@ -143,7 +149,7 @@ def register() -> None:
         user = await guard()
         if isinstance(user, Response):
             return user
-        with frame("User", header=lambda: header(user)):
+        with page_frame("User", user):
             if user.role != "superuser":
                 no_access()
                 return None

@@ -11,12 +11,11 @@ from pmp_frontend.shell import (
     ErrorMessage,
     confirm,
     guard,
-    header,
     no_access,
+    page_frame,
     role_page,
     token,
 )
-from pmp_frontend.theme import frame
 
 STAFF = {"superuser", "teacher"}
 
@@ -149,7 +148,7 @@ def register() -> None:
         user = await guard()
         if isinstance(user, Response):
             return user
-        with frame("Project", header=lambda: header(user)):
+        with page_frame("Project", user):
             if user.role not in STAFF:
                 no_access()
                 return None

@@ -13,22 +13,11 @@ from pmp_frontend.shell import (
     TOKEN_KEY,
     ErrorMessage,
     guard,
-    header,
     home,
+    page_frame,
     token,
 )
 from pmp_frontend.theme import frame
-
-
-def _status_label(name: str, online: bool) -> None:
-    # Text stays black (house style); only the icon signals status, in VIVES red
-    # when something is offline.
-    with ui.row().classes("items-center gap-2"):
-        if online:
-            ui.icon("check_circle", color="dark")
-        else:
-            ui.icon("error", color="primary")
-        ui.label(f"{name}: {'online' if online else 'offline'}")
 
 
 def register_pages() -> None:
@@ -73,11 +62,6 @@ def register_pages() -> None:
                 )
                 error_message = ErrorMessage()
                 ui.button("Log in", on_click=submit).mark("log-in")
-            health = await api.get_health()
-            with ui.card().classes("w-full"):
-                ui.label("System status").classes("text-h6")
-                _status_label("Backend", health.backend_online)
-                _status_label("Database", health.database_online)
 
     @ui.page("/change-password")
     async def change_password_page() -> Response | None:
@@ -100,7 +84,7 @@ def register_pages() -> None:
             ui.notify("Your password has been changed.")
             ui.navigate.to(home(user))
 
-        with frame("Change password", header=lambda: header(user)):
+        with page_frame("Change password", user):
             ui.label("Change your password").classes("text-h4")
             if user.must_change_password:
                 ui.label("Choose a new password of your own before you continue.")

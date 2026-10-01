@@ -76,23 +76,6 @@ async def _request(
 
 
 @dataclass(frozen=True)
-class Health:
-    backend_online: bool
-    database_online: bool
-
-
-async def get_health() -> Health:
-    try:
-        async with _client() as client:
-            response = await client.get("/api/health")
-        body = response.json()
-    except (httpx.HTTPError, ValueError):
-        # Unreachable, or something answered that is not our backend's JSON.
-        return Health(backend_online=False, database_online=False)
-    return Health(backend_online=True, database_online=body.get("database") == "ok")
-
-
-@dataclass(frozen=True)
 class CurrentUser:
     first_name: str
     last_name: str
