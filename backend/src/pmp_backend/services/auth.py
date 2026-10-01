@@ -36,10 +36,6 @@ def change_password(
         raise PasswordChangeError(
             f"Your new password must be at least {MIN_PASSWORD_LENGTH} characters."
         )
-    if new_password == current_password:
-        raise PasswordChangeError(
-            "Your new password must be different from your current one."
-        )
     user.password_hash = hash_password(new_password)
     user.must_change_password = False
     session.commit()

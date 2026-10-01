@@ -155,7 +155,6 @@ def test_other_endpoints_refuse_until_the_password_is_changed(client: TestClient
     [
         ("wrong-current", "long-enough-1", "current password is incorrect"),
         ("teacher-secret-1", "short", "at least 8 characters"),
-        ("teacher-secret-1", "teacher-secret-1", "must be different"),
     ],
 )
 def test_change_password_rules(

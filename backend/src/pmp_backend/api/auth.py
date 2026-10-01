@@ -65,6 +65,7 @@ def login(
         )
     token = issue_token(
         user.id,
+        user.role,
         settings.jwt_secret,
         timedelta(minutes=settings.token_lifetime_minutes),
     )

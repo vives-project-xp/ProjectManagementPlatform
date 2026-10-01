@@ -24,14 +24,9 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       LOGINS_FILE: /run/secrets/logins.txt
     volumes:
-      # Starting accounts; the file stays outside the repository on the VM.
-      - type: bind
-        source: ${LOGINS_PATH:-./logins.txt}
-        target: /run/secrets/logins.txt
-        read_only: true
-        bind:
-          # A missing file must fail loudly, not turn into an empty directory.
-          create_host_path: false
+      # Starting accounts; the file stays outside the repository on the VM. If it
+      # is missing, the backend logs a warning and starts without them.
+      - ${LOGINS_PATH:-./logins.txt}:/run/secrets/logins.txt:ro
     depends_on:
       db:
         condition: service_healthy

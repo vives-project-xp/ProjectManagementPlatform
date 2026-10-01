@@ -1,14 +1,14 @@
-import os
 from logging.config import fileConfig
 
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
 from pmp_backend.models import Base
+from pmp_backend.settings import DatabaseSettings
 
 config = context.config
 # Migrations only need the database; the rest of Settings is not required here.
-config.set_main_option("sqlalchemy.url", os.environ["DATABASE_URL"])
+config.set_main_option("sqlalchemy.url", DatabaseSettings().database_url)
 
 if config.config_file_name is not None:
     # Keep the app's loggers working when migrations run in-process (tests).

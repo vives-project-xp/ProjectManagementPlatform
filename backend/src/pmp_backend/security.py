@@ -21,9 +21,11 @@ def verify_password(password_hash: str, password: str) -> bool:
         return False
 
 
-def issue_token(user_id: int, secret: str, lifetime: timedelta) -> str:
+def issue_token(user_id: int, role: str, secret: str, lifetime: timedelta) -> str:
     now = datetime.now(UTC)
-    claims = {"sub": str(user_id), "iat": now, "exp": now + lifetime}
+    # The Role is informational for clients; the backend always reads the current
+    # Role from the database.
+    claims = {"sub": str(user_id), "role": role, "iat": now, "exp": now + lifetime}
     return jwt.encode(claims, secret, algorithm=_ALGORITHM)
 
 
