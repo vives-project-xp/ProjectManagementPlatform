@@ -2,14 +2,19 @@ from fastapi.responses import RedirectResponse
 from nicegui import app, ui
 from starlette.responses import Response
 
-from pmp_frontend import api, members_page, projects_page, users_page
+from pmp_frontend import (
+    api,
+    members_page,
+    my_project_page,
+    projects_page,
+    users_page,
+)
 from pmp_frontend.shell import (
     TOKEN_KEY,
     ErrorMessage,
     guard,
     header,
     home,
-    role_page,
     token,
 )
 from pmp_frontend.theme import frame
@@ -24,13 +29,6 @@ def _status_label(name: str, online: bool) -> None:
         else:
             ui.icon("error", color="primary")
         ui.label(f"{name}: {'online' if online else 'offline'}")
-
-
-def _placeholder_page(path: str, title: str, roles: set[str], text: str) -> None:
-    @role_page(path, title, roles)
-    async def page(user: api.CurrentUser) -> None:
-        ui.label(title).classes("text-h4")
-        ui.label(text)
 
 
 def register_pages() -> None:
@@ -129,11 +127,4 @@ def register_pages() -> None:
     users_page.register()
     projects_page.register()
     members_page.register()
-
-    # Placeholder screens; later tickets fill them in.
-    _placeholder_page(
-        "/my-project",
-        "My project",
-        {"student"},
-        "Your Project will be shown here.",
-    )
+    my_project_page.register()
