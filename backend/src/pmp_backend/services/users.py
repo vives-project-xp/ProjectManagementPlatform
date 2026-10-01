@@ -55,9 +55,27 @@ def list_users(
     return list(session.scalars(query))
 
 
-def list_students(session: Session) -> list[User]:
-    """Every Student, active or not, with the Project they are a Member of."""
-    return list_users(session, role=Role.STUDENT)
+def list_students(
+    session: Session,
+    *,
+    without_project: bool = False,
+    programme: Programme | None = None,
+    year: Year | None = None,
+) -> list[User]:
+    """Students, active or not, with the Project they are a Member of; optionally
+    only those without a Project yet, or of one Programme and/or Year."""
+    query = (
+        select(User)
+        .where(User.role == Role.STUDENT.value)
+        .order_by(User.last_name, User.first_name)
+    )
+    if without_project:
+        query = query.where(User.project_id.is_(None))
+    if programme is not None:
+        query = query.where(User.programme == programme.value)
+    if year is not None:
+        query = query.where(User.year == year.value)
+    return list(session.scalars(query))
 
 
 def get_user(session: Session, user_id: int) -> User:

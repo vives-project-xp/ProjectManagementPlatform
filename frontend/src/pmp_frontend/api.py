@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import urlencode
 
 import httpx
 
@@ -196,9 +197,23 @@ async def teachers(token: str) -> list[dict[str, Any]]:
 MOVE_CONFIRMATION_NEEDED = "move_confirmation_needed"
 
 
-async def students(token: str) -> list[dict[str, Any]]:
-    """Every Student with their Project (or None), to choose Members from."""
-    return await _request("GET", "/api/students", token=token)
+async def students(
+    token: str,
+    *,
+    without_project: bool = False,
+    programme: str | None = None,
+    year: str | None = None,
+) -> list[dict[str, Any]]:
+    """Students with their Project (or None), optionally filtered."""
+    params: dict[str, str] = {}
+    if without_project:
+        params["without_project"] = "true"
+    if programme:
+        params["programme"] = programme
+    if year:
+        params["year"] = year
+    query = f"?{urlencode(params)}" if params else ""
+    return await _request("GET", f"/api/students{query}", token=token)
 
 
 async def add_member(
