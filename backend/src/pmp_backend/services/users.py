@@ -55,6 +55,11 @@ def list_users(
     return list(session.scalars(query))
 
 
+def list_students(session: Session) -> list[User]:
+    """Every Student, active or not, with the Project they are a Member of."""
+    return list_users(session, role=Role.STUDENT)
+
+
 def get_user(session: Session, user_id: int) -> User:
     user = session.get(User, user_id)
     if user is None:
@@ -174,7 +179,7 @@ def deactivate_user(session: Session, user_id: int, acting_user: User) -> User:
     owned = active_titles_owned_by(session, user.id)
     if owned:
         raise UserConflictError(
-            f"{user.first_name} {user.last_name} is the Product Owner of these "
+            f"{user.full_name} is the Product Owner of these "
             f"active Projects: {', '.join(owned)}. Choose another Product Owner "
             "first."
         )

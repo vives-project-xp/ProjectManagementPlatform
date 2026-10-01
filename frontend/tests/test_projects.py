@@ -1,34 +1,12 @@
-from nicegui import ui
 from nicegui.testing import User
 
-from tests.conftest import eventually, ready_to_work
-
-
-def project_titles(user: User) -> list[str]:
-    table = user.find(marker="projects").elements.pop()
-    assert isinstance(table, ui.table)
-    return [row["title"] for row in table.rows]
-
-
-def fill_project_form(user: User, title: str, minimum: int, maximum: int) -> None:
-    title_input = user.find(marker="title").elements.pop()
-    title_input.set_value(title)
-    owner = user.find(marker="product-owner").elements.pop()
-    assert isinstance(owner, ui.select)
-    owner.set_value(
-        next(key for key, name in owner.options.items() if name == "Teacher Account")
-    )
-    user.find(marker="team-size-min").elements.pop().set_value(minimum)
-    user.find(marker="team-size-max").elements.pop().set_value(maximum)
-
-
-async def create_project(user: User, title: str) -> None:
-    await user.open("/projects")
-    await user.should_see(marker="projects")
-    user.find(marker="new-project").click()
-    fill_project_form(user, title, 4, 6)
-    user.find(marker="create-project").click()
-    await user.should_see(f"Project {title} was created.")
+from tests.conftest import (
+    create_project,
+    eventually,
+    fill_project_form,
+    project_titles,
+    ready_to_work,
+)
 
 
 async def test_teacher_creates_a_project(user: User):

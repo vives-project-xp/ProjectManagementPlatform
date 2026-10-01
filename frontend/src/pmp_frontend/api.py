@@ -24,10 +24,12 @@ def _client() -> httpx.AsyncClient:
 class ApiError(Exception):
     """The backend refused a request; `message` is fit to show to the User."""
 
-    def __init__(self, status_code: int, message: str) -> None:
+    def __init__(self, status_code: int, message: str, code: str | None = None) -> None:
         super().__init__(message)
         self.status_code = status_code
         self.message = message
+        # Set when the page must react specifically, e.g. "move_confirmation_needed".
+        self.code = code
 
     @property
     def is_unauthorized(self) -> bool:
@@ -58,16 +60,17 @@ async def _request(
         raise ApiError(503, "The server cannot be reached. Try again later.") from error
     if response.is_error:
         try:
-            detail = response.json().get("detail")
+            body = response.json()
         except ValueError:
-            detail = None
+            body = {}
+        detail = body.get("detail")
         if isinstance(detail, str):
             message = detail
         elif isinstance(detail, list):
             message = _validation_message(detail)
         else:
             message = "Something went wrong."
-        raise ApiError(response.status_code, message)
+        raise ApiError(response.status_code, message, body.get("code"))
     return response.json() if response.content else None
 
 
@@ -188,6 +191,33 @@ async def create_user(token: str, new_user: dict[str, Any]) -> dict[str, Any]:
 async def teachers(token: str) -> list[dict[str, Any]]:
     """The active Teachers (id and name), to choose a Product Owner from."""
     return await _request("GET", "/api/teachers", token=token)
+
+
+MOVE_CONFIRMATION_NEEDED = "move_confirmation_needed"
+
+
+async def students(token: str) -> list[dict[str, Any]]:
+    """Every Student with their Project (or None), to choose Members from."""
+    return await _request("GET", "/api/students", token=token)
+
+
+async def add_member(
+    token: str, project_id: int, student_id: int, *, confirm_move: bool = False
+) -> dict[str, Any]:
+    """The Project's details after adding; raises ApiError with code
+    MOVE_CONFIRMATION_NEEDED when the Student is a Member elsewhere."""
+    return await _request(
+        "POST",
+        f"/api/projects/{project_id}/members",
+        token=token,
+        json={"student_id": student_id, "confirm_move": confirm_move},
+    )
+
+
+async def remove_member(token: str, project_id: int, student_id: int) -> dict[str, Any]:
+    return await _request(
+        "DELETE", f"/api/projects/{project_id}/members/{student_id}", token=token
+    )
 
 
 async def list_projects(token: str) -> list[dict[str, Any]]:

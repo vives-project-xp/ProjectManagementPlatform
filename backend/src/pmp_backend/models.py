@@ -33,6 +33,11 @@ class User(Base):
             "(role = 'student') = (programme IS NOT NULL AND year IS NOT NULL)",
             name="ck_users_student_fields",
         ),
+        # Only Students are Members (the single column already means: at most
+        # one Project per Student).
+        CheckConstraint(
+            "project_id IS NULL OR role = 'student'", name="ck_users_project_student"
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -45,12 +50,22 @@ class User(Base):
     must_change_password: Mapped[bool] = mapped_column(default=True)
     programme: Mapped[str | None] = mapped_column(String(100))
     year: Mapped[str | None] = mapped_column(String(20))
+    # The Project this Student is a Member of (Students only; see #9).
+    project_id: Mapped[int | None] = mapped_column(ForeignKey("projects.id"))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+    project: Mapped["Project | None"] = relationship(
+        back_populates="members", foreign_keys=[project_id]
+    )
+
+    @property
+    def full_name(self) -> str:
+        return f"{self.first_name} {self.last_name}"
 
 
 class Project(Base):
@@ -83,4 +98,22 @@ class Project(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
-    product_owner: Mapped[User] = relationship(lazy="joined")
+    product_owner: Mapped[User] = relationship(
+        lazy="joined", foreign_keys=[product_owner_id]
+    )
+    # Deactivated Students stay Members and count towards the Team size.
+    members: Mapped[list[User]] = relationship(
+        back_populates="project",
+        foreign_keys=[User.project_id],
+        order_by=(User.last_name, User.first_name),
+        lazy="selectin",
+    )
+
+    @property
+    def member_count(self) -> int:
+        return len(self.members)
+
+    @property
+    def team_size_label(self) -> str:
+        """Members against the Team size, e.g. "3 / 4–6"."""
+        return f"{self.member_count} / {self.team_size_min}–{self.team_size_max}"

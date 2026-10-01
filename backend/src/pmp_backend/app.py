@@ -5,7 +5,7 @@ from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import sessionmaker
 
-from pmp_backend.api import auth, programmes, projects, users
+from pmp_backend.api import auth, programmes, projects, students, users
 from pmp_backend.database import is_reachable, make_engine
 from pmp_backend.errors import Conflict, NotFound, Refused
 from pmp_backend.services.seeding import seed_starting_accounts
@@ -31,6 +31,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(users.router)
     app.include_router(programmes.router)
     app.include_router(projects.router)
+    app.include_router(students.router)
 
     @app.exception_handler(Refused)
     def refused(request: Request, error: Refused) -> JSONResponse:
@@ -41,7 +42,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             code = status.HTTP_409_CONFLICT
         else:
             code = status.HTTP_422_UNPROCESSABLE_CONTENT
-        return JSONResponse({"detail": str(error)}, status_code=code)
+        body = {"detail": str(error)}
+        if error.code:
+            body["code"] = error.code
+        return JSONResponse(body, status_code=code)
 
     @app.get("/api/health")
     def health() -> JSONResponse:
