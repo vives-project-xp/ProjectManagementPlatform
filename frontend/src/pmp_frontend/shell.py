@@ -12,15 +12,16 @@ from pmp_frontend.theme import frame
 
 TOKEN_KEY = "token"
 
-# The screens each Role sees, in navigation order; the first is the Role's home page.
-NAVIGATION: dict[str, list[tuple[str, str]]] = {
+# The screens each Role sees, in navigation order, with their Material icon;
+# the first is the Role's home page.
+NAVIGATION: dict[str, list[tuple[str, str, str]]] = {
     "superuser": [
-        ("Users", "/users"),
-        ("Projects", "/projects"),
-        ("Members", "/members"),
+        ("Users", "/users", "group"),
+        ("Projects", "/projects", "folder"),
+        ("Members", "/members", "badge"),
     ],
-    "teacher": [("Projects", "/projects"), ("Members", "/members")],
-    "student": [("My project", "/my-project")],
+    "teacher": [("Projects", "/projects", "folder"), ("Members", "/members", "badge")],
+    "student": [("My project", "/my-project", "work")],
 }
 
 
@@ -64,11 +65,28 @@ def header(user: api.CurrentUser) -> None:
     with ui.row().classes("items-center gap-4"):
         # Until the Temporary password is changed, there is nowhere else to go.
         if not user.must_change_password:
-            for label, path in NAVIGATION[user.role]:
-                ui.link(label, path).classes("text-dark").mark("navigation")
-            ui.link("Change password", "/change-password").classes("text-dark")
+            for label, path, icon in NAVIGATION[user.role]:
+                _navigation_link(label, path, icon).mark("navigation")
+            _navigation_link("Change password", "/change-password", "lock")
         ui.label(user.full_name).classes("font-medium")
-        ui.button("Log out", on_click=_logout).props("flat color=dark")
+        ui.button("Log out", icon="logout", on_click=_logout).props("flat color=dark")
+
+
+def _navigation_link(label: str, path: str, icon: str) -> ui.link:
+    # Icons stay black like the text (house style), always next to the label.
+    with ui.link(target=path).classes(
+        "text-dark no-underline flex items-center gap-1"
+    ) as link:
+        ui.icon(icon, color="dark")
+        ui.label(label)
+    return link
+
+
+def page_frame(title: str, user: api.CurrentUser):
+    """The frame of a logged-in page: navigation, and the logo leading home."""
+    # Until the Temporary password is changed, there is nowhere else to go.
+    logo_target = None if user.must_change_password else home(user)
+    return frame(title, header=lambda: header(user), home=logo_target)
 
 
 class ErrorMessage:
@@ -99,7 +117,7 @@ def role_page(
             user = await guard()
             if isinstance(user, Response):
                 return user
-            with frame(title, header=lambda: header(user)):
+            with page_frame(title, user):
                 if user.role not in roles:
                     no_access()
                 else:
