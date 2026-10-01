@@ -26,7 +26,7 @@ def test_student_sees_own_project_with_product_owner_and_fellow_members(
     student = ready_to_work(client, "student")
     me = client.get("/api/auth/me", headers=student).json()["id"]
     drone = create_project(client, superuser, "Drone")
-    client.put(
+    response = client.put(
         f"/api/projects/{drone}",
         json={
             "title": "Drone",
@@ -37,6 +37,7 @@ def test_student_sees_own_project_with_product_owner_and_fellow_members(
         },
         headers=superuser,
     )
+    assert response.status_code == 200, response.text
     add_member(client, superuser, drone, me)
     add_member(client, superuser, drone, create_student(client, superuser, "Lisa"))
     create_project(client, superuser, "Robot")

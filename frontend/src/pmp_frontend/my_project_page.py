@@ -15,7 +15,7 @@ def register() -> None:
             ui.label("You haven't been assigned to a project yet.")
             return
         with ui.card().classes("w-full"):
-            ui.label(project["title"]).classes("text-h5").mark("project-title")
+            ui.label(project["title"]).classes("text-h5")
             if project["description"]:
                 ui.label(project["description"])
             ui.label(f"Product Owner: {project['product_owner']}")
