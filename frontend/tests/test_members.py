@@ -1,21 +1,18 @@
 from nicegui import ui
 from nicegui.testing import User
 
-from tests.conftest import create_project, eventually, ready_to_work
+from tests.conftest import (
+    choose_student,
+    create_project,
+    eventually,
+    ready_to_work,
+)
 
 
 def projects_table_members(user: User) -> dict[str, tuple[str, bool]]:
     table = user.find(marker="projects").elements.pop()
     assert isinstance(table, ui.table)
     return {row["title"]: (row["members"], row["understaffed"]) for row in table.rows}
-
-
-def choose_student(user: User, name: str) -> None:
-    choice = user.find(marker="student-choice").elements.pop()
-    assert isinstance(choice, ui.select)
-    choice.set_value(
-        next(key for key, label in choice.options.items() if label.startswith(name))
-    )
 
 
 async def test_teacher_adds_and_moves_a_member(user: User):

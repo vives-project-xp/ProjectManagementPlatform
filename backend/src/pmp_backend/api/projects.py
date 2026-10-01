@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field, StringConstraints
 
 from pmp_backend.api.deps import SessionDep, TeacherOrSuperuserDep
 from pmp_backend.api.schemas import PersonOut, StudentOut
+from pmp_backend.domain import ProjectStatus
 from pmp_backend.models import Project
 from pmp_backend.services import memberships, projects
 from pmp_backend.services.projects import ProjectFields
@@ -36,14 +37,24 @@ class ProjectOut(BaseModel):
         )
 
 
+class MakerOut(BaseModel):
+    """A Member at archive time, kept on the Project forever ("Made by")."""
+
+    name: str
+    programme: str | None
+    year: str | None
+
+
 class ProjectDetailsOut(ProjectOut):
     members: list[StudentOut]
+    makers: list[MakerOut]
 
     @classmethod
     def of(cls, project: Project) -> "ProjectDetailsOut":
         return cls(
             **ProjectOut.of(project).model_dump(),
             members=[StudentOut.of(member) for member in project.members],
+            makers=[MakerOut.model_validate(maker) for maker in project.makers],
         )
 
 
@@ -73,8 +84,27 @@ def teachers(session: SessionDep, user: TeacherOrSuperuserDep) -> list[PersonOut
 
 
 @router.get("/projects")
-def list_projects(session: SessionDep, user: TeacherOrSuperuserDep) -> list[ProjectOut]:
-    return [ProjectOut.of(project) for project in projects.list_projects(session)]
+def list_projects(
+    session: SessionDep,
+    user: TeacherOrSuperuserDep,
+    status: ProjectStatus | None = None,
+) -> list[ProjectOut]:
+    found = projects.list_projects(session, status=status)
+    return [ProjectOut.of(project) for project in found]
+
+
+@router.post("/projects/{project_id}/archive")
+def archive_project(
+    project_id: int, session: SessionDep, user: TeacherOrSuperuserDep
+) -> ProjectDetailsOut:
+    return ProjectDetailsOut.of(projects.archive_project(session, project_id))
+
+
+@router.post("/projects/{project_id}/restore")
+def restore_project(
+    project_id: int, session: SessionDep, user: TeacherOrSuperuserDep
+) -> ProjectDetailsOut:
+    return ProjectDetailsOut.of(projects.restore_project(session, project_id))
 
 
 @router.post("/projects", status_code=status.HTTP_201_CREATED)

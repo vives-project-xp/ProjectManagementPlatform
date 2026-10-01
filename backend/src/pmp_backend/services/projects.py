@@ -63,8 +63,13 @@ def active_titles_owned_by(session: Session, user_id: int) -> list[str]:
     )
 
 
-def list_projects(session: Session) -> list[Project]:
-    return list(session.scalars(select(Project).order_by(func.lower(Project.title))))
+def list_projects(
+    session: Session, *, status: ProjectStatus | None = None
+) -> list[Project]:
+    query = select(Project).order_by(func.lower(Project.title))
+    if status is not None:
+        query = query.where(Project.status == status.value)
+    return list(session.scalars(query))
 
 
 def get_project(session: Session, project_id: int, *, lock: bool = False) -> Project:
@@ -80,6 +85,17 @@ def get_project(session: Session, project_id: int, *, lock: bool = False) -> Pro
     return project
 
 
+def changeable_project(session: Session, project_id: int) -> Project:
+    """The Project, locked until commit, refused when it is archived: Archived
+    Projects are read-only (only restoring changes them)."""
+    project = get_project(session, project_id, lock=True)
+    if project.status == ProjectStatus.ARCHIVED.value:
+        raise ProjectConflictError(
+            f"{project.title} is archived, so it cannot be changed. Restore it first."
+        )
+    return project
+
+
 def create_project(session: Session, fields: ProjectFields) -> Project:
     project = Project(status=ProjectStatus.ACTIVE.value)
     _apply(session, project, fields)
@@ -91,9 +107,45 @@ def create_project(session: Session, fields: ProjectFields) -> Project:
 def update_project(session: Session, project_id: int, fields: ProjectFields) -> Project:
     # Locked like adding a Member, so a lower maximum and a new Member can't
     # both pass their checks at the same moment.
-    project = get_project(session, project_id, lock=True)
+    project = changeable_project(session, project_id)
     _apply(session, project, fields)
     _commit(session, fields.title)
+    return project
+
+
+def archive_project(session: Session, project_id: int) -> Project:
+    """In one transaction: add the current Members to the Makers (never removing
+    anyone, nobody twice), free those Students and make the Project read-only."""
+    project = changeable_project(session, project_id)
+    makers = list(project.makers)
+    known = {maker["student_id"] for maker in makers}
+    for member in project.members:
+        if member.id not in known:
+            makers.append(
+                {
+                    "student_id": member.id,
+                    "name": member.full_name,
+                    "programme": member.programme,
+                    "year": member.year,
+                }
+            )
+    # A new list (not an in-place change), so SQLAlchemy saves the JSONB column.
+    project.makers = makers
+    for member in list(project.members):
+        member.project = None
+    project.status = ProjectStatus.ARCHIVED.value
+    session.commit()
+    session.refresh(project)
+    return project
+
+
+def restore_project(session: Session, project_id: int) -> Project:
+    """Active again, without Members; the Makers stay."""
+    project = get_project(session, project_id, lock=True)
+    if project.status != ProjectStatus.ARCHIVED.value:
+        raise ProjectConflictError(f"{project.title} is not archived.")
+    project.status = ProjectStatus.ACTIVE.value
+    session.commit()
     return project
 
 

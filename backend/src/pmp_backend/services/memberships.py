@@ -6,10 +6,10 @@ Students stay Members and count towards the Team size.
 
 from sqlalchemy.orm import Session
 
-from pmp_backend.domain import ProjectStatus, Role
+from pmp_backend.domain import Role
 from pmp_backend.errors import Conflict, NotFound, Refused
 from pmp_backend.models import Project, User
-from pmp_backend.services.projects import get_project
+from pmp_backend.services.projects import changeable_project
 
 MOVE_CONFIRMATION_NEEDED = "move_confirmation_needed"
 
@@ -20,20 +20,12 @@ class MoveConfirmationNeededError(Conflict):
     code = MOVE_CONFIRMATION_NEEDED
 
 
-def _changeable_project(session: Session, project_id: int) -> Project:
-    """The Project, locked until commit so two changes cannot both take the
-    last place (see projects.get_project)."""
-    project = get_project(session, project_id, lock=True)
-    if project.status != ProjectStatus.ACTIVE.value:
-        raise Conflict(f"{project.title} is archived; its Members cannot change.")
-    return project
-
-
 def add_member(
     session: Session, project_id: int, student_id: int, *, confirm_move: bool = False
 ) -> Project:
     """Make a Student a Member; moving them from another Project needs confirmation."""
-    project = _changeable_project(session, project_id)
+    # Locked until commit, so two changes cannot both take the last place.
+    project = changeable_project(session, project_id)
     # Locked too, so the same Student cannot be placed twice at the same moment.
     student = session.get(User, student_id, with_for_update=True)
     if student is None or student.role != Role.STUDENT.value:
@@ -62,7 +54,7 @@ def add_member(
 
 
 def remove_member(session: Session, project_id: int, student_id: int) -> Project:
-    project = _changeable_project(session, project_id)
+    project = changeable_project(session, project_id)  # locked, refused if archived
     student = session.get(User, student_id)
     if student is None or student.project_id != project.id:
         raise NotFound(f"This Student is not a Member of {project.title}.")

@@ -105,7 +105,8 @@ def register() -> None:
         teachers = await api.teachers(token())
 
         async def refresh() -> None:
-            table.rows = [_row(project) for project in await api.list_projects(token())]
+            found = await api.list_projects(token(), status=status_filter.value)
+            table.rows = [_row(project) for project in found]
 
         async def create() -> None:
             try:
@@ -129,6 +130,12 @@ def register() -> None:
             ui.label("Projects").classes("text-h4")
             ui.space()
             ui.button("New Project", on_click=dialog.open).mark("new-project")
+        # Active Projects are the current work; Archived ones the history overview.
+        status_filter = ui.toggle(
+            {"active": "Active", "archived": "Archived"},
+            value="active",
+            on_change=refresh,
+        ).mark("status-filter")
         table = ui.table(columns=COLUMNS, rows=[], row_key="id").classes("w-full")
         table.mark("projects")
         table.add_slot("body-cell-members", MEMBERS_CELL)
@@ -163,15 +170,51 @@ def register() -> None:
                 heading.text = saved["title"]
                 ui.notify("The changes were saved.")
 
+            async def change_status() -> None:
+                title = project["title"]
+                if archived:
+                    question = f"Restore {title}? It becomes active without Members."
+                    action, change = "Restore", api.restore_project
+                else:
+                    question = (
+                        f"Archive {title}? Its Members are saved as Makers and "
+                        "freed for other Projects, and it becomes read-only."
+                    )
+                    action, change = "Archive", api.archive_project
+                if not await confirm(question, action):
+                    return
+                try:
+                    await change(token(), project_id)
+                except api.ApiError as error:
+                    status_error.show(error.message)
+                    return
+                ui.navigate.to(f"/projects/{project_id}")
+
+            archived = project["status"] == "archived"
             ui.link("← Projects", "/projects").classes("text-dark")
             heading = ui.label(project["title"]).classes("text-h4")
-            ui.label(f"Status: {project['status'].capitalize()}")
-            with ui.card().classes("w-full max-w-lg"):
-                read_fields = _project_form(teachers, project)
-                error_message = ErrorMessage()
-                ui.button("Save", on_click=save).mark("save-project")
-            with ui.card().classes("w-full max-w-lg"):
-                await _members_section(project)
+            with ui.row().classes("items-center gap-4"):
+                ui.label(f"Status: {project['status'].capitalize()}")
+                ui.button(
+                    "Restore" if archived else "Archive", on_click=change_status
+                ).props("outline color=dark").mark("change-status")
+            status_error = ErrorMessage()
+            if archived:
+                # Archived Projects are read-only: shown, never edited.
+                with ui.card().classes("w-full max-w-lg"):
+                    _read_only_details(project)
+            else:
+                with ui.card().classes("w-full max-w-lg"):
+                    read_fields = _project_form(teachers, project)
+                    error_message = ErrorMessage()
+                    ui.button("Save", on_click=save).mark("save-project")
+                with ui.card().classes("w-full max-w-lg"):
+                    await _members_section(project)
+            if project["makers"]:
+                with ui.card().classes("w-full max-w-lg"):
+                    ui.label("Made by").classes("text-h6")
+                    for maker in project["makers"]:
+                        ui.label(_member_label(maker | {"is_active": True}))
         return None
 
 
@@ -256,6 +299,12 @@ async def _members_section(project: dict[str, Any]) -> None:
     update_choices()
     add_error = ErrorMessage()
     ui.button("Add Member", on_click=add).mark("add-member")
+
+
+def _read_only_details(project: dict[str, Any]) -> None:
+    ui.label(project["description"] or "No description.")
+    ui.label(f"Product Owner: {project['product_owner']['name']}")
+    ui.label(f"Team size: {project['team_size_min']}–{project['team_size_max']}")
 
 
 def _member_label(member: dict[str, Any]) -> str:

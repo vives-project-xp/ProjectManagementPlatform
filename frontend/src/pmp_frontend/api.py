@@ -220,8 +220,20 @@ async def remove_member(token: str, project_id: int, student_id: int) -> dict[st
     )
 
 
-async def list_projects(token: str) -> list[dict[str, Any]]:
-    return await _request("GET", "/api/projects", token=token)
+async def list_projects(
+    token: str, *, status: str | None = None
+) -> list[dict[str, Any]]:
+    """All Projects, or only those with `status` ("active" or "archived")."""
+    query = f"?status={status}" if status else ""
+    return await _request("GET", f"/api/projects{query}", token=token)
+
+
+async def archive_project(token: str, project_id: int) -> dict[str, Any]:
+    return await _request("POST", f"/api/projects/{project_id}/archive", token=token)
+
+
+async def restore_project(token: str, project_id: int) -> dict[str, Any]:
+    return await _request("POST", f"/api/projects/{project_id}/restore", token=token)
 
 
 async def get_project(token: str, project_id: int) -> dict[str, Any]:
