@@ -1,6 +1,6 @@
 """Managing Users: the Superuser's work (spec #3, user service)."""
 
-from sqlalchemy import select
+from sqlalchemy import Select, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -44,20 +44,39 @@ def role_exists(session: Session, role: Role) -> bool:
     )
 
 
-def list_users(
-    session: Session, *, role: Role | None = None, active: bool | None = None
-) -> list[User]:
+def _users_query(*, role: Role | None = None, active: bool | None = None) -> Select:
+    """Users sorted by name, optionally of one Role and/or active state."""
     query = select(User).order_by(User.last_name, User.first_name)
     if role is not None:
         query = query.where(User.role == role.value)
     if active is not None:
         query = query.where(User.is_active == active)
+    return query
+
+
+def list_users(
+    session: Session, *, role: Role | None = None, active: bool | None = None
+) -> list[User]:
+    return list(session.scalars(_users_query(role=role, active=active)))
+
+
+def list_students(
+    session: Session,
+    *,
+    without_project: bool = False,
+    programme: Programme | None = None,
+    year: Year | None = None,
+) -> list[User]:
+    """Students, active or not, with the Project they are a Member of; optionally
+    only those without a Project yet, or of one Programme and/or Year."""
+    query = _users_query(role=Role.STUDENT)
+    if without_project:
+        query = query.where(User.project_id.is_(None))
+    if programme is not None:
+        query = query.where(User.programme == programme.value)
+    if year is not None:
+        query = query.where(User.year == year.value)
     return list(session.scalars(query))
-
-
-def list_students(session: Session) -> list[User]:
-    """Every Student, active or not, with the Project they are a Member of."""
-    return list_users(session, role=Role.STUDENT)
 
 
 def get_user(session: Session, user_id: int) -> User:
