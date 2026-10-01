@@ -34,6 +34,19 @@ class ApiError(Exception):
         return self.status_code == 401
 
 
+def _validation_message(errors: list[Any]) -> str:
+    """Turn the backend's field validation errors into one readable sentence."""
+    problems = []
+    for error in errors:
+        location = error.get("loc") or ["value"]
+        field = str(location[-1]).replace("_", " ").capitalize()
+        if error.get("type") == "string_pattern_mismatch":
+            problems.append(f"{field} is not valid.")
+        else:
+            problems.append(f"{field}: {error.get('msg', 'is not valid')}.")
+    return " ".join(problems) or "Something went wrong."
+
+
 async def _request(
     method: str, path: str, *, token: str | None = None, json: Any = None
 ) -> Any:
@@ -48,7 +61,12 @@ async def _request(
             detail = response.json().get("detail")
         except ValueError:
             detail = None
-        message = detail if isinstance(detail, str) else "Something went wrong."
+        if isinstance(detail, str):
+            message = detail
+        elif isinstance(detail, list):
+            message = _validation_message(detail)
+        else:
+            message = "Something went wrong."
         raise ApiError(response.status_code, message)
     return response.json() if response.content else None
 
@@ -116,3 +134,16 @@ async def change_password(token: str, current_password: str, new_password: str) 
 
 async def logout(token: str) -> None:
     await _request("POST", "/api/auth/logout", token=token)
+
+
+async def programmes(token: str) -> list[str]:
+    return await _request("GET", "/api/programmes", token=token)
+
+
+async def list_users(token: str) -> list[dict[str, Any]]:
+    return await _request("GET", "/api/users", token=token)
+
+
+async def create_user(token: str, new_user: dict[str, Any]) -> dict[str, Any]:
+    """Create a Teacher or Student; `new_user` matches the backend's create body."""
+    return await _request("POST", "/api/users", token=token, json=new_user)

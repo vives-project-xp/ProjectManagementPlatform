@@ -1,23 +1,6 @@
 from nicegui.testing import User
 
-from tests.conftest import STARTING_ACCOUNTS
-
-
-async def log_in(user: User, role: str, password: str | None = None) -> None:
-    email, starting_password = STARTING_ACCOUNTS[role]
-    await user.open("/login")
-    user.find(marker="email").type(email)
-    user.find(marker="password").type(password or starting_password)
-    user.find(marker="log-in").click()
-
-
-async def change_starting_password(user: User, role: str, new_password: str) -> None:
-    _, starting_password = STARTING_ACCOUNTS[role]
-    await user.should_see("Change your password")
-    user.find(marker="current-password").type(starting_password)
-    user.find(marker="new-password").type(new_password)
-    user.find(marker="repeat-password").type(new_password)
-    user.find(marker="change-password").click()
+from tests.conftest import change_starting_password, log_in, ready_to_work
 
 
 async def test_first_login_forces_a_password_change(user: User):
@@ -75,9 +58,7 @@ async def test_student_only_sees_my_project(user: User):
 
 
 async def test_log_out_returns_to_login(user: User):
-    await log_in(user, "superuser")
-    await change_starting_password(user, "superuser", "my-new-password")
-    await user.should_see("Users")
+    await ready_to_work(user, "superuser")
 
     user.find("Log out").click()
 

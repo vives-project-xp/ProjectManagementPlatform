@@ -7,6 +7,7 @@ from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
+from pmp_backend.domain import Role
 from pmp_backend.models import User
 from pmp_backend.security import read_token
 from pmp_backend.settings import Settings
@@ -62,7 +63,18 @@ def current_user(
     return user
 
 
+def superuser(user: Annotated[User, Depends(current_user)]) -> User:
+    """The logged-in User, refused unless they are the Superuser."""
+    if user.role != Role.SUPERUSER:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the Superuser can do this.",
+        )
+    return user
+
+
 TemporaryPasswordUserDep = Annotated[
     User, Depends(current_user_allowing_temporary_password)
 ]
 CurrentUserDep = Annotated[User, Depends(current_user)]
+SuperuserDep = Annotated[User, Depends(superuser)]

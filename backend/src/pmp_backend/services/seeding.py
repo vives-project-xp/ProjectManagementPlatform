@@ -3,13 +3,10 @@
 import logging
 from pathlib import Path
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from pmp_backend.domain import Programme, Role, Year
-from pmp_backend.models import User
-from pmp_backend.security import hash_password
-from pmp_backend.services.auth import normalize_email
+from pmp_backend.services.users import find_by_email, new_user
 
 log = logging.getLogger(__name__)
 
@@ -32,22 +29,19 @@ def seed_starting_accounts(session: Session, logins_file: Path | None) -> None:
             log.warning("Skipping invalid line %d in %s.", line_number, logins_file)
             continue
 
-        email = normalize_email(email)
         # Never overwrite: a password changed by the User survives every deploy.
-        if session.scalar(select(User).where(User.email == email)) is not None:
+        if find_by_email(session, email) is not None:
             continue
         is_student = role is Role.STUDENT
-        session.add(
-            User(
-                first_name=role.value.capitalize(),
-                last_name="Account",
-                email=email,
-                password_hash=hash_password(password),
-                role=role.value,
-                must_change_password=True,
-                programme=Programme.ELECTRONICS_ICT.value if is_student else None,
-                year=Year.FIRST.value if is_student else None,
-            )
+        user = new_user(
+            role=role,
+            first_name=role.value.capitalize(),
+            last_name="Account",
+            email=email,
+            temporary_password=password,
+            programme=Programme.ELECTRONICS_ICT if is_student else None,
+            year=Year.FIRST if is_student else None,
         )
-        log.info("Created starting account %s (%s).", email, role.value)
+        session.add(user)
+        log.info("Created starting account %s (%s).", user.email, role.value)
     session.commit()

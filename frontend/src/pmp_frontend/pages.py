@@ -1,78 +1,18 @@
-from contextlib import suppress
-
 from fastapi.responses import RedirectResponse
 from nicegui import app, ui
 from starlette.responses import Response
 
-from pmp_frontend import api
+from pmp_frontend import api, users_page
+from pmp_frontend.shell import (
+    TOKEN_KEY,
+    ErrorMessage,
+    guard,
+    header,
+    home,
+    role_page,
+    token,
+)
 from pmp_frontend.theme import frame
-
-TOKEN_KEY = "token"
-
-# The screens each Role sees, in navigation order; the first is the Role's home page.
-NAVIGATION: dict[str, list[tuple[str, str]]] = {
-    "superuser": [
-        ("Users", "/users"),
-        ("Projects", "/projects"),
-        ("Members", "/members"),
-    ],
-    "teacher": [("Projects", "/projects"), ("Members", "/members")],
-    "student": [("My project", "/my-project")],
-}
-
-
-def _home(user: api.CurrentUser) -> str:
-    return NAVIGATION[user.role][0][1]
-
-
-async def _guard(
-    *, allow_temporary_password: bool = False
-) -> api.CurrentUser | Response:
-    """The logged-in User, or the redirect that sends them where they must go first."""
-    token = app.storage.user.get(TOKEN_KEY)
-    if not token:
-        return RedirectResponse("/login")
-    try:
-        user = await api.me(token)
-    except api.ApiError as error:
-        if error.is_unauthorized:
-            app.storage.user.pop(TOKEN_KEY, None)
-            return RedirectResponse("/login?expired=true")
-        # Backend unreachable: the login page shows the system status.
-        return RedirectResponse("/login")
-    if user.must_change_password and not allow_temporary_password:
-        return RedirectResponse("/change-password")
-    return user
-
-
-async def _logout() -> None:
-    token = app.storage.user.pop(TOKEN_KEY, None)
-    if token:
-        # Forgetting the token is what logs out; a failing call changes nothing.
-        with suppress(api.ApiError):
-            await api.logout(token)
-    ui.navigate.to("/login")
-
-
-def _header(user: api.CurrentUser) -> None:
-    with ui.row().classes("items-center gap-4"):
-        # Until the Temporary password is changed, there is nowhere else to go.
-        if not user.must_change_password:
-            for label, path in NAVIGATION[user.role]:
-                ui.link(label, path).classes("text-dark")
-            ui.link("Change password", "/change-password").classes("text-dark")
-        ui.label(user.full_name).classes("font-medium")
-        ui.button("Log out", on_click=_logout).props("flat color=dark")
-
-
-def _error_message() -> ui.label:
-    """A hidden error line; set its text and make it visible to show a problem."""
-    with ui.row().classes("items-center gap-2") as row:
-        ui.icon("error", color="primary")
-        label = ui.label()
-    label.bind_visibility_to(row)
-    label.set_visibility(False)
-    return label
 
 
 def _status_label(name: str, online: bool) -> None:
@@ -87,41 +27,31 @@ def _status_label(name: str, online: bool) -> None:
 
 
 def _placeholder_page(path: str, title: str, roles: set[str], text: str) -> None:
-    @ui.page(path)
-    async def page() -> Response | None:
-        user = await _guard()
-        if isinstance(user, Response):
-            return user
-        with frame(title, header=lambda: _header(user)):
-            if user.role not in roles:
-                ui.label("No access").classes("text-h4")
-                ui.label("You don't have access to this page.")
-                return None
-            ui.label(title).classes("text-h4")
-            ui.label(text)
-        return None
+    @role_page(path, title, roles)
+    async def page(user: api.CurrentUser) -> None:
+        ui.label(title).classes("text-h4")
+        ui.label(text)
 
 
 def register_pages() -> None:
     @ui.page("/")
     async def start_page() -> Response:
-        user = await _guard()
+        user = await guard()
         if isinstance(user, Response):
             return user
-        return RedirectResponse(_home(user))
+        return RedirectResponse(home(user))
 
     @ui.page("/login")
     async def login_page(expired: bool = False) -> None:
         async def submit() -> None:
             try:
-                token, user = await api.login(email.value, password.value)
+                new_token, user = await api.login(email.value, password.value)
             except api.ApiError as error:
-                error_message.text = error.message
-                error_message.set_visibility(True)
+                error_message.show(error.message)
                 return
-            app.storage.user[TOKEN_KEY] = token
+            app.storage.user[TOKEN_KEY] = new_token
             ui.navigate.to(
-                "/change-password" if user.must_change_password else _home(user)
+                "/change-password" if user.must_change_password else home(user)
             )
 
         with frame("Log in"):
@@ -143,7 +73,7 @@ def register_pages() -> None:
                     .mark("password")
                     .on("keydown.enter", submit)
                 )
-                error_message = _error_message()
+                error_message = ErrorMessage()
                 ui.button("Log in", on_click=submit).mark("log-in")
             health = await api.get_health()
             with ui.card().classes("w-full"):
@@ -153,30 +83,26 @@ def register_pages() -> None:
 
     @ui.page("/change-password")
     async def change_password_page() -> Response | None:
-        user = await _guard(allow_temporary_password=True)
+        user = await guard(allow_temporary_password=True)
         if isinstance(user, Response):
             return user
 
         async def submit() -> None:
             if new.value != repeat.value:
-                error_message.text = "The new passwords do not match."
-                error_message.set_visibility(True)
+                error_message.show("The new passwords do not match.")
                 return
             try:
-                await api.change_password(
-                    app.storage.user.get(TOKEN_KEY, ""), current.value, new.value
-                )
+                await api.change_password(token(), current.value, new.value)
             except api.ApiError as error:
                 if error.is_unauthorized:
                     ui.navigate.to("/login?expired=true")
                     return
-                error_message.text = error.message
-                error_message.set_visibility(True)
+                error_message.show(error.message)
                 return
             ui.notify("Your password has been changed.")
-            ui.navigate.to(_home(user))
+            ui.navigate.to(home(user))
 
-        with frame("Change password", header=lambda: _header(user)):
+        with frame("Change password", header=lambda: header(user)):
             ui.label("Change your password").classes("text-h4")
             if user.must_change_password:
                 ui.label("Choose a new password of your own before you continue.")
@@ -196,14 +122,13 @@ def register_pages() -> None:
                     .classes("w-full")
                     .mark("repeat-password")
                 )
-                error_message = _error_message()
+                error_message = ErrorMessage()
                 ui.button("Change password", on_click=submit).mark("change-password")
         return None
 
+    users_page.register()
+
     # Placeholder screens; later tickets fill them in.
-    _placeholder_page(
-        "/users", "Users", {"superuser"}, "Managing Users comes in a later version."
-    )
     _placeholder_page(
         "/projects",
         "Projects",

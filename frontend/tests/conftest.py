@@ -3,6 +3,7 @@ from pathlib import Path
 
 import httpx
 import pytest
+from nicegui.testing import User
 
 from pmp_backend import testing
 from pmp_backend.app import create_app
@@ -51,3 +52,29 @@ def backend_in_process(tmp_path: Path):
     api.use_transport(httpx.ASGITransport(app=backend))
     yield
     api.use_transport(None)
+
+
+async def log_in(user: User, role: str, password: str | None = None) -> None:
+    email, starting_password = STARTING_ACCOUNTS[role]
+    await user.open("/login")
+    user.find(marker="email").type(email)
+    user.find(marker="password").type(password or starting_password)
+    user.find(marker="log-in").click()
+
+
+async def change_starting_password(user: User, role: str, new_password: str) -> None:
+    _, starting_password = STARTING_ACCOUNTS[role]
+    await user.should_see("Change your password")
+    user.find(marker="current-password").type(starting_password)
+    user.find(marker="new-password").type(new_password)
+    user.find(marker="repeat-password").type(new_password)
+    user.find(marker="change-password").click()
+
+
+async def ready_to_work(user: User, role: str) -> None:
+    """Log in as a starting account and get past the forced password change."""
+    await log_in(user, role)
+    await change_starting_password(user, role, f"{role}-own-password")
+    # Navigation only appears once the Temporary password is gone; the home page
+    # may need a moment to load its data.
+    await user.should_see(marker="navigation", retries=30)
