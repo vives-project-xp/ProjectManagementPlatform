@@ -21,6 +21,7 @@ async def test_superuser_creates_a_student(user: User):
     user.find(marker="first-name").type("Lisa")
     user.find(marker="last-name").type("Peeters")
     user.find(marker="new-email").type("Lisa.Peeters@student.vives.be")
+    user.find(marker="programme").elements.pop().set_value("Electronics-ICT")
     user.find(marker="year").elements.pop().set_value("International")
     user.find(marker="temporary-password").type("welcome-lisa")
     user.find(marker="create-user").click()
@@ -41,6 +42,22 @@ async def test_duplicate_email_is_shown_in_the_dialog(user: User):
     user.find(marker="create-user").click()
 
     await user.should_see("The email address teacher@pmp.local is already in use.")
+
+
+async def test_invalid_input_gets_a_readable_message(user: User):
+    await ready_to_work(user, "superuser")
+    await user.open("/users")
+
+    user.find(marker="new-user").click()
+    user.find(marker="first-name").type("Ann")
+    user.find(marker="last-name").type("Janssens")
+    user.find(marker="new-email").type("ann.janssens@vives.be")
+    user.find(marker="temporary-password").type("short")
+    user.find(marker="create-user").click()
+
+    await user.should_see(
+        "Temporary password: String should have at least 8 characters."
+    )
 
 
 async def test_teacher_has_no_users_screen(user: User):

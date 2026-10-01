@@ -1,6 +1,7 @@
 """Managing Users: the Superuser's work (spec #3, user service)."""
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from pmp_backend.domain import Programme, Role, Year
@@ -29,6 +30,34 @@ def list_users(session: Session) -> list[User]:
     return list(session.scalars(select(User).order_by(User.last_name, User.first_name)))
 
 
+def new_user(
+    *,
+    role: Role,
+    first_name: str,
+    last_name: str,
+    email: str,
+    temporary_password: str,
+    programme: Programme | None = None,
+    year: Year | None = None,
+) -> User:
+    """An unsaved User who must replace `temporary_password` at their first login."""
+    is_student = role is Role.STUDENT
+    if is_student and (programme is None or year is None):
+        raise UserError("A Student needs a Programme and a Year.")
+    if not is_student and (programme is not None or year is not None):
+        raise UserError("Only Students have a Programme and a Year.")
+    return User(
+        first_name=first_name,
+        last_name=last_name,
+        email=normalize_email(email),
+        password_hash=hash_password(temporary_password),
+        role=role.value,
+        must_change_password=True,
+        programme=programme.value if programme else None,
+        year=year.value if year else None,
+    )
+
+
 def create_user(
     session: Session,
     *,
@@ -40,28 +69,28 @@ def create_user(
     programme: Programme | None = None,
     year: Year | None = None,
 ) -> User:
-    """A new User who must replace `temporary_password` at their first login."""
+    """Create a Teacher or Student (the Superuser exists only as a starting account)."""
     if role is Role.SUPERUSER:
         raise UserError("Only Teachers and Students can be created.")
-    is_student = role is Role.STUDENT
-    if is_student and (programme is None or year is None):
-        raise UserError("A Student needs a Programme and a Year.")
-    if not is_student and (programme is not None or year is not None):
-        raise UserError("Only Students have a Programme and a Year.")
-    email = normalize_email(email)
-    if find_by_email(session, email) is not None:
-        raise DuplicateEmailError(f"The email address {email} is already in use.")
-
-    user = User(
+    user = new_user(
+        role=role,
         first_name=first_name,
         last_name=last_name,
         email=email,
-        password_hash=hash_password(temporary_password),
-        role=role.value,
-        must_change_password=True,
-        programme=programme.value if programme else None,
-        year=year.value if year else None,
+        temporary_password=temporary_password,
+        programme=programme,
+        year=year,
     )
+    duplicate = DuplicateEmailError(
+        f"The email address {user.email} is already in use."
+    )
+    if find_by_email(session, user.email) is not None:
+        raise duplicate
     session.add(user)
-    session.commit()
+    try:
+        session.commit()
+    except IntegrityError as error:
+        # Someone else took the email between the check and the insert.
+        session.rollback()
+        raise duplicate from error
     return user
