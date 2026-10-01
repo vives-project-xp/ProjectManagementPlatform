@@ -43,7 +43,13 @@ def create_student(client: TestClient, headers: dict[str, str], first_name: str)
     return response.json()["id"]
 
 
-def add(client, headers, project_id, student_id, confirm_move=False):
+def add_member(
+    client: TestClient,
+    headers: dict[str, str],
+    project_id: int,
+    student_id: int,
+    confirm_move: bool = False,
+):
     return client.post(
         f"/api/projects/{project_id}/members",
         json={"student_id": student_id, "confirm_move": confirm_move},
@@ -62,7 +68,7 @@ def test_teacher_adds_a_student_as_member(client: TestClient):
     teacher = ready_to_work(client, "teacher")
     project = create_project(client, teacher, "Smart Greenhouse")
 
-    response = add(client, teacher, project, lisa)
+    response = add_member(client, teacher, project, lisa)
 
     assert response.status_code == 200, response.text
     assert member_names(client, teacher, project) == ["Lisa Peeters"]
@@ -75,7 +81,7 @@ def test_only_students_can_be_members(client: TestClient):
     project = create_project(client, superuser, "Smart Greenhouse")
     me = client.get("/api/auth/me", headers=superuser).json()["id"]
 
-    response = add(client, superuser, project, me)
+    response = add_member(client, superuser, project, me)
 
     assert response.status_code == 422
     assert response.json()["detail"] == "Only Students can be Members."
@@ -87,18 +93,20 @@ def test_deactivated_student_cannot_be_added(client: TestClient):
     client.post(f"/api/users/{lisa}/deactivate", headers=superuser)
     project = create_project(client, superuser, "Smart Greenhouse")
 
-    response = add(client, superuser, project, lisa)
+    response = add_member(client, superuser, project, lisa)
 
     assert response.status_code == 422
-    assert "Deactivated" in response.json()["detail"]
+    assert "is deactivated" in response.json()["detail"]
 
 
 def test_full_project_refuses_another_member(client: TestClient):
     superuser = ready_to_work(client, "superuser")
     project = create_project(client, superuser, "Drone", minimum=1, maximum=1)
-    add(client, superuser, project, create_student(client, superuser, "Lisa"))
+    add_member(client, superuser, project, create_student(client, superuser, "Lisa"))
 
-    response = add(client, superuser, project, create_student(client, superuser, "Tom"))
+    response = add_member(
+        client, superuser, project, create_student(client, superuser, "Tom")
+    )
 
     assert response.status_code == 409
     assert "Drone is full" in response.json()["detail"]
@@ -108,9 +116,9 @@ def test_adding_twice_is_refused(client: TestClient):
     superuser = ready_to_work(client, "superuser")
     project = create_project(client, superuser, "Drone")
     lisa = create_student(client, superuser, "Lisa")
-    add(client, superuser, project, lisa)
+    add_member(client, superuser, project, lisa)
 
-    response = add(client, superuser, project, lisa)
+    response = add_member(client, superuser, project, lisa)
 
     assert response.status_code == 409
     assert "already a Member of Drone" in response.json()["detail"]
@@ -121,9 +129,9 @@ def test_moving_needs_confirmation_and_then_happens_in_one_step(client: TestClie
     drone = create_project(client, superuser, "Drone")
     greenhouse = create_project(client, superuser, "Smart Greenhouse")
     lisa = create_student(client, superuser, "Lisa")
-    add(client, superuser, drone, lisa)
+    add_member(client, superuser, drone, lisa)
 
-    unconfirmed = add(client, superuser, greenhouse, lisa)
+    unconfirmed = add_member(client, superuser, greenhouse, lisa)
 
     assert unconfirmed.status_code == 409
     body = unconfirmed.json()
@@ -133,7 +141,7 @@ def test_moving_needs_confirmation_and_then_happens_in_one_step(client: TestClie
     )
     assert member_names(client, superuser, drone) == ["Lisa Peeters"]
 
-    confirmed = add(client, superuser, greenhouse, lisa, confirm_move=True)
+    confirmed = add_member(client, superuser, greenhouse, lisa, confirm_move=True)
 
     assert confirmed.status_code == 200, confirmed.text
     assert member_names(client, superuser, drone) == []
@@ -145,10 +153,10 @@ def test_move_into_a_full_project_is_refused(client: TestClient):
     drone = create_project(client, superuser, "Drone")
     full = create_project(client, superuser, "Greenhouse", minimum=1, maximum=1)
     lisa = create_student(client, superuser, "Lisa")
-    add(client, superuser, drone, lisa)
-    add(client, superuser, full, create_student(client, superuser, "Tom"))
+    add_member(client, superuser, drone, lisa)
+    add_member(client, superuser, full, create_student(client, superuser, "Tom"))
 
-    response = add(client, superuser, full, lisa, confirm_move=True)
+    response = add_member(client, superuser, full, lisa, confirm_move=True)
 
     assert response.status_code == 409
     assert member_names(client, superuser, drone) == ["Lisa Peeters"]
@@ -158,7 +166,7 @@ def test_teacher_removes_a_member(client: TestClient):
     superuser = ready_to_work(client, "superuser")
     project = create_project(client, superuser, "Drone")
     lisa = create_student(client, superuser, "Lisa")
-    add(client, superuser, project, lisa)
+    add_member(client, superuser, project, lisa)
 
     response = client.delete(
         f"/api/projects/{project}/members/{lisa}", headers=superuser
@@ -184,11 +192,13 @@ def test_deactivated_members_stay_and_count_towards_team_size(client: TestClient
     superuser = ready_to_work(client, "superuser")
     project = create_project(client, superuser, "Drone", minimum=1, maximum=1)
     lisa = create_student(client, superuser, "Lisa")
-    add(client, superuser, project, lisa)
+    add_member(client, superuser, project, lisa)
     client.post(f"/api/users/{lisa}/deactivate", headers=superuser)
 
     details = client.get(f"/api/projects/{project}", headers=superuser).json()
-    another = add(client, superuser, project, create_student(client, superuser, "Tom"))
+    another = add_member(
+        client, superuser, project, create_student(client, superuser, "Tom")
+    )
 
     assert details["members"][0]["is_active"] is False
     assert details["member_count"] == 1
@@ -199,7 +209,7 @@ def test_lowering_the_maximum_below_the_members_is_refused(client: TestClient):
     superuser = ready_to_work(client, "superuser")
     project = create_project(client, superuser, "Drone", minimum=1, maximum=3)
     for name in ("Lisa", "Tom"):
-        add(client, superuser, project, create_student(client, superuser, name))
+        add_member(client, superuser, project, create_student(client, superuser, name))
 
     response = client.put(
         f"/api/projects/{project}",
@@ -220,7 +230,7 @@ def test_students_list_shows_their_project(client: TestClient):
     superuser = ready_to_work(client, "superuser")
     project = create_project(client, superuser, "Drone")
     lisa = create_student(client, superuser, "Lisa")
-    add(client, superuser, project, lisa)
+    add_member(client, superuser, project, lisa)
 
     students = client.get("/api/students", headers=superuser).json()
 
@@ -235,7 +245,7 @@ def test_students_cannot_manage_members(client: TestClient):
     student = ready_to_work(client, "student")
     me = client.get("/api/auth/me", headers=student).json()["id"]
 
-    assert add(client, student, project, me).status_code == 403
+    assert add_member(client, student, project, me).status_code == 403
     assert (
         client.delete(f"/api/projects/{project}/members/{me}", headers=student)
     ).status_code == 403

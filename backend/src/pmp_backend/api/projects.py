@@ -4,46 +4,12 @@ from fastapi import APIRouter, status
 from pydantic import BaseModel, Field, StringConstraints
 
 from pmp_backend.api.deps import SessionDep, TeacherOrSuperuserDep
-from pmp_backend.models import Project, User
-from pmp_backend.services import memberships, projects, users
+from pmp_backend.api.schemas import PersonOut, StudentOut
+from pmp_backend.models import Project
+from pmp_backend.services import memberships, projects
 from pmp_backend.services.projects import ProjectFields
 
 router = APIRouter(prefix="/api", tags=["projects"])
-
-
-class PersonOut(BaseModel):
-    id: int
-    name: str
-
-    @classmethod
-    def of(cls, user: User) -> "PersonOut":
-        return cls(id=user.id, name=f"{user.first_name} {user.last_name}")
-
-
-class ProjectRefOut(BaseModel):
-    id: int
-    title: str
-
-
-class StudentOut(PersonOut):
-    programme: str | None
-    year: str | None
-    is_active: bool
-    project: ProjectRefOut | None
-
-    @classmethod
-    def of(cls, user: User) -> "StudentOut":
-        project = user.project
-        return cls(
-            id=user.id,
-            name=f"{user.first_name} {user.last_name}",
-            programme=user.programme,
-            year=user.year,
-            is_active=user.is_active,
-            project=ProjectRefOut(id=project.id, title=project.title)
-            if project
-            else None,
-        )
 
 
 class ProjectOut(BaseModel):
@@ -65,7 +31,7 @@ class ProjectOut(BaseModel):
             product_owner=PersonOut.of(project.product_owner),
             team_size_min=project.team_size_min,
             team_size_max=project.team_size_max,
-            member_count=len(project.members),
+            member_count=project.member_count,
             status=project.status,
         )
 
@@ -104,12 +70,6 @@ class MemberIn(BaseModel):
 def teachers(session: SessionDep, user: TeacherOrSuperuserDep) -> list[PersonOut]:
     """The active Teachers, to choose a Product Owner from."""
     return [PersonOut.of(teacher) for teacher in projects.active_teachers(session)]
-
-
-@router.get("/students")
-def students(session: SessionDep, user: TeacherOrSuperuserDep) -> list[StudentOut]:
-    """All Students with their Project, to choose Members from."""
-    return [StudentOut.of(student) for student in users.list_students(session)]
 
 
 @router.get("/projects")

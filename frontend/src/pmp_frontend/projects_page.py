@@ -43,15 +43,21 @@ MEMBERS_CELL = """
 """
 
 
+def _team_size_label(project: dict[str, Any]) -> str:
+    """Members against the Team size, e.g. "3 / 4–6"."""
+    return (
+        f"{project['member_count']} / "
+        f"{project['team_size_min']}–{project['team_size_max']}"
+    )
+
+
 def _row(project: dict[str, Any]) -> dict[str, Any]:
-    count = project["member_count"]
     return {
         "id": project["id"],
         "title": project["title"],
         "owner": project["product_owner"]["name"],
-        # e.g. "3 / 4–6": Members against the Team size.
-        "members": f"{count} / {project['team_size_min']}–{project['team_size_max']}",
-        "understaffed": count < project["team_size_min"],
+        "members": _team_size_label(project),
+        "understaffed": project["member_count"] < project["team_size_min"],
         "status": project["status"].capitalize(),
     }
 
@@ -230,10 +236,7 @@ async def _members_section(project: dict[str, Any]) -> None:
     @ui.refreshable
     def members() -> None:
         current = state["project"]
-        ui.label(
-            f"Members ({current['member_count']} / "
-            f"{current['team_size_min']}–{current['team_size_max']})"
-        ).classes("text-h6")
+        ui.label(f"Members ({_team_size_label(current)})").classes("text-h6")
         if not current["members"]:
             ui.label("No Members yet.")
         for member in current["members"]:

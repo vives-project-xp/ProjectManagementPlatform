@@ -67,8 +67,14 @@ def list_projects(session: Session) -> list[Project]:
     return list(session.scalars(select(Project).order_by(func.lower(Project.title))))
 
 
-def get_project(session: Session, project_id: int) -> Project:
-    project = session.get(Project, project_id)
+def get_project(session: Session, project_id: int, *, lock: bool = False) -> Project:
+    """The Project; with `lock`, its row stays locked until the next commit, so
+    changes to its Members and Team size cannot interleave."""
+    # Lock only the projects row ("FOR UPDATE OF projects"): the Product Owner is
+    # joined in, and Postgres cannot lock the nullable side of that join.
+    project = session.get(
+        Project, project_id, with_for_update={"of": Project} if lock else None
+    )
     if project is None:
         raise ProjectNotFoundError("This Project does not exist.")
     return project
@@ -83,7 +89,9 @@ def create_project(session: Session, fields: ProjectFields) -> Project:
 
 
 def update_project(session: Session, project_id: int, fields: ProjectFields) -> Project:
-    project = get_project(session, project_id)
+    # Locked like adding a Member, so a lower maximum and a new Member can't
+    # both pass their checks at the same moment.
+    project = get_project(session, project_id, lock=True)
     _apply(session, project, fields)
     _commit(session, fields.title)
     return project
@@ -95,7 +103,7 @@ def _apply(session: Session, project: Project, fields: ProjectFields) -> None:
             "The Team size needs a minimum of at least 1 and a maximum "
             "of at least the minimum."
         )
-    members = len(project.members) if project.id is not None else 0
+    members = project.member_count if project.id is not None else 0
     if fields.team_size_max < members:
         raise ProjectConflictError(
             f"{project.title} has {members} Members, so the maximum Team size "

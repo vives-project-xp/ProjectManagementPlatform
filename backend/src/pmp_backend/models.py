@@ -33,7 +33,8 @@ class User(Base):
             "(role = 'student') = (programme IS NOT NULL AND year IS NOT NULL)",
             name="ck_users_student_fields",
         ),
-        # Only Students are Members of a Project; one Project at most.
+        # Only Students are Members (the single column already means: at most
+        # one Project per Student).
         CheckConstraint(
             "project_id IS NULL OR role = 'student'", name="ck_users_project_student"
         ),
@@ -61,6 +62,10 @@ class User(Base):
     project: Mapped["Project | None"] = relationship(
         back_populates="members", foreign_keys=[project_id]
     )
+
+    @property
+    def full_name(self) -> str:
+        return f"{self.first_name} {self.last_name}"
 
 
 class Project(Base):
@@ -103,3 +108,12 @@ class Project(Base):
         order_by=(User.last_name, User.first_name),
         lazy="selectin",
     )
+
+    @property
+    def member_count(self) -> int:
+        return len(self.members)
+
+    @property
+    def team_size_label(self) -> str:
+        """Members against the Team size, e.g. "3 / 4–6"."""
+        return f"{self.member_count} / {self.team_size_min}–{self.team_size_max}"

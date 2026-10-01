@@ -179,7 +179,7 @@ def deactivate_user(session: Session, user_id: int, acting_user: User) -> User:
     owned = active_titles_owned_by(session, user.id)
     if owned:
         raise UserConflictError(
-            f"{user.first_name} {user.last_name} is the Product Owner of these "
+            f"{user.full_name} is the Product Owner of these "
             f"active Projects: {', '.join(owned)}. Choose another Product Owner "
             "first."
         )
