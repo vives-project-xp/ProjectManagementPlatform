@@ -1,15 +1,32 @@
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
+from sqlalchemy.orm import sessionmaker
 
+from pmp_backend.api import auth
 from pmp_backend.database import is_reachable, make_engine
+from pmp_backend.services.seeding import seed_starting_accounts
 from pmp_backend.settings import Settings
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings()
     engine = make_engine(settings.database_url)
+    make_session = sessionmaker(engine, expire_on_commit=False)
 
-    app = FastAPI(title="VIVES Project Management Platform API")
+    @asynccontextmanager
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        with make_session() as session:
+            seed_starting_accounts(session, settings.logins_file)
+        yield
+        engine.dispose()
+
+    app = FastAPI(title="VIVES Project Management Platform API", lifespan=lifespan)
+    app.state.settings = settings
+    app.state.sessionmaker = make_session
+    app.include_router(auth.router)
 
     @app.get("/api/health")
     def health() -> JSONResponse:

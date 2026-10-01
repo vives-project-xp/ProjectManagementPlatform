@@ -1,5 +1,6 @@
 """VIVES house style (Huisstijlgids 2024) shared by every page."""
 
+from collections.abc import Callable
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -31,15 +32,21 @@ def register_static_files() -> None:
 
 
 @contextmanager
-def frame(title: str):
-    """Page layout: white header with the VIVES logo, content on a sand background."""
+def frame(title: str, header: Callable[[], None] | None = None):
+    """Page layout: white header with the VIVES logo, content on a sand background.
+
+    `header` adds content (navigation, the User's name) to the right of the logo.
+    """
     ui.colors(primary=VIVES_RED, dark=BLACK)
     ui.add_head_html(_HEAD_HTML)
     ui.page_title(f"{title} | VIVES")
-    with ui.header().classes("bg-white items-center px-6 py-3 shadow-sm"):
+    with ui.header().classes("bg-white text-dark items-center px-6 py-3 shadow-sm"):
         # The guide asks for clear space of one smile height around the logo.
         ui.image("/static/vives-logo.png").props("fit=contain no-spinner").classes(
             "w-40 h-10"
         )
+        if header is not None:
+            ui.space()
+            header()
     with ui.column().classes("w-full max-w-4xl mx-auto p-6 gap-6"):
         yield

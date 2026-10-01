@@ -8,3 +8,5 @@ class Settings(BaseSettings):
 
     # Where the frontend reaches the backend's REST API (ADR 0003).
     backend_url: str = "http://localhost:8000"
+    # Signs the browser session cookie that holds the login token.
+    storage_secret: str
