@@ -123,8 +123,29 @@ async def logout(token: str) -> None:
     await _request("POST", "/api/auth/logout", token=token)
 
 
-async def programmes(token: str) -> list[str]:
+async def list_programmes(token: str) -> list[dict[str, Any]]:
+    """The Programme list (id and name), sorted by name."""
     return await _request("GET", "/api/programmes", token=token)
+
+
+async def programmes(token: str) -> list[str]:
+    """The Programme names, to pick from in forms and filters."""
+    return [programme["name"] for programme in await list_programmes(token)]
+
+
+async def add_programme(token: str, name: str) -> dict[str, Any]:
+    return await _request("POST", "/api/programmes", token=token, json={"name": name})
+
+
+async def rename_programme(token: str, programme_id: int, name: str) -> dict[str, Any]:
+    """Also renames the Programme for every User who has it."""
+    return await _request(
+        "PUT", f"/api/programmes/{programme_id}", token=token, json={"name": name}
+    )
+
+
+async def remove_programme(token: str, programme_id: int) -> None:
+    await _request("DELETE", f"/api/programmes/{programme_id}", token=token)
 
 
 async def list_users(

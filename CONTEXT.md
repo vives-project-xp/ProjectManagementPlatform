@@ -65,7 +65,7 @@ The permanent record of the Students (name, Programme, Year) who were Members of
 _Avoid_: History, former members, credits
 
 **Programme**:
-The VIVES study programme a Student is enrolled in, picked from a list.
+The VIVES study programme a Student is enrolled in, picked from the list the Superuser manages. Renaming a Programme renames it for every User, but not in Makers; a Programme can only be removed while no User has it.
 _Avoid_: Course, study course, opleiding
 
 **Year**:

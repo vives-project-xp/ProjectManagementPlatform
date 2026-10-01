@@ -9,11 +9,6 @@ class Role(StrEnum):
     STUDENT = "student"
 
 
-class Programme(StrEnum):
-    # Fixed list in code for the MVP (ADR 0004).
-    ELECTRONICS_ICT = "Electronics-ICT"
-
-
 class ProjectStatus(StrEnum):
     ACTIVE = "active"
     ARCHIVED = "archived"

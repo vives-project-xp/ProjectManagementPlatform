@@ -6,6 +6,7 @@ from pmp_frontend import (
     api,
     members_page,
     my_project_page,
+    programmes_page,
     projects_page,
     users_page,
 )
@@ -112,3 +113,4 @@ def register_pages() -> None:
     projects_page.register()
     members_page.register()
     my_project_page.register()
+    programmes_page.register()

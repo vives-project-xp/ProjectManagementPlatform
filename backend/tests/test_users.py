@@ -147,4 +147,4 @@ def test_programmes_come_from_the_backend(client: TestClient):
     response = client.get("/api/programmes", headers=headers)
 
     assert response.status_code == 200
-    assert response.json() == ["Electronics-ICT"]
+    assert [p["name"] for p in response.json()] == ["Electronics-ICT"]

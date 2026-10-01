@@ -25,5 +25,11 @@ def reset(database_url: str = TEST_DATABASE_URL) -> None:
     """Empty every table so each test starts from a clean database."""
     engine = create_engine(database_url)
     with engine.begin() as connection:
-        connection.execute(text("TRUNCATE projects, users RESTART IDENTITY CASCADE"))
+        connection.execute(
+            text("TRUNCATE projects, users, programmes RESTART IDENTITY CASCADE")
+        )
+        # As migration 0004 leaves the list.
+        connection.execute(
+            text("INSERT INTO programmes (name) VALUES ('Electronics-ICT')")
+        )
     engine.dispose()
