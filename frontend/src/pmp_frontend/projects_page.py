@@ -214,7 +214,7 @@ def register() -> None:
                 with ui.card().classes("w-full max-w-lg"):
                     ui.label("Made by").classes("text-h6")
                     for maker in project["makers"]:
-                        ui.label(_member_label(maker | {"is_active": True}))
+                        ui.label(_maker_label(maker))
         return None
 
 
@@ -307,10 +307,14 @@ def _read_only_details(project: dict[str, Any]) -> None:
     ui.label(f"Team size: {project['team_size_min']}–{project['team_size_max']}")
 
 
+def _maker_label(person: dict[str, Any]) -> str:
+    """Name, Programme and Year: how a Maker is listed under "Made by"."""
+    return f"{person['name']} — {person['programme']}, year {person['year']}"
+
+
 def _member_label(member: dict[str, Any]) -> str:
-    details = f"{member['programme']}, year {member['year']}"
     suffix = " (deactivated)" if not member["is_active"] else ""
-    return f"{member['name']} — {details}{suffix}"
+    return f"{_maker_label(member)}{suffix}"
 
 
 def _student_option(student: dict[str, Any]) -> str:

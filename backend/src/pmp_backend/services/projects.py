@@ -117,9 +117,19 @@ def archive_project(session: Session, project_id: int) -> Project:
     """In one transaction: add the current Members to the Makers (never removing
     anyone, nobody twice), free those Students and make the Project read-only."""
     project = changeable_project(session, project_id)
+    # Lock the Members' rows too (adding/moving a Student locks the Student's
+    # row), so a Student moved away at this moment is neither recorded nor freed.
+    members = list(
+        session.scalars(
+            select(User)
+            .where(User.project_id == project.id)
+            .order_by(User.last_name, User.first_name)
+            .with_for_update()
+        )
+    )
     makers = list(project.makers)
     known = {maker["student_id"] for maker in makers}
-    for member in project.members:
+    for member in members:
         if member.id not in known:
             makers.append(
                 {
@@ -131,7 +141,7 @@ def archive_project(session: Session, project_id: int) -> Project:
             )
     # A new list (not an in-place change), so SQLAlchemy saves the JSONB column.
     project.makers = makers
-    for member in list(project.members):
+    for member in members:
         member.project = None
     project.status = ProjectStatus.ARCHIVED.value
     session.commit()

@@ -1,7 +1,12 @@
 from fastapi.testclient import TestClient
 
-from tests.conftest import ready_to_work
-from tests.test_members import add_member, create_project, create_student, teacher_id
+from tests.conftest import (
+    add_member,
+    create_project,
+    create_student,
+    ready_to_work,
+    teacher_id,
+)
 
 
 def archive(client: TestClient, headers: dict[str, str], project_id: int):
@@ -38,6 +43,8 @@ def test_archiving_stores_makers_frees_students_and_sets_status(client: TestClie
     # The freed Student can join another Project right away, without a move.
     other = create_project(client, superuser, "Greenhouse")
     assert add_member(client, superuser, other, lisa).status_code == 200
+    # "Made by" stays the same after the Maker joined another Project.
+    assert maker_names(details(client, superuser, drone)) == ["Lisa Peeters"]
 
 
 def test_archived_project_refuses_edits_and_member_changes(client: TestClient):

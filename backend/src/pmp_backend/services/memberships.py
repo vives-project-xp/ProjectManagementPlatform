@@ -24,8 +24,7 @@ def add_member(
     session: Session, project_id: int, student_id: int, *, confirm_move: bool = False
 ) -> Project:
     """Make a Student a Member; moving them from another Project needs confirmation."""
-    # Locked until commit, so two changes cannot both take the last place.
-    project = changeable_project(session, project_id)
+    project = changeable_project(session, project_id)  # locked, refused if archived
     # Locked too, so the same Student cannot be placed twice at the same moment.
     student = session.get(User, student_id, with_for_update=True)
     if student is None or student.role != Role.STUDENT.value:
