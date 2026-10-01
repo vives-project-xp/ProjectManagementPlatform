@@ -5,6 +5,7 @@ from pathlib import Path
 
 import httpx
 import pytest
+from nicegui import ui
 from nicegui.testing import User
 
 from pmp_backend import testing
@@ -89,3 +90,32 @@ async def ready_to_work(user: User, role: str) -> None:
     # Navigation only appears once the Temporary password is gone; the home page
     # may need a moment to load its data.
     await user.should_see(marker="navigation", retries=30)
+
+
+def project_titles(user: User) -> list[str]:
+    table = user.find(marker="projects").elements.pop()
+    assert isinstance(table, ui.table)
+    return [row["title"] for row in table.rows]
+
+
+def fill_project_form(user: User, title: str, minimum: int, maximum: int) -> None:
+    title_input = user.find(marker="title").elements.pop()
+    title_input.set_value(title)
+    owner = user.find(marker="product-owner").elements.pop()
+    assert isinstance(owner, ui.select)
+    owner.set_value(
+        next(key for key, name in owner.options.items() if name == "Teacher Account")
+    )
+    user.find(marker="team-size-min").elements.pop().set_value(minimum)
+    user.find(marker="team-size-max").elements.pop().set_value(maximum)
+
+
+async def create_project(
+    user: User, title: str, minimum: int = 4, maximum: int = 6
+) -> None:
+    await user.open("/projects")
+    await user.should_see(marker="projects")
+    user.find(marker="new-project").click()
+    fill_project_form(user, title, minimum, maximum)
+    user.find(marker="create-project").click()
+    await user.should_see(f"Project {title} was created.")

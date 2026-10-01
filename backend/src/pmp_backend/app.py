@@ -41,7 +41,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             code = status.HTTP_409_CONFLICT
         else:
             code = status.HTTP_422_UNPROCESSABLE_CONTENT
-        return JSONResponse({"detail": str(error)}, status_code=code)
+        body = {"detail": str(error)}
+        if error.code:
+            body["code"] = error.code
+        return JSONResponse(body, status_code=code)
 
     @app.get("/api/health")
     def health() -> JSONResponse:

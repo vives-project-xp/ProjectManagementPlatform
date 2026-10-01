@@ -109,6 +109,20 @@ def role_page(
     return register
 
 
+async def confirm(message: str, action: str) -> bool:
+    """Ask before a destructive step; True when the User confirms `action`."""
+    with ui.dialog() as dialog, ui.card():
+        ui.label(message)
+        with ui.row():
+            ui.button(action, on_click=lambda: dialog.submit(True)).mark("confirm")
+            ui.button("Cancel", on_click=lambda: dialog.submit(False)).props(
+                "flat color=dark"
+            )
+    result = await dialog
+    dialog.delete()
+    return bool(result)
+
+
 def no_access() -> None:
     ui.label("No access").classes("text-h4")
     ui.label("You don't have access to this page.")

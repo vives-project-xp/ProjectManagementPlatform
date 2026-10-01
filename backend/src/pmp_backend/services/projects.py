@@ -23,6 +23,10 @@ class ProjectNotFoundError(ProjectError, NotFound):
     pass
 
 
+class ProjectConflictError(ProjectError, Conflict):
+    pass
+
+
 @dataclass(frozen=True)
 class ProjectFields:
     """What a Teacher fills in when creating or editing a Project."""
@@ -90,6 +94,12 @@ def _apply(session: Session, project: Project, fields: ProjectFields) -> None:
         raise ProjectError(
             "The Team size needs a minimum of at least 1 and a maximum "
             "of at least the minimum."
+        )
+    members = len(project.members) if project.id is not None else 0
+    if fields.team_size_max < members:
+        raise ProjectConflictError(
+            f"{project.title} has {members} Members, so the maximum Team size "
+            f"cannot be lower than {members}. Remove Members first."
         )
     owner = session.get(User, fields.product_owner_id)
     if owner is None or owner.role != Role.TEACHER.value or not owner.is_active:

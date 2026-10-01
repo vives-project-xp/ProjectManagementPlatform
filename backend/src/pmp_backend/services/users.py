@@ -55,6 +55,11 @@ def list_users(
     return list(session.scalars(query))
 
 
+def list_students(session: Session) -> list[User]:
+    """Every Student, active or not, with the Project they are a Member of."""
+    return list_users(session, role=Role.STUDENT)
+
+
 def get_user(session: Session, user_id: int) -> User:
     user = session.get(User, user_id)
     if user is None:
