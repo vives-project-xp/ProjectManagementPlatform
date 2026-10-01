@@ -174,9 +174,12 @@ def register() -> None:
 
             async def toggle_active() -> None:
                 try:
-                    changed = await api.set_user_active(
-                        token(), user_id, not shown["is_active"]
+                    change = (
+                        api.deactivate_user
+                        if shown["is_active"]
+                        else api.reactivate_user
                     )
+                    changed = await change(token(), user_id)
                 except api.ApiError as error:
                     status_error.show(error.message)
                     return

@@ -6,12 +6,10 @@ A line is skipped when its email is taken or a User with its Role already exists
 import logging
 from pathlib import Path
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from pmp_backend.domain import Programme, Role, Year
-from pmp_backend.models import User
-from pmp_backend.services.users import find_by_email, new_user
+from pmp_backend.services.users import find_by_email, new_user, role_exists
 
 log = logging.getLogger(__name__)
 
@@ -37,9 +35,7 @@ def seed_starting_accounts(session: Session, logins_file: Path | None) -> None:
         # Never overwrite: a password changed by the User survives every deploy.
         # Checking the Role as well means an edited email does not bring the
         # original starting account back on the next restart.
-        if find_by_email(session, email) is not None or session.scalar(
-            select(User.id).where(User.role == role.value).limit(1)
-        ):
+        if find_by_email(session, email) is not None or role_exists(session, role):
             continue
         is_student = role is Role.STUDENT
         user = new_user(

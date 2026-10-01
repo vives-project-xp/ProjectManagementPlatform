@@ -45,6 +45,20 @@ def active_teachers(session: Session) -> list[User]:
     )
 
 
+def active_titles_owned_by(session: Session, user_id: int) -> list[str]:
+    """Titles of the active Projects this User is Product Owner of."""
+    return list(
+        session.scalars(
+            select(Project.title)
+            .where(
+                Project.product_owner_id == user_id,
+                Project.status == ProjectStatus.ACTIVE.value,
+            )
+            .order_by(Project.title)
+        )
+    )
+
+
 def list_projects(session: Session) -> list[Project]:
     return list(session.scalars(select(Project).order_by(func.lower(Project.title))))
 

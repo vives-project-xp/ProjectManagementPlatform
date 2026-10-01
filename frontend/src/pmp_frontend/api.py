@@ -163,9 +163,12 @@ async def update_user(
     return await _request("PUT", f"/api/users/{user_id}", token=token, json=fields)
 
 
-async def set_user_active(token: str, user_id: int, active: bool) -> dict[str, Any]:
-    action = "reactivate" if active else "deactivate"
-    return await _request("POST", f"/api/users/{user_id}/{action}", token=token)
+async def deactivate_user(token: str, user_id: int) -> dict[str, Any]:
+    return await _request("POST", f"/api/users/{user_id}/deactivate", token=token)
+
+
+async def reactivate_user(token: str, user_id: int) -> dict[str, Any]:
+    return await _request("POST", f"/api/users/{user_id}/reactivate", token=token)
 
 
 async def reset_password(token: str, user_id: int, temporary_password: str) -> None:

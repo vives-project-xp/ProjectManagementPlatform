@@ -4,10 +4,11 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from pmp_backend.domain import Programme, ProjectStatus, Role, Year
+from pmp_backend.domain import Programme, Role, Year
 from pmp_backend.errors import Conflict, NotFound, Refused
-from pmp_backend.models import Project, User
+from pmp_backend.models import User
 from pmp_backend.security import hash_password
+from pmp_backend.services.projects import active_titles_owned_by
 
 
 class UserError(Refused):
@@ -33,6 +34,14 @@ def normalize_email(email: str) -> str:
 def find_by_email(session: Session, email: str) -> User | None:
     """The User with this email, compared case-insensitively."""
     return session.scalar(select(User).where(User.email == normalize_email(email)))
+
+
+def role_exists(session: Session, role: Role) -> bool:
+    """Whether at least one User (active or not) has this Role."""
+    return (
+        session.scalar(select(User.id).where(User.role == role.value).limit(1))
+        is not None
+    )
 
 
 def list_users(
@@ -162,14 +171,7 @@ def deactivate_user(session: Session, user_id: int, acting_user: User) -> User:
     user = get_user(session, user_id)
     if user.id == acting_user.id:
         raise UserConflictError("You cannot deactivate yourself.")
-    owned = session.scalars(
-        select(Project.title)
-        .where(
-            Project.product_owner_id == user.id,
-            Project.status == ProjectStatus.ACTIVE.value,
-        )
-        .order_by(Project.title)
-    ).all()
+    owned = active_titles_owned_by(session, user.id)
     if owned:
         raise UserConflictError(
             f"{user.first_name} {user.last_name} is the Product Owner of these "
