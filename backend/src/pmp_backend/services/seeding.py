@@ -8,7 +8,8 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
-from pmp_backend.domain import Programme, Role, Year
+from pmp_backend.domain import Role, Year
+from pmp_backend.services.programmes import first_programme_name
 from pmp_backend.services.users import find_by_email, new_user, role_exists
 
 log = logging.getLogger(__name__)
@@ -44,7 +45,7 @@ def seed_starting_accounts(session: Session, logins_file: Path | None) -> None:
             last_name="Account",
             email=email,
             temporary_password=password,
-            programme=Programme.ELECTRONICS_ICT if is_student else None,
+            programme=first_programme_name(session) if is_student else None,
             year=Year.FIRST if is_student else None,
         )
         session.add(user)

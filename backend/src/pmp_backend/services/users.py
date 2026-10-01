@@ -4,10 +4,11 @@ from sqlalchemy import Select, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from pmp_backend.domain import Programme, Role, Year
+from pmp_backend.domain import Role, Year
 from pmp_backend.errors import Conflict, NotFound, Refused
 from pmp_backend.models import User
 from pmp_backend.security import hash_password
+from pmp_backend.services import programmes
 from pmp_backend.services.projects import active_titles_owned_by
 
 
@@ -64,7 +65,7 @@ def list_students(
     session: Session,
     *,
     without_project: bool = False,
-    programme: Programme | None = None,
+    programme: str | None = None,
     year: Year | None = None,
 ) -> list[User]:
     """Students, active or not, with the Project they are a Member of; optionally
@@ -73,7 +74,9 @@ def list_students(
     if without_project:
         query = query.where(User.project_id.is_(None))
     if programme is not None:
-        query = query.where(User.programme == programme.value)
+        query = query.where(
+            User.programme == programmes.existing_name(session, programme)
+        )
     if year is not None:
         query = query.where(User.year == year.value)
     return list(session.scalars(query))
@@ -86,14 +89,22 @@ def get_user(session: Session, user_id: int) -> User:
     return user
 
 
-def _check_student_fields(
-    role: Role, programme: Programme | None, year: Year | None
-) -> None:
+def _check_student_fields(role: Role, programme: str | None, year: Year | None) -> None:
     is_student = role is Role.STUDENT
     if is_student and (programme is None or year is None):
         raise UserError("A Student needs a Programme and a Year.")
     if not is_student and (programme is not None or year is not None):
         raise UserError("Only Students have a Programme and a Year.")
+
+
+def _student_programme(
+    session: Session, role: Role, programme: str | None, year: Year | None
+) -> str | None:
+    """Check the Student-only fields; the Programme as it is spelled in the list."""
+    _check_student_fields(role, programme, year)
+    if programme is None:
+        return None
+    return programmes.existing_name(session, programme, lock=True)
 
 
 def _check_email_free(session: Session, email: str, user_id: int | None) -> None:
@@ -120,7 +131,7 @@ def new_user(
     last_name: str,
     email: str,
     temporary_password: str,
-    programme: Programme | None = None,
+    programme: str | None = None,
     year: Year | None = None,
 ) -> User:
     """An unsaved User who must replace `temporary_password` at their first login."""
@@ -132,7 +143,7 @@ def new_user(
         password_hash=hash_password(temporary_password),
         role=role.value,
         must_change_password=True,
-        programme=programme.value if programme else None,
+        programme=programme,
         year=year.value if year else None,
     )
 
@@ -145,12 +156,13 @@ def create_user(
     last_name: str,
     email: str,
     temporary_password: str,
-    programme: Programme | None = None,
+    programme: str | None = None,
     year: Year | None = None,
 ) -> User:
     """Create a Teacher or Student (the Superuser exists only as a starting account)."""
     if role is Role.SUPERUSER:
         raise UserError("Only Teachers and Students can be created.")
+    programme = _student_programme(session, role, programme, year)
     user = new_user(
         role=role,
         first_name=first_name,
@@ -173,18 +185,18 @@ def update_user(
     first_name: str,
     last_name: str,
     email: str,
-    programme: Programme | None = None,
+    programme: str | None = None,
     year: Year | None = None,
 ) -> User:
     """Correct a User's details; the Role never changes after creation."""
     user = get_user(session, user_id)
-    _check_student_fields(Role(user.role), programme, year)
+    programme = _student_programme(session, Role(user.role), programme, year)
     email = normalize_email(email)
     _check_email_free(session, email, user.id)
     user.first_name = first_name
     user.last_name = last_name
     user.email = email
-    user.programme = programme.value if programme else None
+    user.programme = programme
     user.year = year.value if year else None
     _commit(session, email)
     return user

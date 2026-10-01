@@ -5,7 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 from pmp_backend.api.deps import SessionDep, SuperuserDep
 from pmp_backend.api.schemas import UserOut
-from pmp_backend.domain import Programme, Role, Year
+from pmp_backend.domain import Role, Year
 from pmp_backend.services import users
 from pmp_backend.services.auth import MIN_PASSWORD_LENGTH
 
@@ -29,7 +29,7 @@ class UserCreateIn(BaseModel):
     last_name: Name
     email: Email
     temporary_password: TemporaryPassword
-    programme: Programme | None = None
+    programme: Name | None = None
     year: Year | None = None
 
 
@@ -40,7 +40,7 @@ class UserEditIn(BaseModel):
     first_name: Name
     last_name: Name
     email: Email
-    programme: Programme | None = None
+    programme: Name | None = None
     year: Year | None = None
 
 

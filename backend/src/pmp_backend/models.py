@@ -68,6 +68,18 @@ class User(Base):
         return f"{self.first_name} {self.last_name}"
 
 
+class Programme(Base):
+    """A study programme in the list the Superuser manages (ADR 0004)."""
+
+    __tablename__ = "programmes"
+    __table_args__ = (
+        Index("uq_programmes_name_lower", func.lower(text("name")), unique=True),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(100))
+
+
 class Project(Base):
     __tablename__ = "projects"
     __table_args__ = (
