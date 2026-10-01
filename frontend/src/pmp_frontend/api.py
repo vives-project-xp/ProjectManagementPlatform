@@ -147,12 +147,12 @@ async def programmes(token: str) -> list[str]:
 async def list_users(
     token: str, *, role: str | None = None, active: bool | None = None
 ) -> list[dict[str, Any]]:
-    filters = []
+    params: dict[str, str] = {}
     if role:
-        filters.append(f"role={role}")
+        params["role"] = role
     if active is not None:
-        filters.append(f"active={str(active).lower()}")
-    query = f"?{'&'.join(filters)}" if filters else ""
+        params["active"] = str(active).lower()
+    query = f"?{urlencode(params)}" if params else ""
     return await _request("GET", f"/api/users{query}", token=token)
 
 
