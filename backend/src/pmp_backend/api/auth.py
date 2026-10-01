@@ -4,34 +4,13 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel
 
-from pmp_backend.api.deps import (
-    CurrentUserDep,
-    SessionDep,
-    TemporaryPasswordUserDep,
-    get_settings,
-)
-from pmp_backend.domain import Programme
-from pmp_backend.models import User
+from pmp_backend.api.deps import SessionDep, TemporaryPasswordUserDep, get_settings
+from pmp_backend.api.schemas import UserOut
 from pmp_backend.security import issue_token
 from pmp_backend.services import auth
 from pmp_backend.settings import Settings
 
-router = APIRouter(prefix="/api", tags=["auth"])
-
-
-class UserOut(BaseModel):
-    id: int
-    first_name: str
-    last_name: str
-    email: str
-    role: str
-    must_change_password: bool
-    programme: str | None
-    year: str | None
-
-    @classmethod
-    def of(cls, user: User) -> "UserOut":
-        return cls.model_validate(user, from_attributes=True)
+router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
 class LoginIn(BaseModel):
@@ -50,7 +29,7 @@ class ChangePasswordIn(BaseModel):
     new_password: str
 
 
-@router.post("/auth/login")
+@router.post("/login")
 def login(
     body: LoginIn,
     session: SessionDep,
@@ -69,15 +48,15 @@ def login(
         settings.jwt_secret,
         timedelta(minutes=settings.token_lifetime_minutes),
     )
-    return LoginOut(access_token=token, user=UserOut.of(user))
+    return LoginOut(access_token=token, user=UserOut.model_validate(user))
 
 
-@router.get("/auth/me")
+@router.get("/me")
 def me(user: TemporaryPasswordUserDep) -> UserOut:
-    return UserOut.of(user)
+    return UserOut.model_validate(user)
 
 
-@router.post("/auth/change-password", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT)
 def change_password(
     body: ChangePasswordIn, user: TemporaryPasswordUserDep, session: SessionDep
 ) -> Response:
@@ -90,13 +69,8 @@ def change_password(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.post("/auth/logout", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 def logout(user: TemporaryPasswordUserDep) -> Response:
     # Tokens are stateless; the frontend forgets the token. Kept as an explicit
     # endpoint so logging out works the same way for every client.
     return Response(status_code=status.HTTP_204_NO_CONTENT)
-
-
-@router.get("/programmes")
-def programmes(user: CurrentUserDep) -> list[str]:
-    return [programme.value for programme in Programme]

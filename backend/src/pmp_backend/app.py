@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import sessionmaker
 
-from pmp_backend.api import auth
+from pmp_backend.api import auth, programmes, users
 from pmp_backend.database import is_reachable, make_engine
 from pmp_backend.services.seeding import seed_starting_accounts
 from pmp_backend.settings import Settings
@@ -27,6 +27,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = settings
     app.state.sessionmaker = make_session
     app.include_router(auth.router)
+    app.include_router(users.router)
+    app.include_router(programmes.router)
 
     @app.get("/api/health")
     def health() -> JSONResponse:

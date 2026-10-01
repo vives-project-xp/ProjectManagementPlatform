@@ -116,3 +116,16 @@ async def change_password(token: str, current_password: str, new_password: str) 
 
 async def logout(token: str) -> None:
     await _request("POST", "/api/auth/logout", token=token)
+
+
+async def programmes(token: str) -> list[str]:
+    return await _request("GET", "/api/programmes", token=token)
+
+
+async def list_users(token: str) -> list[dict[str, Any]]:
+    return await _request("GET", "/api/users", token=token)
+
+
+async def create_user(token: str, new_user: dict[str, Any]) -> dict[str, Any]:
+    """Create a Teacher or Student; `new_user` matches the backend's create body."""
+    return await _request("POST", "/api/users", token=token, json=new_user)

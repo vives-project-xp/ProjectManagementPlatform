@@ -1,10 +1,10 @@
 """Logging in and changing passwords."""
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from pmp_backend.models import User
 from pmp_backend.security import hash_password, verify_password
+from pmp_backend.services.users import find_by_email
 
 MIN_PASSWORD_LENGTH = 8
 
@@ -13,13 +13,9 @@ class PasswordChangeError(Exception):
     pass
 
 
-def normalize_email(email: str) -> str:
-    return email.strip().lower()
-
-
 def authenticate(session: Session, email: str, password: str) -> User | None:
     """The active User with these credentials, or None (never says what failed)."""
-    user = session.scalar(select(User).where(User.email == normalize_email(email)))
+    user = find_by_email(session, email)
     if user is None or not user.is_active:
         return None
     if not verify_password(user.password_hash, password):

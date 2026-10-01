@@ -66,3 +66,16 @@ def login(client: TestClient, role: str) -> str:
 
 def auth(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
+
+
+def ready_to_work(client: TestClient, role: str) -> dict[str, str]:
+    """Auth headers of a starting account that has already chosen its own password."""
+    token = login(client, role)
+    _, password = STARTING_ACCOUNTS[role]
+    response = client.post(
+        "/api/auth/change-password",
+        json={"current_password": password, "new_password": f"{password}-changed"},
+        headers=auth(token),
+    )
+    assert response.status_code == 204, response.text
+    return auth(token)

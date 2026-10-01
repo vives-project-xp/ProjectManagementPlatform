@@ -3,13 +3,12 @@
 import logging
 from pathlib import Path
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from pmp_backend.domain import Programme, Role, Year
 from pmp_backend.models import User
 from pmp_backend.security import hash_password
-from pmp_backend.services.auth import normalize_email
+from pmp_backend.services.users import find_by_email, normalize_email
 
 log = logging.getLogger(__name__)
 
@@ -34,7 +33,7 @@ def seed_starting_accounts(session: Session, logins_file: Path | None) -> None:
 
         email = normalize_email(email)
         # Never overwrite: a password changed by the User survives every deploy.
-        if session.scalar(select(User).where(User.email == email)) is not None:
+        if find_by_email(session, email) is not None:
             continue
         is_student = role is Role.STUDENT
         session.add(
