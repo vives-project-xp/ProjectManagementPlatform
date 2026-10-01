@@ -3,10 +3,10 @@ from typing import Annotated
 from fastapi import APIRouter, status
 from pydantic import BaseModel, Field, StringConstraints
 
-from pmp_backend.api.deps import SessionDep, TeacherOrSuperuserDep
+from pmp_backend.api.deps import SessionDep, StudentDep, TeacherOrSuperuserDep
 from pmp_backend.api.schemas import PersonOut, StudentOut
 from pmp_backend.domain import ProjectStatus
-from pmp_backend.models import Project
+from pmp_backend.models import Project, User
 from pmp_backend.services import memberships, projects
 from pmp_backend.services.projects import ProjectFields
 
@@ -58,6 +58,28 @@ class ProjectDetailsOut(ProjectOut):
         )
 
 
+class MyProjectOut(BaseModel):
+    """A Student's own Project: only what a Student may see of it."""
+
+    title: str
+    description: str | None
+    product_owner: str
+    fellow_members: list[str]
+
+    @classmethod
+    def of(cls, project: Project, student: User) -> "MyProjectOut":
+        return cls(
+            title=project.title,
+            description=project.description,
+            product_owner=project.product_owner.full_name,
+            fellow_members=[
+                member.full_name
+                for member in project.members
+                if member.id != student.id
+            ],
+        )
+
+
 class ProjectIn(BaseModel):
     title: Annotated[
         str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)
@@ -81,6 +103,12 @@ class MemberIn(BaseModel):
 def teachers(session: SessionDep, user: TeacherOrSuperuserDep) -> list[PersonOut]:
     """The active Teachers, to choose a Product Owner from."""
     return [PersonOut.of(teacher) for teacher in projects.active_teachers(session)]
+
+
+@router.get("/my-project")
+def my_project(user: StudentDep) -> MyProjectOut | None:
+    """The logged-in Student's Project, or None when they have none yet."""
+    return MyProjectOut.of(user.project, user) if user.project else None
 
 
 @router.get("/projects")

@@ -235,6 +235,12 @@ async def remove_member(token: str, project_id: int, student_id: int) -> dict[st
     )
 
 
+async def my_project(token: str) -> dict[str, Any] | None:
+    """The logged-in Student's Project (title, description, product_owner,
+    fellow_members), or None when they have none yet."""
+    return await _request("GET", "/api/my-project", token=token)
+
+
 async def list_projects(
     token: str, *, status: str | None = None
 ) -> list[dict[str, Any]]:

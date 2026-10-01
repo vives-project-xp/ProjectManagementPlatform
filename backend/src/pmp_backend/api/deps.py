@@ -82,5 +82,6 @@ TemporaryPasswordUserDep = Annotated[
 ]
 CurrentUserDep = Annotated[User, Depends(current_user)]
 SuperuserDep = Annotated[User, Depends(_role_in(Role.SUPERUSER))]
+StudentDep = Annotated[User, Depends(_role_in(Role.STUDENT))]
 # Teachers and the Superuser: everything about Projects and Members (spec #3).
 TeacherOrSuperuserDep = Annotated[User, Depends(_role_in(Role.SUPERUSER, Role.TEACHER))]
