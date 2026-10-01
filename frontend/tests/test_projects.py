@@ -1,7 +1,7 @@
 from nicegui import ui
 from nicegui.testing import User
 
-from tests.conftest import ready_to_work
+from tests.conftest import eventually, ready_to_work
 
 
 def project_titles(user: User) -> list[str]:
@@ -36,7 +36,7 @@ async def test_teacher_creates_a_project(user: User):
 
     await create_project(user, "Smart Greenhouse")
 
-    assert project_titles(user) == ["Smart Greenhouse"]
+    await eventually(lambda: project_titles(user) == ["Smart Greenhouse"])
 
 
 async def test_teacher_edits_a_project_on_its_details_page(user: User):
@@ -51,7 +51,7 @@ async def test_teacher_edits_a_project_on_its_details_page(user: User):
     await user.should_see("The changes were saved.")
     await user.open("/projects")
     await user.should_see(marker="projects")
-    assert project_titles(user) == ["Greenhouse 2.0"]
+    await eventually(lambda: project_titles(user) == ["Greenhouse 2.0"])
 
 
 async def test_duplicate_title_is_shown_in_the_dialog(user: User):

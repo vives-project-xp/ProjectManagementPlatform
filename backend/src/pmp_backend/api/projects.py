@@ -1,7 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Request, status
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, status
 from pydantic import BaseModel, Field, StringConstraints
 
 from pmp_backend.api.deps import SessionDep, TeacherOrSuperuserDep
@@ -54,17 +53,6 @@ class ProjectIn(BaseModel):
 
     def fields(self) -> ProjectFields:
         return ProjectFields(**self.model_dump())
-
-
-def refused(request: Request, error: Exception) -> JSONResponse:
-    """Exception handler: a refused Project action as an HTTP error (see app.py)."""
-    if isinstance(error, projects.ProjectNotFoundError):
-        code = status.HTTP_404_NOT_FOUND
-    elif isinstance(error, projects.DuplicateTitleError):
-        code = status.HTTP_409_CONFLICT
-    else:
-        code = status.HTTP_422_UNPROCESSABLE_CONTENT
-    return JSONResponse({"detail": str(error)}, status_code=code)
 
 
 @router.get("/teachers")

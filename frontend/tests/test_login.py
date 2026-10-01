@@ -11,6 +11,8 @@ async def test_first_login_forces_a_password_change(user: User):
 
     await change_starting_password(user, "teacher", "my-new-password")
 
+    # The Teacher's home page (Projects) loads its data before it shows.
+    await user.should_see(marker="navigation", retries=30)
     await user.should_see("Teacher Account")
     await user.should_see("Projects")
     await user.should_see("Members")

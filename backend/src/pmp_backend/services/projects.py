@@ -7,18 +7,19 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from pmp_backend.domain import ProjectStatus, Role
+from pmp_backend.errors import Conflict, NotFound, Refused
 from pmp_backend.models import Project, User
 
 
-class ProjectError(Exception):
+class ProjectError(Refused):
     """A Project could not be saved as asked; the message is fit to show."""
 
 
-class DuplicateTitleError(ProjectError):
+class DuplicateTitleError(ProjectError, Conflict):
     pass
 
 
-class ProjectNotFoundError(ProjectError):
+class ProjectNotFoundError(ProjectError, NotFound):
     pass
 
 
