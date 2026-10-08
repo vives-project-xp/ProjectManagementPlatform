@@ -8,9 +8,10 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from pmp_backend.domain import ProjectStatus
-from pmp_backend.errors import Conflict, Refused
+from pmp_backend.domain import ProjectStatus, Role, Year
+from pmp_backend.errors import Conflict, NotFound, Refused
 from pmp_backend.models import Project, Top3Choice, Top3Round, User
+from pmp_backend.services import users
 from pmp_backend.services.projects import changeable_project
 
 MAX_PLACES = 3
@@ -21,6 +22,10 @@ class Top3Error(Refused):
 
 
 class Top3ConflictError(Top3Error, Conflict):
+    pass
+
+
+class Top3NotFoundError(Top3Error, NotFound):
     pass
 
 
@@ -103,6 +108,7 @@ class Choice:
     deleted (no title), archived or no longer Open for choice."""
 
     rank: int
+    project_id: int | None
     title: str | None
     available: bool
 
@@ -140,26 +146,33 @@ def places(session: Session) -> int:
     return min(MAX_PLACES, len(choosable_projects(session)))
 
 
-def top3_of(session: Session, student_id: int) -> SubmittedTop3 | None:
+def _top3s(session: Session, student_ids: list[int]) -> dict[int, SubmittedTop3]:
+    """The submitted Top 3 of each of these Students that has one."""
     rows = session.execute(
         select(Top3Choice, Project)
         .outerjoin(Project, Top3Choice.project_id == Project.id)
-        .where(Top3Choice.student_id == student_id)
-        .order_by(Top3Choice.rank)
+        .where(Top3Choice.student_id.in_(student_ids))
+        .order_by(Top3Choice.student_id, Top3Choice.rank)
     ).all()
-    if not rows:
-        return None
-    return SubmittedTop3(
-        choices=[
+    found: dict[int, SubmittedTop3] = {}
+    for choice, project in rows:
+        top3 = found.setdefault(
+            choice.student_id,
+            SubmittedTop3(choices=[], submitted_at=choice.submitted_at),
+        )
+        top3.choices.append(
             Choice(
                 rank=choice.rank,
+                project_id=choice.project_id,
                 title=project.title if project else None,
                 available=is_choosable(project),
             )
-            for choice, project in rows
-        ],
-        submitted_at=rows[0][0].submitted_at,
-    )
+        )
+    return found
+
+
+def top3_of(session: Session, student_id: int) -> SubmittedTop3 | None:
+    return _top3s(session, [student_id]).get(student_id)
 
 
 def can_submit(session: Session, student: User) -> bool:
@@ -209,3 +222,81 @@ def submit_top3(session: Session, student: User, project_ids: list[int]) -> None
     except IntegrityError as error:
         session.rollback()
         raise Top3ConflictError("You already submitted your Top 3.") from error
+
+
+# The overview (Teachers and the Superuser)
+
+
+@dataclass(frozen=True)
+class StudentTop3:
+    student: User
+    top3: SubmittedTop3 | None
+
+
+@dataclass(frozen=True)
+class ProjectSummary:
+    """How many active Students put this open Project 1st, 2nd and 3rd."""
+
+    project: Project
+    first: int
+    second: int
+    third: int
+
+
+def overview(
+    session: Session,
+    *,
+    programme: str | None = None,
+    year: Year | None = None,
+    without_top3: bool = False,
+) -> list[StudentTop3]:
+    """Every active Student, by name, with their Top 3 (or None)."""
+    students = [
+        student
+        for student in users.list_students(session, programme=programme, year=year)
+        if student.is_active
+    ]
+    top3s = _top3s(session, [student.id for student in students])
+    rows = [StudentTop3(student, top3s.get(student.id)) for student in students]
+    if without_top3:
+        rows = [row for row in rows if row.top3 is None]
+    return rows
+
+
+def summary(session: Session) -> list[ProjectSummary]:
+    """For each Project open for choice, its count per rank (active Students)."""
+    counts = session.execute(
+        select(Top3Choice.project_id, Top3Choice.rank, func.count())
+        .join(User, Top3Choice.student_id == User.id)
+        .where(User.is_active)
+        .group_by(Top3Choice.project_id, Top3Choice.rank)
+    ).all()
+    by_project: dict[tuple[int | None, int], int] = {
+        (project_id, rank): count for project_id, rank, count in counts
+    }
+    return [
+        ProjectSummary(
+            project=project,
+            first=by_project.get((project.id, 1), 0),
+            second=by_project.get((project.id, 2), 0),
+            third=by_project.get((project.id, 3), 0),
+        )
+        for project in choosable_projects(session)
+    ]
+
+
+def reset_top3(session: Session, student_id: int) -> None:
+    """Clear one Student's Top 3 so they can choose again; only while open."""
+    student = session.scalar(
+        select(User)
+        .where(User.id == student_id, User.role == Role.STUDENT.value)
+        .with_for_update()
+    )
+    if student is None:
+        raise Top3NotFoundError("This Student does not exist.")
+    if not round_state(session).is_open:
+        raise Top3ConflictError("The Top 3 round is closed, so a Top 3 can't be reset.")
+    if top3_of(session, student.id) is None:
+        raise Top3NotFoundError(f"{student.full_name} has no Top 3.")
+    session.execute(delete(Top3Choice).where(Top3Choice.student_id == student.id))
+    session.commit()

@@ -339,6 +339,30 @@ async def submit_top3(token: str, project_ids: list[int]) -> dict[str, Any]:
     )
 
 
+async def top3_overview(
+    token: str,
+    *,
+    programme: str | None = None,
+    year: str | None = None,
+    without_top3: bool = False,
+) -> dict[str, Any]:
+    """Every active Student with their Top 3 (`students`), and per open Project
+    how often it was chosen 1st, 2nd and 3rd (`summary`)."""
+    params: dict[str, str] = {}
+    if programme:
+        params["programme"] = programme
+    if year:
+        params["year"] = year
+    if without_top3:
+        params["without_top3"] = "true"
+    query = f"?{urlencode(params)}" if params else ""
+    return await _request("GET", f"/api/top3/overview{query}", token=token)
+
+
+async def reset_top3(token: str, student_id: int) -> None:
+    await _request("DELETE", f"/api/top3/students/{student_id}", token=token)
+
+
 async def delete_project(token: str, project_id: int) -> None:
     await _request("DELETE", f"/api/projects/{project_id}", token=token)
 
