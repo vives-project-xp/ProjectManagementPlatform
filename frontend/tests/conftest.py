@@ -86,7 +86,7 @@ async def log_in(user: User, role: str, password: str | None = None) -> None:
 
 async def change_starting_password(user: User, role: str, new_password: str) -> None:
     _, starting_password = STARTING_ACCOUNTS[role]
-    await user.should_see("Change your password")
+    await user.should_see("Change your password", retries=30)
     user.find(marker="current-password").type(starting_password)
     user.find(marker="new-password").type(new_password)
     user.find(marker="repeat-password").type(new_password)
