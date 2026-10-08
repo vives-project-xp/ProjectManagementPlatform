@@ -9,7 +9,11 @@ from pmp_backend.errors import Conflict, NotFound, Refused
 from pmp_backend.models import User
 from pmp_backend.security import hash_password
 from pmp_backend.services import programmes
-from pmp_backend.services.projects import active_titles_owned_by
+from pmp_backend.services.projects import (
+    active_titles_owned_by,
+    titles_made_by,
+    titles_owned_by,
+)
 
 
 class UserError(Refused):
@@ -37,12 +41,9 @@ def find_by_email(session: Session, email: str) -> User | None:
     return session.scalar(select(User).where(User.email == normalize_email(email)))
 
 
-def role_exists(session: Session, role: Role) -> bool:
-    """Whether at least one User (active or not) has this Role."""
-    return (
-        session.scalar(select(User.id).where(User.role == role.value).limit(1))
-        is not None
-    )
+def any_users(session: Session) -> bool:
+    """Whether at least one User (active or not) exists."""
+    return session.scalar(select(User.id).limit(1)) is not None
 
 
 def _users_query(*, role: Role | None = None, active: bool | None = None) -> Select:
@@ -224,6 +225,48 @@ def reactivate_user(session: Session, user_id: int) -> User:
     user.is_active = True
     session.commit()
     return user
+
+
+def _why_not_deletable(session: Session, user: User) -> str | None:
+    """Why this User is linked to a Project, or None when they are not."""
+    if user.project is not None:
+        return f"is a Member of {user.project.title}"
+    made = titles_made_by(session, user.id)
+    if made:
+        return f"is in the Makers of {', '.join(made)}"
+    owned = titles_owned_by(session, user.id)
+    if owned:
+        return f"is the Product Owner of {', '.join(owned)}"
+    return None
+
+
+def delete_user(session: Session, user_id: int) -> None:
+    """Remove a Student or Teacher who is not linked to any Project; their email
+    becomes free and their token stops working on its next request."""
+    # Locked like adding a Member or archiving (both lock the Student's row), so
+    # the User cannot become linked between the checks and the delete.
+    user = session.get(User, user_id, with_for_update={"of": User})
+    if user is None:
+        raise UserNotFoundError("This User does not exist.")
+    if user.role == Role.SUPERUSER.value:
+        raise UserConflictError("The Superuser cannot be deleted.")
+    reason = _why_not_deletable(session, user)
+    if reason is not None:
+        raise UserConflictError(
+            f"{user.full_name} {reason}, so they cannot be deleted. "
+            "Deactivate them instead."
+        )
+    name = user.full_name
+    session.delete(user)
+    try:
+        session.commit()
+    except IntegrityError as error:
+        # A Project got this Teacher as Product Owner after the check.
+        session.rollback()
+        raise UserConflictError(
+            f"{name} was just made a Product Owner, so they cannot be deleted. "
+            "Deactivate them instead."
+        ) from error
 
 
 def reset_password(session: Session, user_id: int, temporary_password: str) -> None:

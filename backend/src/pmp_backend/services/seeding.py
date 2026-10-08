@@ -1,6 +1,7 @@
 """Create the starting accounts from logins.txt (one per Role).
 
-A line is skipped when its email is taken or a User with its Role already exists.
+Only on the first start, when there are no Users yet: a starting account that was
+later edited or deleted never comes back.
 """
 
 import logging
@@ -10,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from pmp_backend.domain import Role, Year
 from pmp_backend.services.programmes import first_programme_name
-from pmp_backend.services.users import find_by_email, new_user, role_exists
+from pmp_backend.services.users import any_users, find_by_email, new_user
 
 log = logging.getLogger(__name__)
 
@@ -19,7 +20,11 @@ def seed_starting_accounts(session: Session, logins_file: Path | None) -> None:
     if logins_file is None or not logins_file.is_file():
         log.warning("No logins file at %s; no starting accounts created.", logins_file)
         return
+    # Never overwrite: a password changed by the User survives every deploy.
+    if any_users(session):
+        return
 
+    seeded_roles: set[Role] = set()
     for line_number, line in enumerate(
         logins_file.read_text(encoding="utf-8").splitlines(), start=1
     ):
@@ -33,11 +38,10 @@ def seed_starting_accounts(session: Session, logins_file: Path | None) -> None:
             log.warning("Skipping invalid line %d in %s.", line_number, logins_file)
             continue
 
-        # Never overwrite: a password changed by the User survives every deploy.
-        # Checking the Role as well means an edited email does not bring the
-        # original starting account back on the next restart.
-        if find_by_email(session, email) is not None or role_exists(session, role):
+        # One starting account per Role and per email: the first line wins.
+        if role in seeded_roles or find_by_email(session, email) is not None:
             continue
+        seeded_roles.add(role)
         is_student = role is Role.STUDENT
         user = new_user(
             role=role,

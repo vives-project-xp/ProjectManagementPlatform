@@ -179,6 +179,10 @@ async def reactivate_user(token: str, user_id: int) -> dict[str, Any]:
     return await _request("POST", f"/api/users/{user_id}/reactivate", token=token)
 
 
+async def delete_user(token: str, user_id: int) -> None:
+    await _request("DELETE", f"/api/users/{user_id}", token=token)
+
+
 async def reset_password(token: str, user_id: int, temporary_password: str) -> None:
     await _request(
         "POST",

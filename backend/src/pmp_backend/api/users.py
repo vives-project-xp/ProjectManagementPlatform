@@ -103,6 +103,12 @@ def reactivate_user(
     return UserOut.model_validate(users.reactivate_user(session, user_id))
 
 
+@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_user(user_id: int, session: SessionDep, superuser: SuperuserDep) -> Response:
+    users.delete_user(session, user_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @router.post("/{user_id}/reset-password", status_code=status.HTTP_204_NO_CONTENT)
 def reset_password(
     user_id: int, body: ResetPasswordIn, session: SessionDep, superuser: SuperuserDep

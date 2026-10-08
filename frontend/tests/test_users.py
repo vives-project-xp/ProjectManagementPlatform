@@ -1,7 +1,7 @@
 from nicegui import ui
 from nicegui.testing import User
 
-from tests.conftest import eventually, ready_to_work
+from tests.conftest import create_project, eventually, ready_to_work
 
 
 def table_emails(user: User) -> list[str]:
@@ -78,6 +78,45 @@ async def test_superuser_edits_and_deactivates_a_user(user: User):
     await user.should_see(marker="users")
     user.find(marker="status-filter").elements.pop().set_value("Deactivated")
     await eventually(lambda: table_emails(user) == ["teacher@pmp.local"])
+
+
+async def test_superuser_deletes_a_user_after_confirming(user: User):
+    await ready_to_work(user, "superuser")
+
+    # User 2 is the Teacher starting account, not linked to any Project.
+    await user.open("/users/2")
+    await user.should_see(marker="delete-user", retries=30)
+    user.find(marker="delete-user").click()
+    await user.should_see("Delete the User Teacher Account?", retries=10)
+    user.find(marker="confirm").click()
+
+    await user.should_see(marker="users", retries=30)
+    await eventually(lambda: "teacher@pmp.local" not in table_emails(user))
+
+
+async def test_deleting_a_product_owner_is_refused(user: User):
+    await ready_to_work(user, "superuser")
+    await create_project(user, "Smart Greenhouse")
+
+    await user.open("/users/2")
+    await user.should_see(marker="delete-user", retries=30)
+    user.find(marker="delete-user").click()
+    await user.should_see("Delete the User Teacher Account?", retries=10)
+    user.find(marker="confirm").click()
+
+    await user.should_see(
+        "Teacher Account is the Product Owner of Smart Greenhouse, so they cannot "
+        "be deleted. Deactivate them instead."
+    )
+
+
+async def test_the_superuser_page_has_no_delete(user: User):
+    await ready_to_work(user, "superuser")
+
+    await user.open("/users/1")
+    await user.should_see(marker="save-user", retries=30)
+
+    await user.should_not_see(marker="delete-user")
 
 
 async def test_teacher_has_no_users_screen(user: User):

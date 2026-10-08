@@ -15,7 +15,7 @@ The platform-wide kind of User: Superuser, Teacher or Student.
 _Avoid_: Permission level, user type
 
 **Superuser**:
-The only User who creates, edits and deactivates other Users and resets their passwords.
+The only User who creates, edits, deactivates and deletes other Users and resets their passwords. The Superuser can never be deleted.
 _Avoid_: Admin
 
 **Teacher**:
@@ -27,15 +27,19 @@ A User who can work in a Project, described by their Programme and Year.
 _Avoid_: Pupil, participant
 
 **Deactivated User**:
-A User who can no longer log in but is kept, together with their links to Projects; Users are never deleted.
-_Avoid_: Deleted user, removed user
+A User who can no longer log in but is kept, together with their links to Projects. The way to retire a User who is linked to a Project.
+_Avoid_: Removed user
+
+**Deleted User**:
+A Student or Teacher removed for good by the Superuser, typically one created by mistake. Only possible while the User is not linked to any Project: not a Member, not in any Makers, and not the Product Owner of any Project (Active or Archived); otherwise they are deactivated instead. Their session ends at once and their email is free again.
+_Avoid_: Deactivated user (that User is kept)
 
 **Temporary password**:
 A password set by the Superuser that the User must replace at their next login.
 _Avoid_: Default password, reset code
 
 **Starting account**:
-One of the three Users (one per Role) created from the deployment's `logins.txt` the first time the backend starts, never overwritten afterwards; its password from that file counts as a Temporary password. A line is skipped once its email is taken or any User with its Role exists, so editing a starting account (even its email) never brings the original back. The only sanctioned use of "account" for a User.
+One of the three Users (one per Role) created from the deployment's `logins.txt` the first time the backend starts, never overwritten afterwards; its password from that file counts as a Temporary password. Starting accounts are only created while there are no Users at all, so editing or deleting one never brings the original back. The only sanctioned use of "account" for a User.
 _Avoid_: Default user, seed user, admin account
 
 ### Projects
