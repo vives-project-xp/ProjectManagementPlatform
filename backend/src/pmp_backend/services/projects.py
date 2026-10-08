@@ -63,6 +63,28 @@ def active_titles_owned_by(session: Session, user_id: int) -> list[str]:
     )
 
 
+def titles_owned_by(session: Session, user_id: int) -> list[str]:
+    """Titles of all Projects (Active and Archived) this User is Product Owner of."""
+    return list(
+        session.scalars(
+            select(Project.title)
+            .where(Project.product_owner_id == user_id)
+            .order_by(Project.title)
+        )
+    )
+
+
+def titles_made_by(session: Session, student_id: int) -> list[str]:
+    """Titles of the Projects whose Makers include this Student."""
+    return list(
+        session.scalars(
+            select(Project.title)
+            .where(Project.makers.contains([{"student_id": student_id}]))
+            .order_by(Project.title)
+        )
+    )
+
+
 def list_projects(
     session: Session, *, status: ProjectStatus | None = None
 ) -> list[Project]:

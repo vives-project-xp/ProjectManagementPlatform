@@ -8,6 +8,7 @@ from starlette.responses import Response
 from pmp_frontend import api
 from pmp_frontend.shell import (
     ErrorMessage,
+    confirm,
     guard,
     no_access,
     page_frame,
@@ -208,6 +209,18 @@ def register() -> None:
                 new_password.value = ""
                 ui.notify("The password was reset. It must be changed at next login.")
 
+            async def delete() -> None:
+                name = f"{shown['first_name']} {shown['last_name']}"
+                if not await confirm(f"Delete the User {name}?", "Delete"):
+                    return
+                try:
+                    await api.delete_user(token(), user_id)
+                except api.ApiError as error:
+                    delete_error.show(error.message)
+                    return
+                ui.notify(f"{name} was deleted.")
+                ui.navigate.to("/users")
+
             def show_status() -> None:
                 active = shown["is_active"]
                 status_label.text = f"Status: {'Active' if active else 'Deactivated'}"
@@ -253,4 +266,17 @@ def register() -> None:
                 new_password.mark("reset-password-value")
                 reset_error = ErrorMessage()
                 ui.button("Reset password", on_click=reset).mark("reset-password")
+
+            # The Superuser can never be deleted, so their page has no Delete.
+            if shown["role"] != "superuser":
+                with ui.card().classes("w-full max-w-lg"):
+                    ui.label("Delete User").classes("text-h6")
+                    ui.label(
+                        "Only possible when the User is not linked to any Project; "
+                        "otherwise, deactivate them."
+                    )
+                    delete_error = ErrorMessage()
+                    ui.button("Delete", on_click=delete).props("color=negative").mark(
+                        "delete-user"
+                    )
         return None
