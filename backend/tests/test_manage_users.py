@@ -16,7 +16,6 @@ NEW_STUDENT = {
     "first_name": "Lisa",
     "last_name": "Peeters",
     "email": "lisa.peeters@student.vives.be",
-    "temporary_password": "welcome-lisa",
     "programme": "Electronics-ICT",
     "year": "1",
 }
@@ -303,37 +302,21 @@ def test_reset_password_forces_a_change_at_next_login(client: TestClient):
     ready_to_work(client, "student")
     student = user_id(client, headers, "student@pmp.local")
 
-    response = client.post(
-        f"/api/users/{student}/reset-password",
-        json={"temporary_password": "fresh-start-1"},
-        headers=headers,
-    )
+    response = client.post(f"/api/users/{student}/reset-password", headers=headers)
 
-    assert response.status_code == 204, response.text
+    assert response.status_code == 200, response.text
+    new_password = response.json()["temporary_password"]
     old = client.post(
         "/api/auth/login",
         json={"email": "student@pmp.local", "password": "student-secret-1-changed"},
     )
     new = client.post(
         "/api/auth/login",
-        json={"email": "student@pmp.local", "password": "fresh-start-1"},
+        json={"email": "student@pmp.local", "password": new_password},
     )
     assert old.status_code == 401
     assert new.status_code == 200
     assert new.json()["user"]["must_change_password"] is True
-
-
-def test_reset_password_needs_eight_characters(client: TestClient):
-    headers = ready_to_work(client, "superuser")
-    student = user_id(client, headers, "student@pmp.local")
-
-    response = client.post(
-        f"/api/users/{student}/reset-password",
-        json={"temporary_password": "short"},
-        headers=headers,
-    )
-
-    assert response.status_code == 422
 
 
 # Filters
@@ -377,11 +360,7 @@ def test_only_the_superuser_edits_deactivates_resets_and_deletes(
         ("POST", f"/api/users/{target}/deactivate", None),
         ("POST", f"/api/users/{target}/reactivate", None),
         ("DELETE", f"/api/users/{target}", None),
-        (
-            "POST",
-            f"/api/users/{target}/reset-password",
-            {"temporary_password": "x" * 8},
-        ),
+        ("POST", f"/api/users/{target}/reset-password", None),
     ]:
         response = client.request(method, path, json=body, headers=headers)
         assert response.status_code == 403, (method, path)

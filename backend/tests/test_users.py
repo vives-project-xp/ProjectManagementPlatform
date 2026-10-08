@@ -8,14 +8,12 @@ NEW_TEACHER = {
     "first_name": "Ann",
     "last_name": "Janssens",
     "email": "Ann.Janssens@vives.be",
-    "temporary_password": "welcome-ann",
 }
 NEW_STUDENT = {
     "role": "student",
     "first_name": "Lisa",
     "last_name": "Peeters",
     "email": "lisa.peeters@student.vives.be",
-    "temporary_password": "welcome-lisa",
     "programme": "Electronics-ICT",
     "year": "International",
 }
@@ -50,7 +48,10 @@ def test_superuser_creates_a_teacher_who_must_change_their_password(
     assert created["year"] is None
     login = client.post(
         "/api/auth/login",
-        json={"email": "ann.janssens@vives.be", "password": "welcome-ann"},
+        json={
+            "email": "ann.janssens@vives.be",
+            "password": created["temporary_password"],
+        },
     )
     assert login.status_code == 200
     assert login.json()["user"]["must_change_password"] is True
@@ -98,7 +99,6 @@ def test_teacher_has_no_programme_or_year(client: TestClient):
     "changes",
     [
         {"role": "superuser"},
-        {"temporary_password": "short"},
         {"first_name": " "},
         {"email": "not-an-email"},
     ],

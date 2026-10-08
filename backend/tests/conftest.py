@@ -94,7 +94,6 @@ def ready_to_work(client: TestClient, role: str) -> dict[str, str]:
 NEW_STUDENT = {
     "role": "student",
     "last_name": "Peeters",
-    "temporary_password": "welcome-student",
     "programme": "Electronics-ICT",
     "year": "2",
 }
