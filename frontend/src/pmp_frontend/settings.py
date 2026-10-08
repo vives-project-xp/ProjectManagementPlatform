@@ -10,3 +10,6 @@ class Settings(BaseSettings):
     backend_url: str = "http://localhost:8000"
     # Signs the browser session cookie that holds the login token.
     storage_secret: str
+    # Send that cookie only over HTTPS (production, behind Caddy). Off for tests
+    # and plain-HTTP local runs.
+    secure_cookies: bool = False

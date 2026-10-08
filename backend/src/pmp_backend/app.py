@@ -15,6 +15,7 @@ from pmp_backend.api import (
 )
 from pmp_backend.database import is_reachable, make_engine
 from pmp_backend.errors import Conflict, Forbidden, NotFound, Refused
+from pmp_backend.services.auth import LoginGuard
 from pmp_backend.services.seeding import seed_starting_accounts
 from pmp_backend.settings import Settings
 
@@ -34,6 +35,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app = FastAPI(title="VIVES Project Management Platform API", lifespan=lifespan)
     app.state.settings = settings
     app.state.sessionmaker = make_session
+    app.state.login_guard = LoginGuard()
     app.include_router(auth.router)
     app.include_router(users.router)
     app.include_router(programmes.router)
