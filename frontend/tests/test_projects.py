@@ -6,6 +6,7 @@ from tests.conftest import (
     fill_project_form,
     project_titles,
     ready_to_work,
+    upload_photo,
 )
 
 
@@ -64,3 +65,35 @@ async def test_teacher_deletes_a_project_after_confirming(user: User):
 
     await user.should_see(marker="projects", retries=30)
     await eventually(lambda: project_titles(user) == [])
+
+
+async def test_teacher_uploads_replaces_and_removes_a_photo(user: User):
+    await ready_to_work(user, "teacher")
+    await create_project(user, "Drone", 1, 3)
+    await user.open("/projects/1")
+    await user.should_see(marker="photo-placeholder", retries=30)
+
+    await upload_photo(user)
+    await user.should_see(marker="project-photo", retries=30)
+    await upload_photo(user)
+    await eventually(
+        lambda: (
+            user.find(marker="project-photo").elements.pop().source == "/photos/1?v=2"
+        )
+    )
+
+    user.find(marker="remove-photo").click()
+    await user.should_see("Remove the photo of Drone?", retries=10)
+    user.find(marker="confirm").click()
+    await user.should_see(marker="photo-placeholder", retries=30)
+
+
+async def test_a_file_that_is_not_a_photo_is_refused(user: User):
+    await ready_to_work(user, "teacher")
+    await create_project(user, "Drone", 1, 3)
+    await user.open("/projects/1")
+    await user.should_see(marker="photo-upload", retries=30)
+
+    await upload_photo(user, b"not really a photo", "notes.jpg")
+
+    await user.should_see("Only JPG and PNG photos are accepted.")

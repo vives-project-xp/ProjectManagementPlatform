@@ -3,6 +3,7 @@
 from nicegui import ui
 
 from pmp_frontend import api
+from pmp_frontend.photos import show_photo
 from pmp_frontend.shell import role_page, token
 
 
@@ -15,6 +16,7 @@ def register() -> None:
             ui.label("You haven't been assigned to a project yet.")
             return
         with ui.card().classes("w-full"):
+            show_photo(project["id"], project["photo_version"])
             ui.label(project["title"]).classes("text-h5")
             if project["description"]:
                 ui.label(project["description"])

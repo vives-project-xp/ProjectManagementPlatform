@@ -103,6 +103,8 @@ class Project(Base):
     makers: Mapped[list[dict]] = mapped_column(
         JSONB, default=list, server_default=text("'[]'::jsonb")
     )
+    # Null: no photo. Raised on every upload, so pages can bust caches (#29).
+    photo_version: Mapped[int | None]
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

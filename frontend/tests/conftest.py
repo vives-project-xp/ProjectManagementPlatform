@@ -47,6 +47,7 @@ def backend_in_process(tmp_path: Path):
             database_url=testing.TEST_DATABASE_URL,
             jwt_secret="test-secret-that-is-long-enough-for-hs256-signing",
             logins_file=logins_file,
+            photos_dir=tmp_path / "photos",
         )
     )
     # ASGITransport does not run the backend's startup, so seed here.
@@ -126,4 +127,16 @@ def choose_student(user: User, name: str) -> None:
     assert isinstance(choice, ui.select)
     choice.set_value(
         next(key for key, label in choice.options.items() if label.startswith(name))
+    )
+
+
+JPG = b"\xff\xd8\xff\xe0" + b"jpg-body" * 10
+
+
+async def upload_photo(user: User, data: bytes = JPG, name: str = "cover.jpg") -> None:
+    """Upload a photo on the open Project details page."""
+    upload = user.find(marker="photo-upload").elements.pop()
+    assert isinstance(upload, ui.upload)
+    await upload.handle_uploads(
+        [ui.upload.SmallFileUpload(name=name, content_type="image/jpeg", _data=data)]
     )
