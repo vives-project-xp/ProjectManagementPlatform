@@ -191,10 +191,13 @@ def register() -> None:
                 if not await confirm(question, action):
                     return
                 try:
-                    await change(token(), project_id)
+                    changed = await change(token(), project_id)
                 except api.ApiError as error:
                     status_error.show(error.message)
                     return
+                if changed.get("warning"):
+                    # Done in the platform; GitHub has to be fixed by hand.
+                    await confirm(changed["warning"], "OK")
                 ui.navigate.to(f"/projects/{project_id}")
 
             async def delete() -> None:

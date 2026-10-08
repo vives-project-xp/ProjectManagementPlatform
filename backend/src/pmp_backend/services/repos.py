@@ -245,6 +245,24 @@ def check_members(
     return result
 
 
+def _access_sets(client: GitHub, full_name: str) -> tuple[set[str], set[str]]:
+    """Lower-cased logins with access, and with an invitation still open."""
+    collaborators = {c.login.lower() for c in client.collaborators(full_name)}
+    pending = {i.login.lower() for i in client.invitations(full_name) if not i.expired}
+    return collaborators, pending
+
+
+def _status(user: User, collaborators: set[str], pending: set[str]) -> str:
+    login = (user.github_username or "").lower()
+    if not login:
+        return "no_username"
+    if login in collaborators:
+        return "has_access"
+    if login in pending:
+        return "invited"
+    return "not_invited"
+
+
 @dataclass(frozen=True)
 class PersonAccess:
     name: str
@@ -262,22 +280,11 @@ def people_access(
     check_connected(settings)
     project = get_project(session, project_id)
     info = _repository(session, client, project)
-    collaborators = {c.login.lower() for c in client.collaborators(info.full_name)}
-    pending = {
-        i.login.lower() for i in client.invitations(info.full_name) if not i.expired
-    }
+    collaborators, pending = _access_sets(client, info.full_name)
 
     def access(user: User, role: str) -> PersonAccess:
-        login = user.github_username
-        if not login:
-            status = "no_username"
-        elif login.lower() in collaborators:
-            status = "has_access"
-        elif login.lower() in pending:
-            status = "invited"
-        else:
-            status = "not_invited"
-        return PersonAccess(user.full_name, role, login, status)
+        status = _status(user, collaborators, pending)
+        return PersonAccess(user.full_name, role, user.github_username, status)
 
     people = [access(project.product_owner, "Product Owner")]
     people += [access(member, "Member") for member in project.members]
@@ -308,3 +315,48 @@ def check_all(
             message = f"Failed. {error}"
         results.append((get_project(session, project_id), message))
     return results
+
+
+def archive_repository(
+    session: Session, client: GitHub, settings: Settings, project: Project
+) -> str | None:
+    """Archive or unarchive the Project's repository to match the Project
+    (spec #49): a warning to show when GitHub refused, never an error, so
+    GitHub problems never block archiving."""
+    if project.github_repo_id is None or not is_connected(settings):
+        return None
+    archived = project.status == ProjectStatus.ARCHIVED.value
+    try:
+        info = _repository(session, client, project)
+        client.set_archived(info.full_name, archived)
+    except GitHubError as error:
+        verb = "archived" if archived else "restored"
+        action = "archived" if archived else "unarchived"
+        return (
+            f"{project.title} was {verb}, but its repository could not be {action} "
+            f"on GitHub: {error}"
+        )
+    session.commit()
+    return None
+
+
+@dataclass(frozen=True)
+class StudentAccess:
+    repo_url: str | None
+    # "no_repository", "no_username", "not_invited", "invited" or "has_access".
+    status: str
+    invitation_url: str | None
+
+
+def student_access(
+    session: Session, client: GitHub, settings: Settings, student: User
+) -> StudentAccess:
+    """A Student's repository and their next step to get access."""
+    project = student.project
+    if project is None or project.github_repo_id is None or not is_connected(settings):
+        return StudentAccess(None, "no_repository", None)
+    info = _repository(session, client, project)
+    status = _status(student, *_access_sets(client, info.full_name))
+    # GitHub's page to accept a repository invitation.
+    invitation = f"{info.html_url}/invitations" if status == "invited" else None
+    return StudentAccess(info.html_url, status, invitation)

@@ -178,6 +178,11 @@ def delete_project(session: Session, project_id: int) -> None:
     never once it has Makers, so no history is lost."""
     # Locked like adding a Member, so nobody joins between the check and the delete.
     project = get_project(session, project_id, lock=True)
+    if project.github_repo_id is not None:
+        # The code lives on; archiving keeps it read-only (spec #49).
+        raise ProjectConflictError(
+            "This Project has a GitHub repository; archive it instead."
+        )
     if project.status == ProjectStatus.ARCHIVED.value:
         raise ProjectConflictError(
             f"{project.title} is archived, so it cannot be deleted."

@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field, StringConstraints
 
 from pmp_backend.api.deps import (
     CurrentUserDep,
+    GitHubDep,
     SessionDep,
     SettingsDep,
     StudentDep,
@@ -72,6 +73,8 @@ class ProjectDetailsOut(ProjectOut):
     members: list[StudentOut]
     makers: list[MakerOut]
     top3_ranks: list[Top3RankOut]
+    # Set when archiving or restoring worked but GitHub didn't follow.
+    warning: str | None = None
 
     @classmethod
     def of(cls, project: Project) -> "ProjectDetailsOut":
@@ -166,16 +169,28 @@ def list_projects(
 
 @router.post("/projects/{project_id}/archive")
 def archive_project(
-    project_id: int, session: SessionDep, user: TeacherOrSuperuserDep
+    project_id: int,
+    session: SessionDep,
+    client: GitHubDep,
+    settings: SettingsDep,
+    user: TeacherOrSuperuserDep,
 ) -> ProjectDetailsOut:
-    return ProjectDetailsOut.of(projects.archive_project(session, project_id))
+    project = projects.archive_project(session, project_id)
+    warning = repos.archive_repository(session, client, settings, project)
+    return ProjectDetailsOut.of(project).model_copy(update={"warning": warning})
 
 
 @router.post("/projects/{project_id}/restore")
 def restore_project(
-    project_id: int, session: SessionDep, user: TeacherOrSuperuserDep
+    project_id: int,
+    session: SessionDep,
+    client: GitHubDep,
+    settings: SettingsDep,
+    user: TeacherOrSuperuserDep,
 ) -> ProjectDetailsOut:
-    return ProjectDetailsOut.of(projects.restore_project(session, project_id))
+    project = projects.restore_project(session, project_id)
+    warning = repos.archive_repository(session, client, settings, project)
+    return ProjectDetailsOut.of(project).model_copy(update={"warning": warning})
 
 
 @router.post("/projects", status_code=status.HTTP_201_CREATED)

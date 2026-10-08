@@ -8,6 +8,7 @@ from pmp_backend.api.deps import (
     GitHubDep,
     SessionDep,
     SettingsDep,
+    StudentDep,
     TeacherOrSuperuserDep,
 )
 from pmp_backend.api.schemas import UserOut
@@ -145,3 +146,17 @@ def repository_access(
     return RepositoryAccessOut(
         repo_url=url, people=[PersonAccessOut(**vars(person)) for person in people]
     )
+
+
+class StudentAccessOut(BaseModel):
+    repo_url: str | None
+    status: str
+    invitation_url: str | None
+
+
+@router.get("/my-project/github")
+def my_repository(
+    session: SessionDep, client: GitHubDep, settings: SettingsDep, student: StudentDep
+) -> StudentAccessOut:
+    access = repos.student_access(session, client, settings, student)
+    return StudentAccessOut(**vars(access))

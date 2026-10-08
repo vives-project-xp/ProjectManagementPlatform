@@ -170,3 +170,31 @@ async def github_buttons(after) -> None:
     ui.button("Check all members", on_click=check_all).props("outline color=dark").mark(
         "check-all-members"
     )
+
+
+NEXT_STEP = {
+    "no_username": "Add your GitHub username above to get access.",
+    "not_invited": "You'll be invited soon: your Product Owner still has to check "
+    "the members.",
+    "has_access": "You have access.",
+}
+
+
+async def my_repository_card() -> None:
+    """On My project: the Student's repository and their next step."""
+    try:
+        mine = await api.my_repository(token())
+    except api.ApiError as problem:
+        ui.label(problem.message).classes("text-negative")
+        return
+    if mine["repo_url"] is None:
+        return
+    with ui.card().classes("w-full").mark("my-repository"):
+        ui.label("GitHub repository").classes("text-h6")
+        ui.link(mine["repo_url"], mine["repo_url"], new_tab=True)
+        if mine["status"] == "invited":
+            ui.link(
+                "Accept your invitation on GitHub", mine["invitation_url"], new_tab=True
+            ).mark("accept-invitation")
+        else:
+            ui.label(NEXT_STEP[mine["status"]]).mark(f"repo-{mine['status']}")
