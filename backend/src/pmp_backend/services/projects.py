@@ -171,6 +171,31 @@ def archive_project(session: Session, project_id: int) -> Project:
     return project
 
 
+def delete_project(session: Session, project_id: int) -> None:
+    """Remove an Active Project created by mistake: only without Members, and
+    never once it has Makers, so no history is lost."""
+    # Locked like adding a Member, so nobody joins between the check and the delete.
+    project = get_project(session, project_id, lock=True)
+    if project.status == ProjectStatus.ARCHIVED.value:
+        raise ProjectConflictError(
+            f"{project.title} is archived, so it cannot be deleted."
+        )
+    if project.makers:
+        raise ProjectConflictError(
+            f"{project.title} has Makers from an earlier archive, so it cannot be "
+            "deleted. Archive it instead."
+        )
+    count = project.member_count
+    if count:
+        members = "Member" if count == 1 else "Members"
+        raise ProjectConflictError(
+            f"{project.title} has {count} {members}, so it cannot be deleted. "
+            "Remove the Members first."
+        )
+    session.delete(project)
+    session.commit()
+
+
 def restore_project(session: Session, project_id: int) -> Project:
     """Active again, without Members; the Makers stay."""
     project = get_project(session, project_id, lock=True)

@@ -3,7 +3,13 @@ from fastapi.testclient import TestClient
 from sqlalchemy import update
 
 from pmp_backend.models import User
-from tests.conftest import auth, ready_to_work
+from tests.conftest import (
+    add_member,
+    auth,
+    create_project,
+    create_student,
+    ready_to_work,
+)
 
 
 def teacher_id(client: TestClient, headers: dict[str, str]) -> int:
@@ -216,7 +222,73 @@ def test_students_cannot_use_projects_or_teachers(client: TestClient):
         == 403
     )
     assert client.get("/api/teachers", headers=student).status_code == 403
+    assert (
+        client.delete(f"/api/projects/{created['id']}", headers=student).status_code
+        == 403
+    )
 
 
 def test_projects_api_needs_a_login(client: TestClient):
     assert client.get("/api/projects", headers=auth("not-a-token")).status_code == 401
+
+
+# Deleting
+
+
+@pytest.mark.parametrize("role", ["teacher", "superuser"])
+def test_project_without_members_is_deleted(client: TestClient, role: str):
+    headers = ready_to_work(client, role)
+    project = create_project(client, headers, "Smart Greenhouse")
+
+    response = client.delete(f"/api/projects/{project}", headers=headers)
+
+    assert response.status_code == 204, response.text
+    assert client.get(f"/api/projects/{project}", headers=headers).status_code == 404
+    assert client.get("/api/projects", headers=headers).json() == []
+    create_project(client, headers, "Smart Greenhouse")
+
+
+def test_project_with_members_cannot_be_deleted(client: TestClient):
+    headers = ready_to_work(client, "superuser")
+    project = create_project(client, headers, "Smart Greenhouse")
+    add_member(client, headers, project, create_student(client, headers, "Lisa"))
+
+    response = client.delete(f"/api/projects/{project}", headers=headers)
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == (
+        "Smart Greenhouse has 1 Member, so it cannot be deleted. "
+        "Remove the Members first."
+    )
+
+
+def test_archived_project_cannot_be_deleted(client: TestClient):
+    headers = ready_to_work(client, "teacher")
+    project = create_project(client, headers, "Smart Greenhouse")
+    client.post(f"/api/projects/{project}/archive", headers=headers)
+
+    response = client.delete(f"/api/projects/{project}", headers=headers)
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == (
+        "Smart Greenhouse is archived, so it cannot be deleted."
+    )
+
+
+def test_restored_project_with_makers_cannot_be_deleted(client: TestClient):
+    headers = ready_to_work(client, "superuser")
+    project = create_project(client, headers, "Smart Greenhouse")
+    add_member(client, headers, project, create_student(client, headers, "Lisa"))
+    client.post(f"/api/projects/{project}/archive", headers=headers)
+    client.post(f"/api/projects/{project}/restore", headers=headers)
+
+    response = client.delete(f"/api/projects/{project}", headers=headers)
+
+    assert response.status_code == 409
+    assert "Makers" in response.json()["detail"]
+
+
+def test_deleting_an_unknown_project_is_not_found(client: TestClient):
+    headers = ready_to_work(client, "teacher")
+
+    assert client.delete("/api/projects/9999", headers=headers).status_code == 404
