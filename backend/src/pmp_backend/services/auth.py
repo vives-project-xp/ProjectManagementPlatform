@@ -1,16 +1,50 @@
 """Logging in and changing passwords."""
 
+import time
+from collections.abc import Callable
+
 from sqlalchemy.orm import Session
 
 from pmp_backend.models import User
 from pmp_backend.security import hash_password, verify_password
-from pmp_backend.services.users import find_by_email
+from pmp_backend.services.users import find_by_email, normalize_email
 
 MIN_PASSWORD_LENGTH = 8
+MAX_FAILURES = 5
+LOCK_SECONDS = 15 * 60
 
 
 class PasswordChangeError(Exception):
     pass
+
+
+class LoginGuard:
+    """Locks an email for 15 minutes after 5 wrong passwords within 15 minutes,
+    so passwords cannot be guessed. Kept in memory (one backend process): a
+    restart forgets it."""
+
+    def __init__(self, clock: Callable[[], float] = time.monotonic) -> None:
+        self._clock = clock
+        self._failures: dict[str, list[float]] = {}
+
+    def _recent(self, email: str) -> list[float]:
+        since = self._clock() - LOCK_SECONDS
+        recent = [at for at in self._failures.get(email, []) if at > since]
+        if recent:
+            self._failures[email] = recent
+        else:
+            self._failures.pop(email, None)
+        return recent
+
+    def is_locked(self, email: str) -> bool:
+        return len(self._recent(normalize_email(email))) >= MAX_FAILURES
+
+    def failed(self, email: str) -> None:
+        email = normalize_email(email)
+        self._failures[email] = [*self._recent(email), self._clock()]
+
+    def succeeded(self, email: str) -> None:
+        self._failures.pop(normalize_email(email), None)
 
 
 def authenticate(session: Session, email: str, password: str) -> User | None:

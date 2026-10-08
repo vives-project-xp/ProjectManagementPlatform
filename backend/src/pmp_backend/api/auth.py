@@ -1,7 +1,7 @@
 from datetime import timedelta
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel
 
 from pmp_backend.api.deps import SessionDep, TemporaryPasswordUserDep, get_settings
@@ -44,16 +44,26 @@ class ChangePasswordIn(BaseModel):
 @router.post("/login")
 def login(
     body: LoginIn,
+    request: Request,
     session: SessionDep,
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> LoginOut:
+    guard: auth.LoginGuard = request.app.state.login_guard
+    # Checked before the password, so a locked email learns nothing more.
+    if guard.is_locked(body.email):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many failed attempts. Try again in 15 minutes.",
+        )
     user = auth.authenticate(session, body.email, body.password)
     if user is None:
+        guard.failed(body.email)
         # One message for unknown email, wrong password and Deactivated User alike.
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password.",
         )
+    guard.succeeded(body.email)
     return login_out(user, settings)
 
 
