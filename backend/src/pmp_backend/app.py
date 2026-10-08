@@ -11,6 +11,7 @@ from pmp_backend.api import (
     programmes,
     projects,
     students,
+    top3,
     users,
 )
 from pmp_backend.database import is_reachable, make_engine
@@ -41,6 +42,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(programmes.router)
     app.include_router(projects.router)
     app.include_router(students.router)
+    app.include_router(top3.router)
     if settings.dev_login:
         app.include_router(dev_login.router)
 

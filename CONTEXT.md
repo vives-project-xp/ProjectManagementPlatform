@@ -61,12 +61,20 @@ The minimum and maximum number of Members a Project wants.
 _Avoid_: Capacity, group size
 
 **Archived Project**:
-A finished Project, kept read-only for the history overview. Archiving frees its Students, and restoring it does not bring them back. It can never be deleted, nor can a restored Project that has Makers.
+A finished Project, kept read-only for the history overview. Archiving frees its Students, and restoring it does not bring them back. It can never be deleted, nor can a restored Project that has Makers. It is never Open for choice: archiving switches that off.
 _Avoid_: Deleted project, closed project, historical project
 
 **Project photo**:
 The one optional cover photo of a Project (JPG or PNG, at most 5 MB), uploaded, replaced and removed by Teachers and the Superuser. Shown on the Project's details, as a thumbnail in the Projects table and on a Member's My project. An Archived Project keeps its photo, read-only; deleting a Project deletes its photo.
 _Avoid_: Image, picture, logo, avatar
+
+**Open for choice**:
+An Active Project that a Teacher or the Superuser has marked so that Students can pick it in their Top 3. Off for a new Project; switched off when the Project is archived.
+_Avoid_: Visible, published, available
+
+**Top 3 round**:
+The one period, ending at a deadline in Belgian time, in which Students submit their Top 3. A Teacher or the Superuser opens it, moves the deadline, closes it early or reopens it; every Top 3 is kept. Starting a new Top 3 round (each semester) clears every Top 3.
+_Avoid_: Election, vote, enrolment period
 
 **Makers**:
 The permanent record of the Students (name, Programme, Year) who were Members of a Project when it was archived. Nobody is ever removed from it: archiving a restored Project again only adds the new Members (a Student already listed is not added twice). Shown as "Made by".

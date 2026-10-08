@@ -26,7 +26,10 @@ def reset(database_url: str = TEST_DATABASE_URL) -> None:
     engine = create_engine(database_url)
     with engine.begin() as connection:
         connection.execute(
-            text("TRUNCATE projects, users, programmes RESTART IDENTITY CASCADE")
+            text(
+                "TRUNCATE projects, users, programmes, top3_round "
+                "RESTART IDENTITY CASCADE"
+            )
         )
         # As migration 0004 leaves the list.
         connection.execute(

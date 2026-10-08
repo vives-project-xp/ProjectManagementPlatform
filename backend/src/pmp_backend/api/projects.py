@@ -13,7 +13,7 @@ from pmp_backend.api.deps import (
 from pmp_backend.api.schemas import PersonOut, StudentOut
 from pmp_backend.domain import ProjectStatus
 from pmp_backend.models import Project, User
-from pmp_backend.services import memberships, photos, projects
+from pmp_backend.services import memberships, photos, projects, top3
 from pmp_backend.services.projects import ProjectFields
 
 router = APIRouter(prefix="/api", tags=["projects"])
@@ -30,6 +30,7 @@ class ProjectOut(BaseModel):
     status: str
     # Null without a photo; changes with every upload.
     photo_version: int | None
+    open_for_choice: bool
 
     @classmethod
     def of(cls, project: Project) -> "ProjectOut":
@@ -43,6 +44,7 @@ class ProjectOut(BaseModel):
             member_count=project.member_count,
             status=project.status,
             photo_version=project.photo_version,
+            open_for_choice=project.open_for_choice,
         )
 
 
@@ -104,6 +106,10 @@ class ProjectIn(BaseModel):
 
     def fields(self) -> ProjectFields:
         return ProjectFields(**self.model_dump())
+
+
+class OpenForChoiceIn(BaseModel):
+    open: bool
 
 
 class MemberIn(BaseModel):
@@ -179,6 +185,17 @@ def delete_project(
 ) -> Response:
     photos.delete_project(session, settings.photos_dir, project_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.put("/projects/{project_id}/open-for-choice")
+def set_open_for_choice(
+    project_id: int,
+    body: OpenForChoiceIn,
+    session: SessionDep,
+    user: TeacherOrSuperuserDep,
+) -> ProjectDetailsOut:
+    project = top3.set_open_for_choice(session, project_id, body.open)
+    return ProjectDetailsOut.of(project)
 
 
 @router.put("/projects/{project_id}/photo")

@@ -9,6 +9,7 @@ from pmp_frontend import (
     photos,
     programmes_page,
     projects_page,
+    top3_page,
     users_page,
 )
 from pmp_frontend.shell import (
@@ -155,3 +156,4 @@ def register_pages() -> None:
     my_project_page.register()
     programmes_page.register()
     photos.register()
+    top3_page.register()

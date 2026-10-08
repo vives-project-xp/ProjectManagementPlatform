@@ -33,8 +33,10 @@ async def test_student_sees_own_project(user: User):
     await log_in(user, "student")
     await change_starting_password(user, "student", "student-own-password")
 
-    await user.should_see("Drone", retries=30)
-    await user.should_see("Product Owner: Teacher Account")
+    # Not "Drone": the earlier "Project Drone was created." notification matches it
+    # before My project has loaded.
+    await user.should_see("Product Owner: Teacher Account", retries=30)
+    await user.should_see("Drone")
     await user.should_see("You are the only Member so far.")
     await user.should_see(marker="photo-placeholder")
 
