@@ -24,6 +24,9 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       LOGINS_FILE: /run/secrets/logins.txt
       PHOTOS_DIR: /data/photos
+      # Test login without a password (api/dev_login.py); set DEV_LOGIN=true in
+      # .env only while the team is testing.
+      DEV_LOGIN: ${DEV_LOGIN:-false}
     volumes:
       # Project photos, one file per Project (outside the database).
       - photos:/data/photos

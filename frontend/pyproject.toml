@@ -32,3 +32,4 @@ testpaths = ["tests"]
 main_file = "src/pmp_frontend/main.py"
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
+markers = ["dev_login: run the backend with the test login turned on"]

@@ -5,7 +5,14 @@ from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import sessionmaker
 
-from pmp_backend.api import auth, programmes, projects, students, users
+from pmp_backend.api import (
+    auth,
+    dev_login,
+    programmes,
+    projects,
+    students,
+    users,
+)
 from pmp_backend.database import is_reachable, make_engine
 from pmp_backend.errors import Conflict, Forbidden, NotFound, Refused
 from pmp_backend.services.seeding import seed_starting_accounts
@@ -32,6 +39,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(programmes.router)
     app.include_router(projects.router)
     app.include_router(students.router)
+    if settings.dev_login:
+        app.include_router(dev_login.router)
 
     @app.exception_handler(Refused)
     def refused(request: Request, error: Refused) -> JSONResponse:

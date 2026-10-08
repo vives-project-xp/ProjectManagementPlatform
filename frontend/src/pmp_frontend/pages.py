@@ -32,16 +32,32 @@ def register_pages() -> None:
 
     @ui.page("/login")
     async def login_page(expired: bool = False) -> None:
+        def enter(new_token: str, user: api.CurrentUser) -> None:
+            app.storage.user[TOKEN_KEY] = new_token
+            ui.navigate.to(
+                "/change-password" if user.must_change_password else home(user)
+            )
+
         async def submit() -> None:
             try:
                 new_token, user = await api.login(email.value, password.value)
             except api.ApiError as error:
                 error_message.show(error.message)
                 return
-            app.storage.user[TOKEN_KEY] = new_token
-            ui.navigate.to(
-                "/change-password" if user.must_change_password else home(user)
-            )
+            enter(new_token, user)
+
+        async def submit_dev_login() -> None:
+            if dev_user.value is None:
+                dev_error.show("Choose a User.")
+                return
+            try:
+                new_token, user = await api.dev_login(dev_user.value)
+            except api.ApiError as error:
+                dev_error.show(error.message)
+                return
+            enter(new_token, user)
+
+        dev_users = await api.dev_login_users()
 
         with frame("Log in"):
             ui.label("Project Management Platform").classes("text-h4")
@@ -64,6 +80,29 @@ def register_pages() -> None:
                 )
                 error_message = ErrorMessage()
                 ui.button("Log in", on_click=submit).mark("log-in")
+            if dev_users:
+                with ui.card().classes("w-full max-w-md"):
+                    ui.label("Test login").classes("text-h6")
+                    ui.label(
+                        "Turned on for testing: anyone can log in as any User "
+                        "without a password. Turn it off before real use."
+                    ).classes("text-negative")
+                    dev_user = (
+                        ui.select(
+                            {
+                                person["id"]: f"{person['name']} "
+                                f"({person['role'].capitalize()})"
+                                for person in dev_users
+                            },
+                            label="User",
+                        )
+                        .classes("w-full")
+                        .mark("dev-login-user")
+                    )
+                    dev_error = ErrorMessage()
+                    ui.button("Log in as this User", on_click=submit_dev_login).mark(
+                        "dev-log-in"
+                    )
 
     @ui.page("/change-password")
     async def change_password_page() -> Response | None:

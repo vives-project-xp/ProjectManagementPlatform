@@ -1,3 +1,5 @@
+import pytest
+from nicegui import ui
 from nicegui.testing import User
 
 from tests.conftest import change_starting_password, log_in, ready_to_work
@@ -66,3 +68,33 @@ async def test_log_out_returns_to_login(user: User):
     await user.should_see(marker="log-in")
     await user.open("/users")
     await user.should_see(marker="log-in")
+
+
+async def test_login_page_has_no_test_login_by_default(user: User):
+    await user.open("/login")
+    await user.should_see(marker="log-in")
+
+    await user.should_not_see("Test login")
+
+
+@pytest.mark.dev_login
+async def test_test_login_logs_in_as_the_chosen_user(user: User):
+    await user.open("/login")
+    await user.should_see("Test login", retries=30)
+    choice = user.find(marker="dev-login-user").elements.pop()
+    assert isinstance(choice, ui.select)
+    assert list(choice.options.values()) == [
+        "Superuser Account (Superuser)",
+        "Teacher Account (Teacher)",
+        "Student Account (Student)",
+    ]
+
+    choice.set_value(
+        next(
+            key for key, label in choice.options.items() if label.startswith("Teacher")
+        )
+    )
+    user.find(marker="dev-log-in").click()
+
+    # Starting accounts still have their Temporary password.
+    await user.should_see("Change your password", retries=30)
