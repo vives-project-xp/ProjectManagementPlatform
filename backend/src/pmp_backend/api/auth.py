@@ -6,6 +6,7 @@ from pydantic import BaseModel
 
 from pmp_backend.api.deps import SessionDep, TemporaryPasswordUserDep, get_settings
 from pmp_backend.api.schemas import UserOut
+from pmp_backend.models import User
 from pmp_backend.security import issue_token
 from pmp_backend.services import auth
 from pmp_backend.settings import Settings
@@ -22,6 +23,17 @@ class LoginOut(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: UserOut
+
+
+def login_out(user: User, settings: Settings) -> LoginOut:
+    """A fresh token for this User, as every way of logging in returns it."""
+    token = issue_token(
+        user.id,
+        user.role,
+        settings.jwt_secret,
+        timedelta(minutes=settings.token_lifetime_minutes),
+    )
+    return LoginOut(access_token=token, user=UserOut.model_validate(user))
 
 
 class ChangePasswordIn(BaseModel):
@@ -42,13 +54,7 @@ def login(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password.",
         )
-    token = issue_token(
-        user.id,
-        user.role,
-        settings.jwt_secret,
-        timedelta(minutes=settings.token_lifetime_minutes),
-    )
-    return LoginOut(access_token=token, user=UserOut.model_validate(user))
+    return login_out(user, settings)
 
 
 @router.get("/me")

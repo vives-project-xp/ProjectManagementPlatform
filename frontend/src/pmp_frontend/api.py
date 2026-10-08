@@ -126,6 +126,21 @@ async def login(email: str, password: str) -> tuple[str, CurrentUser]:
     return body["access_token"], CurrentUser.of(body["user"])
 
 
+async def dev_login_users() -> list[dict[str, Any]] | None:
+    """The Users the test login offers (id, name, role), or None when it is off
+    (or the backend cannot be reached)."""
+    try:
+        return await _request("GET", "/api/dev-login/users")
+    except ApiError:
+        return None
+
+
+async def dev_login(user_id: int) -> tuple[str, CurrentUser]:
+    """Log in as this User without a password (test login only)."""
+    body = await _request("POST", "/api/dev-login", json={"user_id": user_id})
+    return body["access_token"], CurrentUser.of(body["user"])
+
+
 async def me(token: str) -> CurrentUser:
     return CurrentUser.of(await _request("GET", "/api/auth/me", token=token))
 

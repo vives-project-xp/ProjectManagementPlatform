@@ -32,7 +32,7 @@ def _migrated_database() -> None:
 
 
 @pytest.fixture(autouse=True)
-def backend_in_process(tmp_path: Path):
+def backend_in_process(tmp_path: Path, request: pytest.FixtureRequest):
     """Route the frontend's API calls to the real backend app, in this process."""
     testing.reset(testing.TEST_DATABASE_URL)
     logins_file = tmp_path / "logins.txt"
@@ -48,6 +48,7 @@ def backend_in_process(tmp_path: Path):
             jwt_secret="test-secret-that-is-long-enough-for-hs256-signing",
             logins_file=logins_file,
             photos_dir=tmp_path / "photos",
+            dev_login=request.node.get_closest_marker("dev_login") is not None,
         )
     )
     # ASGITransport does not run the backend's startup, so seed here.
