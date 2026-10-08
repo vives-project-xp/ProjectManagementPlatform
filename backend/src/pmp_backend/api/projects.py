@@ -56,9 +56,17 @@ class MakerOut(BaseModel):
     year: str | None
 
 
+class Top3RankOut(BaseModel):
+    """The rank (1–3) a Student gave this Project in their Top 3."""
+
+    student_id: int
+    rank: int
+
+
 class ProjectDetailsOut(ProjectOut):
     members: list[StudentOut]
     makers: list[MakerOut]
+    top3_ranks: list[Top3RankOut]
 
     @classmethod
     def of(cls, project: Project) -> "ProjectDetailsOut":
@@ -66,6 +74,12 @@ class ProjectDetailsOut(ProjectOut):
             **ProjectOut.of(project).model_dump(),
             members=[StudentOut.of(member) for member in project.members],
             makers=[MakerOut.model_validate(maker) for maker in project.makers],
+            top3_ranks=[
+                Top3RankOut(student_id=choice.student_id, rank=choice.rank)
+                for choice in sorted(
+                    project.top3_choices, key=lambda c: (c.rank, c.student_id)
+                )
+            ],
         )
 
 

@@ -263,6 +263,22 @@ def register() -> None:
         return None
 
 
+async def add_member_moving_if_confirmed(
+    project_id: int, student_id: int
+) -> dict[str, Any] | None:
+    """Add the Student; when they are a Member elsewhere, ask before moving them.
+    The Project's details, or None when the move was cancelled; ApiError when
+    the backend refuses."""
+    try:
+        return await api.add_member(token(), project_id, student_id)
+    except api.ApiError as error:
+        if error.code != api.MOVE_CONFIRMATION_NEEDED:
+            raise
+        if not await confirm(error.message, "Move"):
+            return None
+        return await api.add_member(token(), project_id, student_id, confirm_move=True)
+
+
 async def _members_section(project: dict[str, Any]) -> None:
     """The Members list with add (and move) and remove, each confirmed."""
     state = {"project": project, "students": await api.students(token())}
@@ -274,13 +290,20 @@ async def _members_section(project: dict[str, Any]) -> None:
         update_choices()
 
     def update_choices() -> None:
-        # Active Students who are not yet in this Project (others can be moved).
+        # Active Students who are not yet in this Project (others can be moved);
+        # those who put it in their Top 3 first, by rank.
+        ranks = {r["student_id"]: r["rank"] for r in state["project"]["top3_ranks"]}
+        candidates = [
+            student
+            for student in state["students"]
+            if student["is_active"]
+            and (student["project"] or {}).get("id") != state["project"]["id"]
+        ]
+        candidates.sort(key=lambda student: ranks.get(student["id"], 4))
         choice.set_options(
             {
-                student["id"]: _student_option(student)
-                for student in state["students"]
-                if student["is_active"]
-                and (student["project"] or {}).get("id") != state["project"]["id"]
+                student["id"]: _student_option(student, ranks.get(student["id"]))
+                for student in candidates
             },
             value=None,
         )
@@ -291,20 +314,12 @@ async def _members_section(project: dict[str, Any]) -> None:
             add_error.show("Choose a Student first.")
             return
         try:
-            details = await api.add_member(token(), project["id"], student_id)
+            details = await add_member_moving_if_confirmed(project["id"], student_id)
         except api.ApiError as error:
-            if error.code != api.MOVE_CONFIRMATION_NEEDED:
-                add_error.show(error.message)
-                return
-            if not await confirm(error.message, "Move"):
-                return
-            try:
-                details = await api.add_member(
-                    token(), project["id"], student_id, confirm_move=True
-                )
-            except api.ApiError as move_error:
-                add_error.show(move_error.message)
-                return
+            add_error.show(error.message)
+            return
+        if details is None:
+            return
         add_error.hide()
         await reload(details)
         ui.notify("The Member was added.")
@@ -362,7 +377,11 @@ def _member_label(member: dict[str, Any]) -> str:
     return f"{_maker_label(member)}{suffix}"
 
 
-def _student_option(student: dict[str, Any]) -> str:
+RANK_NAMES = {1: "1st", 2: "2nd", 3: "3rd"}
+
+
+def _student_option(student: dict[str, Any], rank: int | None = None) -> str:
     project = student["project"]
     where = project["title"] if project else "no Project yet"
-    return f"{student['name']} ({where})"
+    chosen = f" — {RANK_NAMES[rank]} choice" if rank else ""
+    return f"{student['name']} ({where}){chosen}"

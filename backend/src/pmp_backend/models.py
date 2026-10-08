@@ -120,6 +120,8 @@ class Project(Base):
     product_owner: Mapped[User] = relationship(
         lazy="joined", foreign_keys=[product_owner_id]
     )
+    # Every Top 3 place that names this Project (spec #37), loaded on access.
+    top3_choices: Mapped[list["Top3Choice"]] = relationship(viewonly=True)
     # Deactivated Students stay Members and count towards the Team size.
     members: Mapped[list[User]] = relationship(
         back_populates="project",
