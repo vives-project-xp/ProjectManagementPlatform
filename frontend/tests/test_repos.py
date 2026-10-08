@@ -121,3 +121,45 @@ async def test_check_all_members_shows_a_result_per_project(
     user.find(marker="confirm").click()
 
     await user.should_see("Drone: Everything was already in order.", retries=30)
+
+
+async def staff_token() -> str:
+    email, password = STARTING_ACCOUNTS["superuser"]
+    token, _ = await api.login(email, password)
+    await api.change_password(token, password, "superuser-own-password")
+    return token
+
+
+async def test_student_sees_how_to_get_access(user: User, github: FakeGitHub):
+    github.add_account("Stu-D")
+    await ready_to_work(user, "student")
+    staff = await staff_token()
+    owner = (await api.teachers(staff))[0]["id"]
+    project = await api.create_project(
+        staff,
+        {
+            "title": "Drone",
+            "description": None,
+            "product_owner_id": owner,
+            "team_size_min": 1,
+            "team_size_max": 3,
+        },
+    )
+    # User 3 is the Student starting account.
+    await api.add_member(staff, project["id"], 3)
+    await api.create_repos(staff)
+
+    await user.open("/my-project")
+    await user.should_see("Add your GitHub username above to get access.", retries=30)
+
+    await api.set_github_username(staff, 3, "Stu-D")
+    await api.check_members(staff, project["id"])
+    await user.open("/my-project")
+    await user.should_see(marker="accept-invitation", retries=30)
+    link = user.find(marker="accept-invitation").elements.pop()
+    assert isinstance(link, ui.link)
+    assert link.props["href"] == "https://github.com/TestOrg/Drone/invitations"
+
+    github.accept("Drone", "Stu-D")
+    await user.open("/my-project")
+    await user.should_see("You have access.", retries=30)

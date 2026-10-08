@@ -95,6 +95,10 @@ class GitHub(Protocol):
 
     def delete_invitation(self, full_name: str, invitation_id: int) -> None: ...
 
+    def set_archived(self, full_name: str, archived: bool) -> None:
+        """Archive (read-only) or unarchive the repository."""
+        ...
+
 
 class HttpGitHub:
     """GitHub's REST API. Without a token, lookups still work (at GitHub's lower
@@ -200,6 +204,12 @@ class HttpGitHub:
     def delete_invitation(self, full_name: str, invitation_id: int) -> None:
         response = self._send(
             "DELETE", f"/repos/{full_name}/invitations/{invitation_id}"
+        )
+        self._ok(response, full_name)
+
+    def set_archived(self, full_name: str, archived: bool) -> None:
+        response = self._send(
+            "PATCH", f"/repos/{full_name}", json={"archived": archived}
         )
         self._ok(response, full_name)
 
