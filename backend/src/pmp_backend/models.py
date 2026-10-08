@@ -184,3 +184,18 @@ class Top3Choice(Base):
     submitted_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+
+
+class RepoGrant(Base):
+    """A GitHub account the platform itself invited to a Project's repository
+    (lower-cased), so "Check members" may take its access back (spec #49)."""
+
+    __tablename__ = "repo_grants"
+    __table_args__ = (
+        CheckConstraint("login = lower(login)", name="ck_repo_grants_login_lower"),
+    )
+
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), primary_key=True
+    )
+    login: Mapped[str] = mapped_column(String(39), primary_key=True)

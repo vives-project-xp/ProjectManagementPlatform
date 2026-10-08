@@ -444,6 +444,25 @@ async def set_repo_name(
     )
 
 
+async def repository_access(token: str, project_id: int) -> dict[str, Any]:
+    """The repository's `repo_url` and `people` (name, role, github_username,
+    status: has_access / invited / not_invited / no_username)."""
+    return await _request("GET", f"/api/projects/{project_id}/github", token=token)
+
+
+async def check_members(token: str, project_id: int) -> dict[str, Any]:
+    """Bring the repository's access in line with the Project: invited, removed,
+    updated, repo_gone and a `message`."""
+    return await _request(
+        "POST", f"/api/projects/{project_id}/github/check", token=token
+    )
+
+
+async def check_all_members(token: str) -> list[dict[str, Any]]:
+    """Check every Active Project's repository: project_id, title, message."""
+    return await _request("POST", "/api/github/check-all", token=token)
+
+
 async def delete_project(token: str, project_id: int) -> None:
     await _request("DELETE", f"/api/projects/{project_id}", token=token)
 

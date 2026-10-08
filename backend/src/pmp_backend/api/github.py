@@ -80,3 +80,68 @@ def create_repos(
         RepoResultOut(**vars(result))
         for result in repos.create_all(session, client, settings)
     ]
+
+
+class CheckOut(BaseModel):
+    invited: list[str]
+    removed: list[str]
+    updated: list[str]
+    repo_gone: bool
+    message: str
+
+
+class CheckAllOut(BaseModel):
+    project_id: int
+    title: str
+    message: str
+
+
+class PersonAccessOut(BaseModel):
+    name: str
+    role: str
+    github_username: str | None
+    status: str
+
+
+class RepositoryAccessOut(BaseModel):
+    repo_url: str
+    people: list[PersonAccessOut]
+
+
+@router.post("/projects/{project_id}/github/check")
+def check_members(
+    project_id: int,
+    session: SessionDep,
+    client: GitHubDep,
+    settings: SettingsDep,
+    user: TeacherOrSuperuserDep,
+) -> CheckOut:
+    result = repos.check_members(session, client, settings, project_id)
+    return CheckOut(**vars(result), message=result.message)
+
+
+@router.post("/github/check-all")
+def check_all_members(
+    session: SessionDep,
+    client: GitHubDep,
+    settings: SettingsDep,
+    user: TeacherOrSuperuserDep,
+) -> list[CheckAllOut]:
+    return [
+        CheckAllOut(project_id=project.id, title=project.title, message=message)
+        for project, message in repos.check_all(session, client, settings)
+    ]
+
+
+@router.get("/projects/{project_id}/github")
+def repository_access(
+    project_id: int,
+    session: SessionDep,
+    client: GitHubDep,
+    settings: SettingsDep,
+    user: TeacherOrSuperuserDep,
+) -> RepositoryAccessOut:
+    url, people = repos.people_access(session, client, settings, project_id)
+    return RepositoryAccessOut(
+        repo_url=url, people=[PersonAccessOut(**vars(person)) for person in people]
+    )
