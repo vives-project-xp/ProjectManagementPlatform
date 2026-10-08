@@ -55,6 +55,10 @@ services:
     environment:
       BACKEND_URL: http://backend:8000
       STORAGE_SECRET: ${STORAGE_SECRET}
+    volumes:
+      # NiceGUI's per-browser storage (holds the API token); kept on a volume so
+      # a redeploy, which recreates the container, does not log everyone out.
+      - frontend-storage:/app/.nicegui
     depends_on:
       - backend
 
@@ -76,5 +80,6 @@ services:
 
 volumes:
   db-data:
+  frontend-storage:
   caddy-data:
   caddy-config:
