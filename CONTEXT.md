@@ -72,6 +72,10 @@ _Avoid_: Image, picture, logo, avatar
 An Active Project that a Teacher or the Superuser has marked so that Students can pick it in their Top 3. Off for a new Project; switched off when the Project is archived.
 _Avoid_: Visible, published, available
 
+**Top 3**:
+A Student's ranked choice of 3 different Projects that are Open for choice (fewer when fewer are open), submitted once during the Top 3 round and final after that; only a Teacher or the Superuser can reset it. Only Students without a Project submit one; Teachers form the teams from them. A chosen Project that is later deleted, archived or closed for choice shows as "no longer available".
+_Avoid_: Preference, wish list, vote
+
 **Top 3 round**:
 The one period, ending at a deadline in Belgian time, in which Students submit their Top 3. A Teacher or the Superuser opens it, moves the deadline, closes it early or reopens it; every Top 3 is kept. Starting a new Top 3 round (each semester) clears every Top 3.
 _Avoid_: Election, vote, enrolment period

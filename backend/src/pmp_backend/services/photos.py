@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from pmp_backend.domain import Role
 from pmp_backend.errors import Forbidden, NotFound, Refused
 from pmp_backend.models import Project, User
-from pmp_backend.services import projects
+from pmp_backend.services import projects, top3
 from pmp_backend.services.projects import changeable_project, get_project
 
 MAX_BYTES = 5 * 1024 * 1024
@@ -82,10 +82,15 @@ def read_photo(
     session: Session, photos_dir: Path, project_id: int, viewer: User
 ) -> tuple[bytes, str]:
     """The photo's bytes and media type. A Student sees only the photo of the
-    Project they are a Member of; Teachers and the Superuser see every photo."""
-    if viewer.role == Role.STUDENT.value and viewer.project_id != project_id:
-        raise PhotoForbiddenError("You don't have access to this.")
+    Project they are a Member of, or of a Project Open for choice (their Top 3);
+    Teachers and the Superuser see every photo."""
     project = get_project(session, project_id)
+    if (
+        viewer.role == Role.STUDENT.value
+        and viewer.project_id != project_id
+        and not top3.is_choosable(project)
+    ):
+        raise PhotoForbiddenError("You don't have access to this.")
     path = _path(photos_dir, project_id)
     if project.photo_version is None or not path.is_file():
         raise NoPhotoError(f"{project.title} has no photo.")

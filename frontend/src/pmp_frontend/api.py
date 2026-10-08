@@ -326,6 +326,19 @@ async def start_new_top3_round(token: str, deadline: str) -> dict[str, Any]:
     )
 
 
+async def my_top3(token: str) -> dict[str, Any]:
+    """The logged-in Student's view of the Top 3: round, can_submit, places,
+    projects to choose from, and their submitted top3 (or None)."""
+    return await _request("GET", "/api/my-top3", token=token)
+
+
+async def submit_top3(token: str, project_ids: list[int]) -> dict[str, Any]:
+    """Submit a ranked Top 3: the first id is the 1st choice."""
+    return await _request(
+        "POST", "/api/my-top3", token=token, json={"project_ids": project_ids}
+    )
+
+
 async def delete_project(token: str, project_id: int) -> None:
     await _request("DELETE", f"/api/projects/{project_id}", token=token)
 
