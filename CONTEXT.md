@@ -84,6 +84,10 @@ _Avoid_: Preference, wish list, vote
 The one period, ending at a deadline in Belgian time, in which Students submit their Top 3. A Teacher or the Superuser opens it, moves the deadline, closes it early or reopens it; every Top 3 is kept. Starting a new Top 3 round (each semester) clears every Top 3.
 _Avoid_: Election, vote, enrolment period
 
+**Project repository**:
+The public GitHub repository of a Project, in the organisation the platform is connected to; created completely empty by "Create repos for all Projects" for every Active Project with Members. Its name is suggested from the title (`SmartGreenhouse`) and can be changed until it exists; renaming the Project doesn't rename it.
+_Avoid_: Repo (in UI text), GitHub project, code base
+
 **Makers**:
 The permanent record of the Students (name, Programme, Year) who were Members of a Project when it was archived. Nobody is ever removed from it: archiving a restored Project again only adds the new Members (a Student already listed is not added twice). Shown as "Made by".
 _Avoid_: History, former members, credits

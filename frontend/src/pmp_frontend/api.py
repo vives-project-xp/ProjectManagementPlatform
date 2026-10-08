@@ -421,6 +421,29 @@ async def reset_top3(token: str, student_id: int) -> None:
     await _request("DELETE", f"/api/top3/students/{student_id}", token=token)
 
 
+async def github_status(token: str) -> dict[str, Any]:
+    """Whether GitHub is connected (`connected`) and the organisation (`org`)."""
+    return await _request("GET", "/api/github/status", token=token)
+
+
+async def create_repos(token: str) -> list[dict[str, Any]]:
+    """Create repositories for all Projects that need one; a result per Project
+    (project_id, title, created, message)."""
+    return await _request("POST", "/api/github/repos", token=token)
+
+
+async def set_repo_name(
+    token: str, project_id: int, name: str | None
+) -> dict[str, Any]:
+    """Choose the repository name (None: back to the suggested one)."""
+    return await _request(
+        "PUT",
+        f"/api/projects/{project_id}/repo-name",
+        token=token,
+        json={"repo_name": name},
+    )
+
+
 async def delete_project(token: str, project_id: int) -> None:
     await _request("DELETE", f"/api/projects/{project_id}", token=token)
 

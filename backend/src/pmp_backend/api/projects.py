@@ -13,7 +13,7 @@ from pmp_backend.api.deps import (
 from pmp_backend.api.schemas import PersonOut, StudentOut
 from pmp_backend.domain import ProjectStatus
 from pmp_backend.models import Project, User
-from pmp_backend.services import memberships, photos, projects, top3
+from pmp_backend.services import memberships, photos, projects, repos, top3
 from pmp_backend.services.projects import ProjectFields
 
 router = APIRouter(prefix="/api", tags=["projects"])
@@ -31,6 +31,9 @@ class ProjectOut(BaseModel):
     # Null without a photo; changes with every upload.
     photo_version: int | None
     open_for_choice: bool
+    # The repository's name (chosen or suggested) and its URL once it exists.
+    repo_name: str
+    repo_url: str | None
 
     @classmethod
     def of(cls, project: Project) -> "ProjectOut":
@@ -45,6 +48,8 @@ class ProjectOut(BaseModel):
             status=project.status,
             photo_version=project.photo_version,
             open_for_choice=project.open_for_choice,
+            repo_name=repos.repo_name(project),
+            repo_url=project.github_repo_url,
         )
 
 
@@ -124,6 +129,11 @@ class ProjectIn(BaseModel):
 
 class OpenForChoiceIn(BaseModel):
     open: bool
+
+
+class RepoNameIn(BaseModel):
+    # None: back to the name suggested from the title.
+    repo_name: Annotated[str, StringConstraints(strip_whitespace=True)] | None
 
 
 class MemberIn(BaseModel):
@@ -209,6 +219,14 @@ def set_open_for_choice(
     user: TeacherOrSuperuserDep,
 ) -> ProjectDetailsOut:
     project = top3.set_open_for_choice(session, project_id, body.open)
+    return ProjectDetailsOut.of(project)
+
+
+@router.put("/projects/{project_id}/repo-name")
+def set_repo_name(
+    project_id: int, body: RepoNameIn, session: SessionDep, user: TeacherOrSuperuserDep
+) -> ProjectDetailsOut:
+    project = repos.set_repo_name(session, project_id, body.repo_name or None)
     return ProjectDetailsOut.of(project)
 
 

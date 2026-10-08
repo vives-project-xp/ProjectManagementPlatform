@@ -1,13 +1,19 @@
 """Database helpers shared by the backend and frontend test suites."""
 
 import os
+from dataclasses import dataclass
 from pathlib import Path
 
 from alembic import command
 from alembic.config import Config
 from sqlalchemy import create_engine, text
 
-from pmp_backend.services.github import GitHubAccount, GitHubUnavailableError
+from pmp_backend.services.github import (
+    CreatedRepo,
+    GitHubAccount,
+    GitHubUnavailableError,
+    repo_exists_error,
+)
 
 TEST_DATABASE_URL = os.environ.get(
     "TEST_DATABASE_URL",
@@ -40,12 +46,29 @@ def reset(database_url: str = TEST_DATABASE_URL) -> None:
     engine.dispose()
 
 
+@dataclass
+class FakeRepo:
+    id: int
+    org: str
+    name: str
+    private: bool = False
+    # Never given a first commit (spec #49: completely empty).
+    empty: bool = True
+    archived: bool = False
+
+    @property
+    def html_url(self) -> str:
+        return f"https://github.com/{self.org}/{self.name}"
+
+
 class FakeGitHub:
     """GitHub for tests: accounts in memory, no network. Set `failing` to make
     every call fail as if GitHub could not be reached."""
 
     def __init__(self) -> None:
         self.accounts: dict[str, GitHubAccount] = {}
+        # By name, lower-cased (GitHub names are case-insensitive).
+        self.repos: dict[str, FakeRepo] = {}
         self.failing = False
 
     def add_account(self, login: str, name: str | None = None) -> None:
@@ -60,3 +83,15 @@ class FakeGitHub:
     def user(self, username: str) -> GitHubAccount | None:
         self._check()
         return self.accounts.get(username.lower())
+
+    def add_repo(self, org: str, name: str) -> FakeRepo:
+        repo = FakeRepo(id=1000 + len(self.repos), org=org, name=name)
+        self.repos[name.lower()] = repo
+        return repo
+
+    def create_org_repo(self, org: str, name: str) -> CreatedRepo:
+        self._check()
+        if name.lower() in self.repos:
+            raise repo_exists_error(org, name)
+        repo = self.add_repo(org, name)
+        return CreatedRepo(id=repo.id, html_url=repo.html_url)

@@ -55,6 +55,8 @@ def backend_in_process(
             jwt_secret="test-secret-that-is-long-enough-for-hs256-signing",
             logins_file=logins_file,
             photos_dir=tmp_path / "photos",
+            github_org="TestOrg",
+            github_token="test-token",
             dev_login=request.node.get_closest_marker("dev_login") is not None,
         )
     )
