@@ -41,6 +41,12 @@ class User(Base):
         CheckConstraint(
             "project_id IS NULL OR role = 'student'", name="ck_users_project_student"
         ),
+        # One GitHub account belongs to one User, whatever the capitalisation.
+        Index(
+            "uq_users_github_username_lower",
+            func.lower(text("github_username")),
+            unique=True,
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -48,6 +54,8 @@ class User(Base):
     last_name: Mapped[str] = mapped_column(String(100))
     email: Mapped[str] = mapped_column(String(254), unique=True)
     password_hash: Mapped[str] = mapped_column(String(255))
+    # As GitHub spells it (spec #49); None until the User saves one.
+    github_username: Mapped[str | None] = mapped_column(String(39))
     role: Mapped[str] = mapped_column(String(20))
     is_active: Mapped[bool] = mapped_column(default=True)
     must_change_password: Mapped[bool] = mapped_column(default=True)

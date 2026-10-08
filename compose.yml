@@ -27,6 +27,10 @@ services:
       # Test login without a password (api/dev_login.py); set DEV_LOGIN=true in
       # .env only while the team is testing.
       DEV_LOGIN: ${DEV_LOGIN:-false}
+      # Project repositories (spec #49): the organisation and a fine-grained
+      # token for it. Without a token, the GitHub actions are off.
+      GITHUB_ORG: ${GITHUB_ORG:-}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
     volumes:
       # Project photos, one file per Project (outside the database).
       - photos:/data/photos

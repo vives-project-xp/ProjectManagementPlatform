@@ -7,6 +7,8 @@ from alembic import command
 from alembic.config import Config
 from sqlalchemy import create_engine, text
 
+from pmp_backend.services.github import GitHubAccount, GitHubUnavailableError
+
 TEST_DATABASE_URL = os.environ.get(
     "TEST_DATABASE_URL",
     "postgresql+psycopg://pmp:pmp@localhost:5433/pmp_test",
@@ -36,3 +38,25 @@ def reset(database_url: str = TEST_DATABASE_URL) -> None:
             text("INSERT INTO programmes (name) VALUES ('Electronics-ICT')")
         )
     engine.dispose()
+
+
+class FakeGitHub:
+    """GitHub for tests: accounts in memory, no network. Set `failing` to make
+    every call fail as if GitHub could not be reached."""
+
+    def __init__(self) -> None:
+        self.accounts: dict[str, GitHubAccount] = {}
+        self.failing = False
+
+    def add_account(self, login: str, name: str | None = None) -> None:
+        self.accounts[login.lower()] = GitHubAccount(
+            login=login, name=name, avatar_url=f"https://avatars.example/{login}.png"
+        )
+
+    def _check(self) -> None:
+        if self.failing:
+            raise GitHubUnavailableError()
+
+    def user(self, username: str) -> GitHubAccount | None:
+        self._check()
+        return self.accounts.get(username.lower())

@@ -6,6 +6,7 @@ from nicegui import ui
 from starlette.responses import Response
 
 from pmp_frontend import api
+from pmp_frontend.github_username import github_username_card
 from pmp_frontend.shell import (
     ErrorMessage,
     confirm,
@@ -33,6 +34,7 @@ COLUMNS = [
         "align": "left",
     },
     {"name": "email", "label": "Email", "field": "email", "align": "left"},
+    {"name": "github", "label": "GitHub", "field": "github", "align": "left"},
     {
         "name": "role",
         "label": "Role",
@@ -51,6 +53,7 @@ def _row(user: dict[str, Any]) -> dict[str, Any]:
         "id": user["id"],
         "name": f"{user['first_name']} {user['last_name']}",
         "email": user["email"],
+        "github": user["github_username"] or "",
         "role": user["role"].capitalize(),
         "programme": user["programme"] or "",
         "year": user["year"] or "",
@@ -266,6 +269,11 @@ def register() -> None:
                 new_password.mark("reset-password-value")
                 reset_error = ErrorMessage()
                 ui.button("Reset password", on_click=reset).mark("reset-password")
+
+            github_username_card(
+                shown["github_username"],
+                lambda username: api.set_github_username(token(), user_id, username),
+            )
 
             # The Superuser can never be deleted, so their page has no Delete.
             if shown["role"] != "superuser":

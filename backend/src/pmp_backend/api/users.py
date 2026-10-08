@@ -3,7 +3,8 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Response, status
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
-from pmp_backend.api.deps import SessionDep, SuperuserDep
+from pmp_backend.api.deps import GitHubDep, SessionDep, SuperuserDep
+from pmp_backend.api.github import GitHubUsernameIn
 from pmp_backend.api.schemas import UserOut
 from pmp_backend.domain import Role, Year
 from pmp_backend.services import users
@@ -115,3 +116,15 @@ def reset_password(
 ) -> Response:
     users.reset_password(session, user_id, body.temporary_password)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.put("/{user_id}/github-username")
+def set_github_username(
+    user_id: int,
+    body: GitHubUsernameIn,
+    session: SessionDep,
+    client: GitHubDep,
+    superuser: SuperuserDep,
+) -> UserOut:
+    user = users.set_github_username(session, client, user_id, body.github_username)
+    return UserOut.model_validate(user)

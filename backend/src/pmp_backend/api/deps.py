@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from pmp_backend.domain import Role
 from pmp_backend.models import User
 from pmp_backend.security import read_token
+from pmp_backend.services.github import GitHub
 from pmp_backend.settings import Settings
 
 _bearer = HTTPBearer(auto_error=False)
@@ -26,6 +27,13 @@ def get_session(request: Request) -> Iterator[Session]:
 
 SessionDep = Annotated[Session, Depends(get_session)]
 SettingsDep = Annotated[Settings, Depends(get_settings)]
+
+
+def get_github(request: Request) -> GitHub:
+    return request.app.state.github
+
+
+GitHubDep = Annotated[GitHub, Depends(get_github)]
 
 
 def _unauthorized() -> HTTPException:

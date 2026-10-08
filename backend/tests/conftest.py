@@ -50,9 +50,16 @@ def settings(logins_file: Path, tmp_path: Path) -> Settings:
 
 
 @pytest.fixture
-def client(settings: Settings) -> Iterator[TestClient]:
+def github() -> testing.FakeGitHub:
+    return testing.FakeGitHub()
+
+
+@pytest.fixture
+def client(settings: Settings, github: testing.FakeGitHub) -> Iterator[TestClient]:
+    app = create_app(settings)
+    app.state.github = github
     # Entering the client runs the app's startup, which creates the starting accounts.
-    with TestClient(create_app(settings)) as client:
+    with TestClient(app) as client:
         yield client
 
 

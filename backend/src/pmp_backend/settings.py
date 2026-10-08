@@ -23,3 +23,8 @@ class Settings(DatabaseSettings):
     # Test login: log in as any active User without a password. For the team's
     # testing only; off unless DEV_LOGIN=true.
     dev_login: bool = False
+    # The GitHub organisation that gets the Project repositories, and a
+    # fine-grained token for it (spec #49). Only in /opt/pmp/.env.
+    github_org: str | None = None
+    github_token: str | None = None
+    github_api_url: str = "https://api.github.com"
