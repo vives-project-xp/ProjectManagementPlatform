@@ -49,8 +49,11 @@ async def test_logo_is_no_link_during_the_forced_password_change(user: User):
 @pytest.mark.parametrize(
     ("role", "icons"),
     [
-        ("superuser", {"group", "folder", "badge", "lock", "logout"}),
-        ("teacher", {"folder", "badge", "lock", "logout"}),
+        (
+            "superuser",
+            {"group", "folder", "badge", "format_list_numbered", "lock", "logout"},
+        ),
+        ("teacher", {"folder", "badge", "format_list_numbered", "lock", "logout"}),
         ("student", {"work", "lock", "logout"}),
     ],
 )

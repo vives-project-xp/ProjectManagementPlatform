@@ -166,6 +166,8 @@ def archive_project(session: Session, project_id: int) -> Project:
     for member in members:
         member.project = None
     project.status = ProjectStatus.ARCHIVED.value
+    # Archived Projects are never offered in a Top 3 (spec #37).
+    project.open_for_choice = False
     session.commit()
     session.refresh(project)
     return project

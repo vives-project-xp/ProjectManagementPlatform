@@ -5,8 +5,11 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
+    SmallInteger,
     String,
     Text,
+    UniqueConstraint,
+    false,
     func,
     text,
 )
@@ -105,6 +108,8 @@ class Project(Base):
     )
     # Null: no photo. Raised on every upload, so pages can bust caches (#29).
     photo_version: Mapped[int | None]
+    # Students may pick it in their Top 3 (spec #37); never for Archived Projects.
+    open_for_choice: Mapped[bool] = mapped_column(default=False, server_default=false())
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -131,3 +136,35 @@ class Project(Base):
     def team_size_label(self) -> str:
         """Members against the Team size, e.g. "3 / 4–6"."""
         return f"{self.member_count} / {self.team_size_min}–{self.team_size_max}"
+
+
+class Top3Round(Base):
+    """The one Top 3 round: open while its deadline is in the future."""
+
+    __tablename__ = "top3_round"
+    __table_args__ = (CheckConstraint("id = 1", name="ck_top3_round_single"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    deadline: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class Top3Choice(Base):
+    """One ranked place of a Student's Top 3. A deleted Project leaves
+    `project_id` null: "no longer available"."""
+
+    __tablename__ = "top3_choices"
+    __table_args__ = (
+        CheckConstraint("rank BETWEEN 1 AND 3", name="ck_top3_choices_rank"),
+        UniqueConstraint("student_id", "project_id", name="uq_top3_choices_project"),
+    )
+
+    student_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    rank: Mapped[int] = mapped_column(SmallInteger, primary_key=True)
+    project_id: Mapped[int | None] = mapped_column(
+        ForeignKey("projects.id", ondelete="SET NULL")
+    )
+    submitted_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )

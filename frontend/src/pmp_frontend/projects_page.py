@@ -32,6 +32,7 @@ COLUMNS = [
     {"name": "owner", "label": "Product Owner", "field": "owner", "align": "left"},
     {"name": "members", "label": "Members", "field": "members", "align": "left"},
     {"name": "status", "label": "Status", "field": "status", "align": "left"},
+    {"name": "choice", "label": "Open for choice", "field": "choice", "align": "left"},
 ]
 
 # Understaffed Projects get a VIVES-red warning icon; the text itself stays black.
@@ -61,6 +62,7 @@ def _row(project: dict[str, Any]) -> dict[str, Any]:
         "members": _team_size_label(project),
         "understaffed": project["member_count"] < project["team_size_min"],
         "status": project["status"].capitalize(),
+        "choice": "Yes" if project["open_for_choice"] else "",
     }
 
 
@@ -205,6 +207,20 @@ def register() -> None:
                 ui.notify(f"Project {title} was deleted.")
                 ui.navigate.to("/projects")
 
+            async def toggle_choice(event) -> None:
+                title = project["title"]
+                try:
+                    await api.set_open_for_choice(token(), project_id, event.value)
+                except api.ApiError as error:
+                    status_error.show(error.message)
+                    return
+                status_error.hide()
+                ui.notify(
+                    f"{title} is open for choice."
+                    if event.value
+                    else f"{title} is no longer open for choice."
+                )
+
             archived = project["status"] == "archived"
             ui.link("← Projects", "/projects").classes("text-dark")
             heading = ui.label(project["title"]).classes("text-h4")
@@ -219,6 +235,13 @@ def register() -> None:
                     ui.button("Delete", on_click=delete).props(
                         "outline color=negative"
                     ).mark("delete-project")
+            if not archived:
+                # Students can pick it in their Top 3 (spec #37).
+                ui.switch(
+                    "Open for choice",
+                    value=project["open_for_choice"],
+                    on_change=toggle_choice,
+                ).mark("open-for-choice")
             status_error = ErrorMessage()
             photo_card(project, editable=not archived)
             if archived:

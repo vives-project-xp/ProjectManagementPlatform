@@ -292,6 +292,40 @@ async def list_projects(
     return await _request("GET", f"/api/projects{query}", token=token)
 
 
+async def set_open_for_choice(
+    token: str, project_id: int, value: bool
+) -> dict[str, Any]:
+    return await _request(
+        "PUT",
+        f"/api/projects/{project_id}/open-for-choice",
+        token=token,
+        json={"open": value},
+    )
+
+
+async def top3_round(token: str) -> dict[str, Any]:
+    """The Top 3 round: `deadline` (ISO, or None before the first) and `is_open`."""
+    return await _request("GET", "/api/top3/round", token=token)
+
+
+async def set_top3_deadline(token: str, deadline: str) -> dict[str, Any]:
+    """Open, reopen or move the round; `deadline` is ISO with a time zone."""
+    return await _request(
+        "PUT", "/api/top3/round", token=token, json={"deadline": deadline}
+    )
+
+
+async def close_top3_round(token: str) -> dict[str, Any]:
+    return await _request("POST", "/api/top3/round/close", token=token)
+
+
+async def start_new_top3_round(token: str, deadline: str) -> dict[str, Any]:
+    """Clear every Top 3 and open the round with this deadline."""
+    return await _request(
+        "POST", "/api/top3/round/new", token=token, json={"deadline": deadline}
+    )
+
+
 async def delete_project(token: str, project_id: int) -> None:
     await _request("DELETE", f"/api/projects/{project_id}", token=token)
 
