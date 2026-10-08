@@ -12,6 +12,7 @@ from pmp_frontend import (
     top3_page,
     users_page,
 )
+from pmp_frontend.github_username import github_username_card
 from pmp_frontend.shell import (
     TOKEN_KEY,
     ErrorMessage,
@@ -35,9 +36,7 @@ def register_pages() -> None:
     async def login_page(expired: bool = False) -> None:
         def enter(new_token: str, user: api.CurrentUser) -> None:
             app.storage.user[TOKEN_KEY] = new_token
-            ui.navigate.to(
-                "/change-password" if user.must_change_password else home(user)
-            )
+            ui.navigate.to("/account" if user.must_change_password else home(user))
 
         async def submit() -> None:
             try:
@@ -106,7 +105,12 @@ def register_pages() -> None:
                     )
 
     @ui.page("/change-password")
-    async def change_password_page() -> Response | None:
+    def old_change_password_page() -> Response:
+        # The page was renamed to My account (spec #49); old links keep working.
+        return RedirectResponse("/account")
+
+    @ui.page("/account")
+    async def account_page() -> Response | None:
         user = await guard(allow_temporary_password=True)
         if isinstance(user, Response):
             return user
@@ -126,8 +130,9 @@ def register_pages() -> None:
             ui.notify("Your password has been changed.")
             ui.navigate.to(home(user))
 
-        with page_frame("Change password", user):
-            ui.label("Change your password").classes("text-h4")
+        with page_frame("My account", user):
+            ui.label("My account").classes("text-h4")
+            ui.label("Change your password").classes("text-h6")
             if user.must_change_password:
                 ui.label("Choose a new password of your own before you continue.")
             with ui.card().classes("w-full max-w-md"):
@@ -148,6 +153,12 @@ def register_pages() -> None:
                 )
                 error_message = ErrorMessage()
                 ui.button("Change password", on_click=submit).mark("change-password")
+            # GitHub needs a password of your own first, like everything else.
+            if not user.must_change_password:
+                github_username_card(
+                    user.github_username,
+                    lambda username: api.set_my_github_username(token(), username),
+                )
         return None
 
     users_page.register()

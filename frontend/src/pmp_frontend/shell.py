@@ -54,7 +54,7 @@ async def guard(
         # Backend unreachable: the login page shows the system status.
         return RedirectResponse("/login")
     if user.must_change_password and not allow_temporary_password:
-        return RedirectResponse("/change-password")
+        return RedirectResponse("/account")
     return user
 
 
@@ -73,7 +73,7 @@ def header(user: api.CurrentUser) -> None:
         if not user.must_change_password:
             for label, path, icon in NAVIGATION[user.role]:
                 _navigation_link(label, path, icon).mark("navigation")
-            _navigation_link("Change password", "/change-password", "lock")
+            _navigation_link("My account", "/account", "account_circle")
         ui.label(user.full_name).classes("font-medium")
         ui.button("Log out", icon="logout", on_click=_logout).props("flat color=dark")
 

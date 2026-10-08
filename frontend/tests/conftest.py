@@ -31,8 +31,15 @@ def _migrated_database() -> None:
     testing.migrate(testing.TEST_DATABASE_URL)
 
 
+@pytest.fixture
+def github() -> testing.FakeGitHub:
+    return testing.FakeGitHub()
+
+
 @pytest.fixture(autouse=True)
-def backend_in_process(tmp_path: Path, request: pytest.FixtureRequest):
+def backend_in_process(
+    tmp_path: Path, request: pytest.FixtureRequest, github: testing.FakeGitHub
+):
     """Route the frontend's API calls to the real backend app, in this process."""
     testing.reset(testing.TEST_DATABASE_URL)
     logins_file = tmp_path / "logins.txt"
@@ -51,6 +58,7 @@ def backend_in_process(tmp_path: Path, request: pytest.FixtureRequest):
             dev_login=request.node.get_closest_marker("dev_login") is not None,
         )
     )
+    backend.state.github = github
     # ASGITransport does not run the backend's startup, so seed here.
     with backend.state.sessionmaker() as session:
         seed_starting_accounts(session, logins_file)

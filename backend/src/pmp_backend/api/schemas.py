@@ -53,3 +53,4 @@ class UserOut(BaseModel):
     must_change_password: bool
     programme: str | None
     year: str | None
+    github_username: str | None

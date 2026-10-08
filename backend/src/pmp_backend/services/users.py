@@ -1,6 +1,6 @@
 """Managing Users: the Superuser's work (spec #3, user service)."""
 
-from sqlalchemy import Select, select
+from sqlalchemy import Select, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -8,7 +8,7 @@ from pmp_backend.domain import Role, Year
 from pmp_backend.errors import Conflict, NotFound, Refused
 from pmp_backend.models import User
 from pmp_backend.security import hash_password
-from pmp_backend.services import programmes
+from pmp_backend.services import github, programmes
 from pmp_backend.services.projects import (
     active_titles_owned_by,
     titles_made_by,
@@ -275,3 +275,30 @@ def reset_password(session: Session, user_id: int, temporary_password: str) -> N
     user.password_hash = hash_password(temporary_password)
     user.must_change_password = True
     session.commit()
+
+
+def set_github_username(
+    session: Session, client: github.GitHub, user_id: int, username: str | None
+) -> User:
+    """Save (as GitHub spells it) or clear a User's GitHub username; refused when
+    GitHub has no such account or another User already has it."""
+    user = get_user(session, user_id)
+    if not username:
+        user.github_username = None
+        session.commit()
+        return user
+    login = github.find_account(client, username).login
+    taken = f"The GitHub username {login} is already used by another User."
+    owner = session.scalar(
+        select(User).where(func.lower(User.github_username) == login.lower())
+    )
+    if owner is not None and owner.id != user.id:
+        raise UserConflictError(taken)
+    user.github_username = login
+    try:
+        session.commit()
+    except IntegrityError as error:
+        # Someone else saved it between the check and the save.
+        session.rollback()
+        raise UserConflictError(taken) from error
+    return user

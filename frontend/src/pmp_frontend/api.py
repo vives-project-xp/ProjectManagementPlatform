@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 from typing import Any
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 
 import httpx
 
@@ -102,6 +102,7 @@ class CurrentUser:
     email: str
     role: str
     must_change_password: bool
+    github_username: str | None = None
 
     @classmethod
     def of(cls, body: dict[str, Any]) -> "CurrentUser":
@@ -111,6 +112,7 @@ class CurrentUser:
             email=body["email"],
             role=body["role"],
             must_change_password=body["must_change_password"],
+            github_username=body.get("github_username"),
         )
 
     @property
@@ -139,6 +141,35 @@ async def dev_login(user_id: int) -> tuple[str, CurrentUser]:
     """Log in as this User without a password (test login only)."""
     body = await _request("POST", "/api/dev-login", json={"user_id": user_id})
     return body["access_token"], CurrentUser.of(body["user"])
+
+
+async def github_account(token: str, username: str) -> dict[str, Any]:
+    """The GitHub account (login, name, avatar_url); ApiError when unknown."""
+    return await _request(
+        "GET", f"/api/github/users/{quote(username.strip(), safe='')}", token=token
+    )
+
+
+async def set_my_github_username(token: str, username: str | None) -> dict[str, Any]:
+    """Save (or, with None, clear) your own GitHub username; the saved User."""
+    return await _request(
+        "PUT",
+        "/api/me/github-username",
+        token=token,
+        json={"github_username": username},
+    )
+
+
+async def set_github_username(
+    token: str, user_id: int, username: str | None
+) -> dict[str, Any]:
+    """The Superuser saves (or clears) any User's GitHub username."""
+    return await _request(
+        "PUT",
+        f"/api/users/{user_id}/github-username",
+        token=token,
+        json={"github_username": username},
+    )
 
 
 async def me(token: str) -> CurrentUser:

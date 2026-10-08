@@ -6,6 +6,7 @@ from typing import Any
 from nicegui import ui
 
 from pmp_frontend import api
+from pmp_frontend.github_username import github_username_card
 from pmp_frontend.photos import show_photo
 from pmp_frontend.shell import ErrorMessage, confirm, role_page, token
 from pmp_frontend.top3_page import RANKS, choice_text, shown
@@ -79,6 +80,10 @@ def register() -> None:
     @role_page("/my-project", "My project", {"student"})
     async def my_project_page(user: api.CurrentUser) -> None:
         ui.label("My project").classes("text-h4")
+        github_username_card(
+            user.github_username,
+            lambda username: api.set_my_github_username(token(), username),
+        )
         project = await api.my_project(token())
         if project is None:
             ui.label("You haven't been assigned to a project yet.")

@@ -34,6 +34,10 @@ _Avoid_: Removed user
 A Student or Teacher removed for good by the Superuser, typically one created by mistake. Only possible while the User is not linked to any Project: not a Member, not in any Makers, and not the Product Owner of any Project (Active or Archived); otherwise they are deactivated instead. Their session ends at once and their email is free again.
 _Avoid_: Deactivated user (that User is kept)
 
+**GitHub username**:
+The GitHub account a User saved, confirmed by its profile picture and name and stored as GitHub spells it. One account belongs to one User (ignoring case). It decides who gets access to a Project repository.
+_Avoid_: GitHub login, GitHub handle, GitHub account (for the saved name)
+
 **Temporary password**:
 A password set by the Superuser that the User must replace at their next login.
 _Avoid_: Default password, reset code

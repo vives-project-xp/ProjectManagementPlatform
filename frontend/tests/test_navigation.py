@@ -23,7 +23,7 @@ def navigation_icons(user: User) -> set[str]:
 )
 async def test_logo_leads_to_the_roles_home_screen(user: User, role: str, home: str):
     await ready_to_work(user, role)
-    await user.open("/change-password")
+    await user.open("/account")
     await user.should_see("Change your password")
 
     link = logo_link(user)
@@ -51,10 +51,20 @@ async def test_logo_is_no_link_during_the_forced_password_change(user: User):
     [
         (
             "superuser",
-            {"group", "folder", "badge", "format_list_numbered", "lock", "logout"},
+            {
+                "group",
+                "folder",
+                "badge",
+                "format_list_numbered",
+                "account_circle",
+                "logout",
+            },
         ),
-        ("teacher", {"folder", "badge", "format_list_numbered", "lock", "logout"}),
-        ("student", {"work", "lock", "logout"}),
+        (
+            "teacher",
+            {"folder", "badge", "format_list_numbered", "account_circle", "logout"},
+        ),
+        ("student", {"work", "account_circle", "logout"}),
     ],
 )
 async def test_navigation_items_have_icons(user: User, role: str, icons: set[str]):
