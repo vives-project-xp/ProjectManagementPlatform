@@ -50,13 +50,21 @@ def _validation_message(errors: list[Any]) -> str:
     return " ".join(problems) or "Something went wrong."
 
 
-async def _request(
-    method: str, path: str, *, token: str | None = None, json: Any = None
-) -> Any:
+async def _response(
+    method: str,
+    path: str,
+    *,
+    token: str | None = None,
+    json: Any = None,
+    files: Any = None,
+) -> httpx.Response:
+    """The backend's answer; ApiError when it refuses or cannot be reached."""
     headers = {"Authorization": f"Bearer {token}"} if token else {}
     try:
         async with _client() as client:
-            response = await client.request(method, path, headers=headers, json=json)
+            response = await client.request(
+                method, path, headers=headers, json=json, files=files
+            )
     except httpx.HTTPError as error:
         raise ApiError(503, "The server cannot be reached. Try again later.") from error
     if response.is_error:
@@ -72,6 +80,18 @@ async def _request(
         else:
             message = "Something went wrong."
         raise ApiError(response.status_code, message, body.get("code"))
+    return response
+
+
+async def _request(
+    method: str,
+    path: str,
+    *,
+    token: str | None = None,
+    json: Any = None,
+    files: Any = None,
+) -> Any:
+    response = await _response(method, path, token=token, json=json, files=files)
     return response.json() if response.content else None
 
 
@@ -271,6 +291,27 @@ async def restore_project(token: str, project_id: int) -> dict[str, Any]:
 
 async def get_project(token: str, project_id: int) -> dict[str, Any]:
     return await _request("GET", f"/api/projects/{project_id}", token=token)
+
+
+async def upload_photo(
+    token: str, project_id: int, name: str, data: bytes, content_type: str
+) -> dict[str, Any]:
+    return await _request(
+        "PUT",
+        f"/api/projects/{project_id}/photo",
+        token=token,
+        files={"photo": (name, data, content_type)},
+    )
+
+
+async def remove_photo(token: str, project_id: int) -> dict[str, Any]:
+    return await _request("DELETE", f"/api/projects/{project_id}/photo", token=token)
+
+
+async def project_photo(token: str, project_id: int) -> tuple[bytes, str]:
+    """The photo's bytes and media type."""
+    response = await _response("GET", f"/api/projects/{project_id}/photo", token=token)
+    return response.content, response.headers["content-type"]
 
 
 async def create_project(token: str, fields: dict[str, Any]) -> dict[str, Any]:

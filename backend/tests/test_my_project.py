@@ -46,10 +46,12 @@ def test_student_sees_own_project_with_product_owner_and_fellow_members(
 
     assert response.status_code == 200, response.text
     assert response.json() == {
+        "id": drone,
         "title": "Drone",
         "description": "Build a drone.",
         "product_owner": "Teacher Account",
         "fellow_members": ["Lisa Peeters"],
+        "photo_version": None,
     }
 
 

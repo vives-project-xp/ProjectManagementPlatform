@@ -1,13 +1,19 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Response, status
+from fastapi import APIRouter, Response, UploadFile, status
 from pydantic import BaseModel, Field, StringConstraints
 
-from pmp_backend.api.deps import SessionDep, StudentDep, TeacherOrSuperuserDep
+from pmp_backend.api.deps import (
+    CurrentUserDep,
+    SessionDep,
+    SettingsDep,
+    StudentDep,
+    TeacherOrSuperuserDep,
+)
 from pmp_backend.api.schemas import PersonOut, StudentOut
 from pmp_backend.domain import ProjectStatus
 from pmp_backend.models import Project, User
-from pmp_backend.services import memberships, projects
+from pmp_backend.services import memberships, photos, projects
 from pmp_backend.services.projects import ProjectFields
 
 router = APIRouter(prefix="/api", tags=["projects"])
@@ -22,6 +28,8 @@ class ProjectOut(BaseModel):
     team_size_max: int
     member_count: int
     status: str
+    # Null without a photo; changes with every upload.
+    photo_version: int | None
 
     @classmethod
     def of(cls, project: Project) -> "ProjectOut":
@@ -34,6 +42,7 @@ class ProjectOut(BaseModel):
             team_size_max=project.team_size_max,
             member_count=project.member_count,
             status=project.status,
+            photo_version=project.photo_version,
         )
 
 
@@ -61,14 +70,17 @@ class ProjectDetailsOut(ProjectOut):
 class MyProjectOut(BaseModel):
     """A Student's own Project: only what a Student may see of it."""
 
+    id: int
     title: str
     description: str | None
     product_owner: str
     fellow_members: list[str]
+    photo_version: int | None
 
     @classmethod
     def of(cls, project: Project, student: User) -> "MyProjectOut":
         return cls(
+            id=project.id,
             title=project.title,
             description=project.description,
             product_owner=project.product_owner.full_name,
@@ -77,6 +89,7 @@ class MyProjectOut(BaseModel):
                 for member in project.members
                 if member.id != student.id
             ],
+            photo_version=project.photo_version,
         )
 
 
@@ -159,10 +172,48 @@ def update_project(
 
 @router.delete("/projects/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_project(
-    project_id: int, session: SessionDep, user: TeacherOrSuperuserDep
+    project_id: int,
+    session: SessionDep,
+    settings: SettingsDep,
+    user: TeacherOrSuperuserDep,
 ) -> Response:
-    projects.delete_project(session, project_id)
+    photos.delete_project(session, settings.photos_dir, project_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.put("/projects/{project_id}/photo")
+def upload_photo(
+    project_id: int,
+    photo: UploadFile,
+    session: SessionDep,
+    settings: SettingsDep,
+    user: TeacherOrSuperuserDep,
+) -> ProjectDetailsOut:
+    # One byte more than allowed is enough to know a file is too large.
+    data = photo.file.read(photos.MAX_BYTES + 1)
+    project = photos.save_photo(
+        session, settings.photos_dir, project_id, data, photo.content_type or ""
+    )
+    return ProjectDetailsOut.of(project)
+
+
+@router.delete("/projects/{project_id}/photo")
+def remove_photo(
+    project_id: int,
+    session: SessionDep,
+    settings: SettingsDep,
+    user: TeacherOrSuperuserDep,
+) -> ProjectDetailsOut:
+    project = photos.remove_photo(session, settings.photos_dir, project_id)
+    return ProjectDetailsOut.of(project)
+
+
+@router.get("/projects/{project_id}/photo")
+def get_photo(
+    project_id: int, session: SessionDep, settings: SettingsDep, user: CurrentUserDep
+) -> Response:
+    data, media_type = photos.read_photo(session, settings.photos_dir, project_id, user)
+    return Response(content=data, media_type=media_type)
 
 
 @router.post("/projects/{project_id}/members")

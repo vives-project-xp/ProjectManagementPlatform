@@ -40,11 +40,12 @@ def logins_file(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-def settings(logins_file: Path) -> Settings:
+def settings(logins_file: Path, tmp_path: Path) -> Settings:
     return Settings(
         database_url=TEST_DATABASE_URL,
         jwt_secret=TEST_JWT_SECRET,
         logins_file=logins_file,
+        photos_dir=tmp_path / "photos",
     )
 
 

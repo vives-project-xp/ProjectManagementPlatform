@@ -23,7 +23,10 @@ services:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       JWT_SECRET: ${JWT_SECRET}
       LOGINS_FILE: /run/secrets/logins.txt
+      PHOTOS_DIR: /data/photos
     volumes:
+      # Project photos, one file per Project (outside the database).
+      - photos:/data/photos
       # Starting accounts; the file stays outside the repository on the VM. If it
       # is missing, the backend logs a warning and starts without them.
       - ${LOGINS_PATH:-./logins.txt}:/run/secrets/logins.txt:ro
@@ -45,6 +48,7 @@ services:
       - ./backup/backup.sh:/backup.sh:ro
       # On the VM, outside the runner's checkout (which is wiped on every deploy).
       - ${BACKUP_PATH:-/opt/pmp/backups}:/backups
+      - photos:/photos:ro
     depends_on:
       db:
         condition: service_healthy
@@ -81,5 +85,6 @@ services:
 volumes:
   db-data:
   frontend-storage:
+  photos:
   caddy-data:
   caddy-config:

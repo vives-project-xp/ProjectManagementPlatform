@@ -7,6 +7,7 @@ from nicegui import ui
 from starlette.responses import Response
 
 from pmp_frontend import api
+from pmp_frontend.photos import THUMBNAIL_CELL, photo_card, photo_url
 from pmp_frontend.shell import (
     ErrorMessage,
     confirm,
@@ -20,6 +21,7 @@ from pmp_frontend.shell import (
 STAFF = {"superuser", "teacher"}
 
 COLUMNS = [
+    {"name": "photo", "label": "", "field": "photo", "align": "left"},
     {
         "name": "title",
         "label": "Title",
@@ -53,6 +55,7 @@ def _team_size_label(project: dict[str, Any]) -> str:
 def _row(project: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": project["id"],
+        "photo": photo_url(project["id"], project["photo_version"]) or "",
         "title": project["title"],
         "owner": project["product_owner"]["name"],
         "members": _team_size_label(project),
@@ -137,6 +140,7 @@ def register() -> None:
         ).mark("status-filter")
         table = ui.table(columns=COLUMNS, rows=[], row_key="id").classes("w-full")
         table.mark("projects")
+        table.add_slot("body-cell-photo", THUMBNAIL_CELL)
         table.add_slot("body-cell-members", MEMBERS_CELL)
         table.on(
             "rowClick", lambda event: ui.navigate.to(f"/projects/{event.args[1]['id']}")
@@ -216,6 +220,7 @@ def register() -> None:
                         "outline color=negative"
                     ).mark("delete-project")
             status_error = ErrorMessage()
+            photo_card(project, editable=not archived)
             if archived:
                 # Archived Projects are read-only: shown, never edited.
                 with ui.card().classes("w-full max-w-lg"):

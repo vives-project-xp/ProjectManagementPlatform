@@ -64,6 +64,10 @@ _Avoid_: Capacity, group size
 A finished Project, kept read-only for the history overview. Archiving frees its Students, and restoring it does not bring them back. It can never be deleted, nor can a restored Project that has Makers.
 _Avoid_: Deleted project, closed project, historical project
 
+**Project photo**:
+The one optional cover photo of a Project (JPG or PNG, at most 5 MB), uploaded, replaced and removed by Teachers and the Superuser. Shown on the Project's details, as a thumbnail in the Projects table and on a Member's My project. An Archived Project keeps its photo, read-only; deleting a Project deletes its photo.
+_Avoid_: Image, picture, logo, avatar
+
 **Makers**:
 The permanent record of the Students (name, Programme, Year) who were Members of a Project when it was archived. Nobody is ever removed from it: archiving a restored Project again only adds the new Members (a Student already listed is not added twice). Shown as "Made by".
 _Avoid_: History, former members, credits

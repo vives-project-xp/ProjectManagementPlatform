@@ -18,3 +18,5 @@ class Settings(DatabaseSettings):
     token_lifetime_minutes: int = 8 * 60
     # Starting accounts (role,email,password per line); created once if missing.
     logins_file: Path | None = None
+    # Project photos, one file per Project; a Docker volume in production.
+    photos_dir: Path = Path("/data/photos")
