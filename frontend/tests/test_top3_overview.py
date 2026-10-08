@@ -84,3 +84,36 @@ async def test_hasnt_chosen_yet_filter(user: User):
     user.find(marker="without-top3").elements.pop().set_value(True)
 
     await user.should_see("No Students match these filters.", retries=30)
+
+
+async def test_add_to_makes_the_student_a_member(user: User):
+    drone, robot, greenhouse = await open_round_with(
+        ["Drone", "Robot", "Smart Greenhouse"]
+    )
+    await student_submits([robot, greenhouse, drone])
+    await ready_to_work(user, "teacher")
+    await user.open("/top3")
+    await user.should_see(marker=f"add-3-to-{robot}", retries=30)
+
+    user.find(marker=f"add-3-to-{robot}").click()
+
+    await user.should_see("Student Account was added to Robot.")
+    await user.should_see("Project: Robot", retries=30)
+    await user.should_not_see(marker=f"add-3-to-{robot}")
+
+
+async def test_members_section_shows_the_rank(user: User):
+    drone, robot, greenhouse = await open_round_with(
+        ["Drone", "Robot", "Smart Greenhouse"]
+    )
+    await student_submits([robot, greenhouse, drone])
+    await ready_to_work(user, "teacher")
+
+    await user.open(f"/projects/{greenhouse}")
+    await user.should_see(marker="student-choice", retries=30)
+
+    choice = user.find(marker="student-choice").elements.pop()
+    assert isinstance(choice, ui.select)
+    assert list(choice.options.values())[0] == (
+        "Student Account (no Project yet) — 2nd choice"
+    )

@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 from nicegui import ui
 
 from pmp_frontend import api
+from pmp_frontend.projects_page import add_member_moving_if_confirmed
 from pmp_frontend.shell import ErrorMessage, confirm, role_page, token
 from pmp_frontend.users_page import YEARS
 
@@ -47,7 +48,7 @@ def choice_text(choice: dict[str, Any]) -> str:
     return f"{RANKS[choice['rank'] - 1]}: {title}"
 
 
-def _student_card(student: dict[str, Any], reset) -> None:
+def _student_card(student: dict[str, Any], reset, add_to) -> None:
     with ui.card().classes("w-full").mark(f"student-{student['id']}"):
         ui.label(student["name"]).classes("text-subtitle1")
         ui.label(f"{student['programme']}, year {student['year']}").classes(
@@ -58,8 +59,17 @@ def _student_card(student: dict[str, Any], reset) -> None:
         if student["top3"] is None:
             ui.label("Hasn't chosen yet.")
             return
+        current = (project or {}).get("id")
         for choice in student["top3"]:
-            ui.label(choice_text(choice))
+            with ui.row().classes("w-full items-center"):
+                ui.label(choice_text(choice))
+                if choice["available"] and choice["project_id"] != current:
+                    ui.button(
+                        f"Add to {choice['title']}",
+                        on_click=lambda c=choice: add_to(student, c),
+                    ).props("flat dense color=primary").mark(
+                        f"add-{student['id']}-to-{choice['project_id']}"
+                    )
         ui.label(f"Submitted on {shown(student['submitted_at'])}.").classes(
             "text-caption"
         )
@@ -113,8 +123,23 @@ def register() -> None:
                 if not found["students"]:
                     ui.label("No Students match these filters.")
                 for student in found["students"]:
-                    _student_card(student, reset)
+                    _student_card(student, reset, add_to)
             summary.rows = found["summary"]
+
+        async def add_to(student: dict[str, Any], choice: dict[str, Any]) -> None:
+            # The Members rules apply: Team size, moving, Archived Projects.
+            try:
+                details = await add_member_moving_if_confirmed(
+                    choice["project_id"], student["id"]
+                )
+            except api.ApiError as problem:
+                overview_error.show(problem.message)
+                return
+            if details is None:
+                return
+            overview_error.hide()
+            ui.notify(f"{student['name']} was added to {choice['title']}.")
+            await refresh_overview()
 
         async def reset(student: dict[str, Any]) -> None:
             question = f"Reset the top 3 of {student['name']}? They can choose again."
