@@ -1,9 +1,11 @@
 from datetime import datetime
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Response, status
 from pydantic import AwareDatetime, BaseModel
 
 from pmp_backend.api.deps import SessionDep, StudentDep, TeacherOrSuperuserDep
+from pmp_backend.api.schemas import ProjectRefOut
+from pmp_backend.domain import Year
 from pmp_backend.models import Project
 from pmp_backend.services import top3
 from pmp_backend.services.top3 import RoundState
@@ -75,6 +77,8 @@ class ChoosableProjectOut(BaseModel):
 
 class ChoiceOut(BaseModel):
     rank: int
+    # Null once the Project is deleted.
+    project_id: int | None
     title: str | None
     available: bool
 
@@ -116,3 +120,77 @@ def my_top3(session: SessionDep, student: StudentDep) -> MyTop3Out:
 def submit_top3(body: Top3In, session: SessionDep, student: StudentDep) -> MyTop3Out:
     top3.submit_top3(session, student, body.project_ids)
     return my_top3(session, student)
+
+
+class StudentTop3Out(BaseModel):
+    id: int
+    name: str
+    programme: str | None
+    year: str | None
+    project: ProjectRefOut | None
+    top3: list[ChoiceOut] | None
+    submitted_at: datetime | None
+
+
+class ProjectSummaryOut(BaseModel):
+    project_id: int
+    title: str
+    first: int
+    second: int
+    third: int
+
+
+class OverviewOut(BaseModel):
+    students: list[StudentTop3Out]
+    summary: list[ProjectSummaryOut]
+
+
+@router.get("/top3/overview")
+def overview(
+    session: SessionDep,
+    user: TeacherOrSuperuserDep,
+    programme: str | None = None,
+    year: Year | None = None,
+    without_top3: bool = False,
+) -> OverviewOut:
+    rows = top3.overview(
+        session, programme=programme, year=year, without_top3=without_top3
+    )
+    return OverviewOut(
+        students=[
+            StudentTop3Out(
+                id=row.student.id,
+                name=row.student.full_name,
+                programme=row.student.programme,
+                year=row.student.year,
+                project=ProjectRefOut(
+                    id=row.student.project.id, title=row.student.project.title
+                )
+                if row.student.project
+                else None,
+                top3=[ChoiceOut(**vars(choice)) for choice in row.top3.choices]
+                if row.top3
+                else None,
+                submitted_at=row.top3.submitted_at if row.top3 else None,
+            )
+            for row in rows
+        ],
+        summary=[
+            ProjectSummaryOut(
+                project_id=item.project.id,
+                title=item.project.title,
+                first=item.first,
+                second=item.second,
+                third=item.third,
+            )
+            for item in top3.summary(session)
+        ],
+    )
+
+
+@router.delete("/top3/students/{student_id}", status_code=status.HTTP_204_NO_CONTENT)
+def reset_top3(
+    student_id: int, session: SessionDep, user: TeacherOrSuperuserDep
+) -> Response:
+    top3.reset_top3(session, student_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

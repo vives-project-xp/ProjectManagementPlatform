@@ -8,9 +8,7 @@ from nicegui import ui
 from pmp_frontend import api
 from pmp_frontend.photos import show_photo
 from pmp_frontend.shell import ErrorMessage, confirm, role_page, token
-from pmp_frontend.top3_page import shown
-
-RANKS = ["1st choice", "2nd choice", "3rd choice"]
+from pmp_frontend.top3_page import RANKS, choice_text, shown
 
 
 def _top3_card(top3: dict[str, Any]) -> None:
@@ -36,10 +34,7 @@ def _top3_card(top3: dict[str, Any]) -> None:
         ui.label("Your top 3").classes("text-h6")
         if top3["top3"] is not None:
             for choice in top3["top3"]:
-                title = choice["title"] or "A deleted Project"
-                if not choice["available"]:
-                    title += " (no longer available)"
-                ui.label(f"{RANKS[choice['rank'] - 1]}: {title}")
+                ui.label(choice_text(choice))
             ui.label(f"Submitted on {shown(top3['submitted_at'])}.").classes(
                 "text-caption"
             )
