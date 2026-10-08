@@ -189,6 +189,18 @@ def register() -> None:
                     return
                 ui.navigate.to(f"/projects/{project_id}")
 
+            async def delete() -> None:
+                title = project["title"]
+                if not await confirm(f"Delete {title}?", "Delete"):
+                    return
+                try:
+                    await api.delete_project(token(), project_id)
+                except api.ApiError as error:
+                    status_error.show(error.message)
+                    return
+                ui.notify(f"Project {title} was deleted.")
+                ui.navigate.to("/projects")
+
             archived = project["status"] == "archived"
             ui.link("← Projects", "/projects").classes("text-dark")
             heading = ui.label(project["title"]).classes("text-h4")
@@ -197,6 +209,12 @@ def register() -> None:
                 ui.button(
                     "Restore" if archived else "Archive", on_click=change_status
                 ).props("outline color=dark").mark("change-status")
+                # Only Active Projects without Makers can be deleted (the backend
+                # also refuses one with Members, with a message).
+                if not archived and not project["makers"]:
+                    ui.button("Delete", on_click=delete).props(
+                        "outline color=negative"
+                    ).mark("delete-project")
             status_error = ErrorMessage()
             if archived:
                 # Archived Projects are read-only: shown, never edited.

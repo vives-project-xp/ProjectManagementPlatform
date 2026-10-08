@@ -45,7 +45,7 @@ _Avoid_: Default user, seed user, admin account
 ### Projects
 
 **Project**:
-A piece of work a team of Students carries out for its Product Owner.
+A piece of work a team of Students carries out for its Product Owner. A Teacher or the Superuser can delete an Active Project created by mistake while it has no Members and no Makers.
 _Avoid_: Assignment, task
 
 **Product Owner**:
@@ -61,7 +61,7 @@ The minimum and maximum number of Members a Project wants.
 _Avoid_: Capacity, group size
 
 **Archived Project**:
-A finished Project, kept read-only for the history overview. Archiving frees its Students, and restoring it does not bring them back.
+A finished Project, kept read-only for the history overview. Archiving frees its Students, and restoring it does not bring them back. It can never be deleted, nor can a restored Project that has Makers.
 _Avoid_: Deleted project, closed project, historical project
 
 **Makers**:

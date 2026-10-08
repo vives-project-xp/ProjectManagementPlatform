@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Response, status
 from pydantic import BaseModel, Field, StringConstraints
 
 from pmp_backend.api.deps import SessionDep, StudentDep, TeacherOrSuperuserDep
@@ -155,6 +155,14 @@ def update_project(
 ) -> ProjectDetailsOut:
     project = projects.update_project(session, project_id, body.fields())
     return ProjectDetailsOut.of(project)
+
+
+@router.delete("/projects/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_project(
+    project_id: int, session: SessionDep, user: TeacherOrSuperuserDep
+) -> Response:
+    projects.delete_project(session, project_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("/projects/{project_id}/members")

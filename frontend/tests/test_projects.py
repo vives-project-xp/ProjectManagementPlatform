@@ -50,3 +50,17 @@ async def test_student_has_no_projects_screen(user: User):
     await user.should_see("You don't have access to this page.")
     await user.open("/projects/1")
     await user.should_see("You don't have access to this page.")
+
+
+async def test_teacher_deletes_a_project_after_confirming(user: User):
+    await ready_to_work(user, "teacher")
+    await create_project(user, "Drone", 1, 3)
+    await user.open("/projects/1")
+    await user.should_see(marker="delete-project", retries=30)
+
+    user.find(marker="delete-project").click()
+    await user.should_see("Delete Drone?", retries=10)
+    user.find(marker="confirm").click()
+
+    await user.should_see(marker="projects", retries=30)
+    await eventually(lambda: project_titles(user) == [])

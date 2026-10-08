@@ -257,6 +257,10 @@ async def list_projects(
     return await _request("GET", f"/api/projects{query}", token=token)
 
 
+async def delete_project(token: str, project_id: int) -> None:
+    await _request("DELETE", f"/api/projects/{project_id}", token=token)
+
+
 async def archive_project(token: str, project_id: int) -> dict[str, Any]:
     return await _request("POST", f"/api/projects/{project_id}/archive", token=token)
 
