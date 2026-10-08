@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from sqlalchemy import (
+    BigInteger,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -118,6 +119,11 @@ class Project(Base):
     photo_version: Mapped[int | None]
     # Students may pick it in their Top 3 (spec #37); never for Archived Projects.
     open_for_choice: Mapped[bool] = mapped_column(default=False, server_default=false())
+    # Its GitHub repository (spec #49): the chosen name (None: suggested from the
+    # title), and the id and URL once it exists.
+    repo_name: Mapped[str | None] = mapped_column(String(100))
+    github_repo_id: Mapped[int | None] = mapped_column(BigInteger)
+    github_repo_url: Mapped[str | None] = mapped_column(String(300))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

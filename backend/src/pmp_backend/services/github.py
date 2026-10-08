@@ -34,9 +34,26 @@ class GitHubAccount:
     avatar_url: str
 
 
+@dataclass(frozen=True)
+class CreatedRepo:
+    id: int
+    html_url: str
+
+
+def repo_exists_error(org: str, name: str) -> GitHubError:
+    return GitHubError(
+        f"A repository called {name} already exists in {org}. "
+        "Choose another Repository name."
+    )
+
+
 class GitHub(Protocol):
     def user(self, username: str) -> GitHubAccount | None:
         """The account with this username (any capitalisation), or None."""
+        ...
+
+    def create_org_repo(self, org: str, name: str) -> CreatedRepo:
+        """A new public, completely empty repository in the organisation."""
         ...
 
 
@@ -60,6 +77,35 @@ class HttpGitHub:
             return self._client.get(path)
         except httpx.HTTPError as error:
             raise GitHubUnavailableError() from error
+
+    def _send(self, method: str, path: str, **kwargs) -> httpx.Response:
+        try:
+            return self._client.request(method, path, **kwargs)
+        except httpx.HTTPError as error:
+            raise GitHubUnavailableError() from error
+
+    def _refused(self, response: httpx.Response, org: str) -> GitHubError:
+        if response.status_code == 401:
+            return GitHubError("GitHub refused the token. Check GITHUB_TOKEN.")
+        if response.status_code in (403, 404):
+            return GitHubError(
+                f"The GitHub token may not do this in {org}. Check its permissions."
+            )
+        return GitHubUnavailableError()
+
+    def create_org_repo(self, org: str, name: str) -> CreatedRepo:
+        response = self._send(
+            "POST",
+            f"/orgs/{org}/repos",
+            json={"name": name, "private": False, "auto_init": False},
+        )
+        if response.status_code == 422:
+            # GitHub's way of saying the name is taken.
+            raise repo_exists_error(org, name)
+        if response.is_error:
+            raise self._refused(response, org)
+        body = response.json()
+        return CreatedRepo(id=body["id"], html_url=body["html_url"])
 
     def user(self, username: str) -> GitHubAccount | None:
         response = self._get(f"/users/{username}")
