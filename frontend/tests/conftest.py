@@ -128,7 +128,8 @@ async def create_project(
     user.find(marker="new-project").click()
     fill_project_form(user, title, minimum, maximum)
     user.find(marker="create-project").click()
-    await user.should_see(f"Project {title} was created.")
+    # Creating waits for the backend; CI can be slower than the default retries.
+    await user.should_see(f"Project {title} was created.", retries=30)
 
 
 def choose_student(user: User, name: str) -> None:
