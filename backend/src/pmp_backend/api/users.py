@@ -1,14 +1,13 @@
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Response, status
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from fastapi import APIRouter, Form, Response, UploadFile, status
+from pydantic import BaseModel, ConfigDict, StringConstraints
 
 from pmp_backend.api.deps import GitHubDep, SessionDep, SuperuserDep
 from pmp_backend.api.github import GitHubUsernameIn
 from pmp_backend.api.schemas import UserOut
 from pmp_backend.domain import Role, Year
 from pmp_backend.services import users
-from pmp_backend.services.auth import MIN_PASSWORD_LENGTH
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 
@@ -21,7 +20,6 @@ Email = Annotated[
         strip_whitespace=True, max_length=254, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$"
     ),
 ]
-TemporaryPassword = Annotated[str, Field(min_length=MIN_PASSWORD_LENGTH)]
 
 
 class UserCreateIn(BaseModel):
@@ -29,7 +27,7 @@ class UserCreateIn(BaseModel):
     first_name: Name
     last_name: Name
     email: Email
-    temporary_password: TemporaryPassword
+    # No password: the platform generates the Temporary password (#56).
     programme: Name | None = None
     year: Year | None = None
 
@@ -45,8 +43,36 @@ class UserEditIn(BaseModel):
     year: Year | None = None
 
 
-class ResetPasswordIn(BaseModel):
-    temporary_password: TemporaryPassword
+class TemporaryPasswordOut(BaseModel):
+    """A generated Temporary password, shown once; only its hash is kept."""
+
+    temporary_password: str
+
+
+class UserCreatedOut(UserOut):
+    temporary_password: str
+
+
+class ImportedUserOut(BaseModel):
+    id: int
+    first_name: str
+    last_name: str
+    email: str
+    temporary_password: str
+
+
+class SkippedLineOut(BaseModel):
+    line: int
+    email: str | None
+    reason: str
+
+
+class ImportOut(BaseModel):
+    created: list[ImportedUserOut]
+    skipped: list[SkippedLineOut]
+
+
+MAX_IMPORT_BYTES = 1024 * 1024
 
 
 @router.get("")
@@ -63,18 +89,54 @@ def list_users(
 @router.post("", status_code=status.HTTP_201_CREATED)
 def create_user(
     body: UserCreateIn, session: SessionDep, superuser: SuperuserDep
-) -> UserOut:
-    user = users.create_user(
+) -> UserCreatedOut:
+    user, password = users.create_user(
         session,
         role=Role(body.role),
         first_name=body.first_name,
         last_name=body.last_name,
         email=body.email,
-        temporary_password=body.temporary_password,
         programme=body.programme,
         year=body.year,
     )
-    return UserOut.model_validate(user)
+    return UserCreatedOut(
+        **UserOut.model_validate(user).model_dump(), temporary_password=password
+    )
+
+
+@router.post("/import")
+def import_users(
+    file: UploadFile,
+    role: Annotated[Literal["teacher", "student"], Form()],
+    session: SessionDep,
+    superuser: SuperuserDep,
+    programme: Annotated[str | None, Form()] = None,
+    year: Annotated[Year | None, Form()] = None,
+) -> ImportOut:
+    """One User per `Firstname,Lastname,email` line, Role, Programme and Year
+    the same for the whole file (#56)."""
+    content = file.file.read(MAX_IMPORT_BYTES + 1)
+    if len(content) > MAX_IMPORT_BYTES:
+        raise users.UserError("The file is larger than 1 MB.")
+    created, skipped = users.import_users(
+        session, content, role=Role(role), programme=programme, year=year
+    )
+    return ImportOut(
+        created=[
+            ImportedUserOut(
+                id=item.user.id,
+                first_name=item.user.first_name,
+                last_name=item.user.last_name,
+                email=item.user.email,
+                temporary_password=item.temporary_password,
+            )
+            for item in created
+        ],
+        skipped=[
+            SkippedLineOut(line=item.line, email=item.email, reason=item.reason)
+            for item in skipped
+        ],
+    )
 
 
 @router.get("/{user_id}")
@@ -110,12 +172,13 @@ def delete_user(user_id: int, session: SessionDep, superuser: SuperuserDep) -> R
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.post("/{user_id}/reset-password", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/{user_id}/reset-password")
 def reset_password(
-    user_id: int, body: ResetPasswordIn, session: SessionDep, superuser: SuperuserDep
-) -> Response:
-    users.reset_password(session, user_id, body.temporary_password)
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+    user_id: int, session: SessionDep, superuser: SuperuserDep
+) -> TemporaryPasswordOut:
+    return TemporaryPasswordOut(
+        temporary_password=users.reset_password(session, user_id)
+    )
 
 
 @router.put("/{user_id}/github-username")

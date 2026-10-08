@@ -19,16 +19,23 @@ def in_hours(hours: float) -> str:
     return (datetime.now(UTC) + timedelta(hours=hours)).isoformat()
 
 
-def log_in_new_student(client: TestClient, first_name: str) -> dict[str, str]:
-    """Headers of a Student made with create_student, past the password change."""
-    email = f"{first_name.lower()}@student.vives.be"
-    password = NEW_STUDENT["temporary_password"]
+OWN_PASSWORD = "lisa-own-password"
+
+
+def log_in_new_student(
+    client: TestClient, staff: dict[str, str], student_id: int, email: str
+) -> dict[str, str]:
+    """Headers of a Student made with create_student, past the password change;
+    their generated Temporary password comes from a reset."""
+    password = client.post(
+        f"/api/users/{student_id}/reset-password", headers=staff
+    ).json()["temporary_password"]
     token = client.post(
         "/api/auth/login", json={"email": email, "password": password}
     ).json()["access_token"]
     client.post(
         "/api/auth/change-password",
-        json={"current_password": password, "new_password": f"{password}-own"},
+        json={"current_password": password, "new_password": OWN_PASSWORD},
         headers=auth(token),
     )
     return auth(token)
@@ -71,7 +78,8 @@ def setup(client: TestClient):
         ids.append(project)
     client.put("/api/top3/round", json={"deadline": in_hours(24)}, headers=staff)
     lisa = create_student(client, staff, "Lisa")
-    submit(client, log_in_new_student(client, "Lisa"), [ids[1], ids[0], ids[2]])
+    lisa_headers = log_in_new_student(client, staff, lisa, "lisa@student.vives.be")
+    submit(client, lisa_headers, [ids[1], ids[0], ids[2]])
     return staff, ids, lisa
 
 
@@ -174,10 +182,9 @@ def test_reset_lets_the_student_choose_again(client: TestClient, setup):
 
     assert response.status_code == 204, response.text
     assert row(overview(client, staff), "Lisa Peeters")["top3"] is None
-    password = f"{NEW_STUDENT['temporary_password']}-own"
     token = client.post(
         "/api/auth/login",
-        json={"email": "lisa@student.vives.be", "password": password},
+        json={"email": "lisa@student.vives.be", "password": OWN_PASSWORD},
     ).json()["access_token"]
     submit(client, auth(token), ids)
 

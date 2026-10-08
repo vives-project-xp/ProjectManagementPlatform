@@ -39,7 +39,7 @@ The GitHub account a User saved, confirmed by its profile picture and name and s
 _Avoid_: GitHub login, GitHub handle, GitHub account (for the saved name)
 
 **Temporary password**:
-A password set by the Superuser that the User must replace at their next login.
+A password the platform generates (different for every User) when the Superuser creates, imports or resets a User, shown to the Superuser only once; the User must replace it at their next login. Starting accounts use the one from `logins.txt`.
 _Avoid_: Default password, reset code
 
 **Starting account**:

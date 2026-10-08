@@ -1,5 +1,9 @@
 """Managing Users: the Superuser's work (spec #3, user service)."""
 
+import csv
+import re
+from dataclasses import dataclass
+
 from sqlalchemy import Select, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -7,7 +11,7 @@ from sqlalchemy.orm import Session
 from pmp_backend.domain import Role, Year
 from pmp_backend.errors import Conflict, NotFound, Refused
 from pmp_backend.models import User
-from pmp_backend.security import hash_password
+from pmp_backend.security import generate_temporary_password, hash_password
 from pmp_backend.services import github, programmes
 from pmp_backend.services.projects import (
     active_titles_owned_by,
@@ -149,6 +153,11 @@ def new_user(
     )
 
 
+def _check_creatable(role: Role) -> None:
+    if role is Role.SUPERUSER:
+        raise UserError("Only Teachers and Students can be created.")
+
+
 def create_user(
     session: Session,
     *,
@@ -156,27 +165,27 @@ def create_user(
     first_name: str,
     last_name: str,
     email: str,
-    temporary_password: str,
     programme: str | None = None,
     year: Year | None = None,
-) -> User:
-    """Create a Teacher or Student (the Superuser exists only as a starting account)."""
-    if role is Role.SUPERUSER:
-        raise UserError("Only Teachers and Students can be created.")
+) -> tuple[User, str]:
+    """Create a Teacher or Student (the Superuser exists only as a starting
+    account), with a generated Temporary password; the User and that password."""
+    _check_creatable(role)
     programme = _student_programme(session, role, programme, year)
+    password = generate_temporary_password()
     user = new_user(
         role=role,
         first_name=first_name,
         last_name=last_name,
         email=email,
-        temporary_password=temporary_password,
+        temporary_password=password,
         programme=programme,
         year=year,
     )
     _check_email_free(session, user.email, None)
     session.add(user)
     _commit(session, user.email)
-    return user
+    return user, password
 
 
 def update_user(
@@ -269,12 +278,15 @@ def delete_user(session: Session, user_id: int) -> None:
         ) from error
 
 
-def reset_password(session: Session, user_id: int, temporary_password: str) -> None:
-    """Give a User a new Temporary password, to be replaced at their next login."""
+def reset_password(session: Session, user_id: int) -> str:
+    """Give a User a new, generated Temporary password, to be replaced at their
+    next login; that password (shown once, only its hash is kept)."""
     user = get_user(session, user_id)
-    user.password_hash = hash_password(temporary_password)
+    password = generate_temporary_password()
+    user.password_hash = hash_password(password)
     user.must_change_password = True
     session.commit()
+    return password
 
 
 def set_github_username(
@@ -302,3 +314,109 @@ def set_github_username(
         session.rollback()
         raise UserConflictError(taken) from error
     return user
+
+
+# Importing Users from a CSV file
+
+MAX_IMPORT_LINES = 1000
+EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+@dataclass(frozen=True)
+class ImportedUser:
+    user: User
+    temporary_password: str
+
+
+@dataclass(frozen=True)
+class SkippedLine:
+    line: int
+    email: str | None
+    reason: str
+
+
+def _csv_rows(content: bytes) -> list[list[str]]:
+    """The file's lines as cells; UTF-8 with or without BOM, "," or ";"."""
+    try:
+        text = content.decode("utf-8-sig")
+    except UnicodeDecodeError as error:
+        raise UserError("The file must be a UTF-8 CSV file.") from error
+    lines = text.splitlines()
+    if len(lines) > MAX_IMPORT_LINES:
+        raise UserError(f"The file has more than {MAX_IMPORT_LINES} lines.")
+    # Belgian Excel separates with ";".
+    first = lines[0] if lines else ""
+    delimiter = ";" if first.count(";") > first.count(",") else ","
+    return [
+        [cell.strip() for cell in row] for row in csv.reader(lines, delimiter=delimiter)
+    ]
+
+
+def _skip_reason(session: Session, cells: list[str], seen: set[str]) -> str | None:
+    if len(cells) != 3:
+        return "A line needs 3 values: Firstname,Lastname,email."
+    first_name, last_name, email = cells
+    if not first_name or not last_name:
+        return "A first and a last name are needed."
+    if len(first_name) > 100 or len(last_name) > 100:
+        return "A name can be at most 100 characters."
+    if not EMAIL.match(email) or len(email) > 254:
+        return f"{email} is not a valid email address."
+    email = normalize_email(email)
+    if email in seen:
+        return f"{email} appears more than once in the file."
+    if find_by_email(session, email) is not None:
+        return f"The email address {email} is already in use."
+    return None
+
+
+def import_users(
+    session: Session,
+    content: bytes,
+    *,
+    role: Role,
+    programme: str | None = None,
+    year: Year | None = None,
+) -> tuple[list[ImportedUser], list[SkippedLine]]:
+    """Create a User for every valid `Firstname,Lastname,email` line, each with
+    its own generated Temporary password; the other lines are skipped with the
+    reason. Role, Programme and Year are the same for the whole file."""
+    _check_creatable(role)
+    programme = _student_programme(session, role, programme, year)
+    created: list[ImportedUser] = []
+    skipped: list[SkippedLine] = []
+    seen: set[str] = set()
+    for number, cells in enumerate(_csv_rows(content), start=1):
+        if not any(cells):
+            continue
+        # A first line without an email is the header (any language).
+        if number == 1 and len(cells) == 3 and "@" not in cells[2]:
+            continue
+        reason = _skip_reason(session, cells, seen)
+        if reason is not None:
+            email = normalize_email(cells[2]) if len(cells) == 3 else None
+            skipped.append(SkippedLine(line=number, email=email, reason=reason))
+            continue
+        first_name, last_name, email = cells
+        password = generate_temporary_password()
+        user = new_user(
+            role=role,
+            first_name=first_name,
+            last_name=last_name,
+            email=email,
+            temporary_password=password,
+            programme=programme,
+            year=year,
+        )
+        seen.add(user.email)
+        session.add(user)
+        created.append(ImportedUser(user=user, temporary_password=password))
+    try:
+        session.commit()
+    except IntegrityError as error:
+        session.rollback()
+        raise DuplicateEmailError(
+            "Someone created one of these Users at the same moment. "
+            "Import the file again."
+        ) from error
+    return created, skipped

@@ -57,13 +57,14 @@ async def _response(
     token: str | None = None,
     json: Any = None,
     files: Any = None,
+    data: Any = None,
 ) -> httpx.Response:
     """The backend's answer; ApiError when it refuses or cannot be reached."""
     headers = {"Authorization": f"Bearer {token}"} if token else {}
     try:
         async with _client() as client:
             response = await client.request(
-                method, path, headers=headers, json=json, files=files
+                method, path, headers=headers, json=json, files=files, data=data
             )
     except httpx.HTTPError as error:
         raise ApiError(503, "The server cannot be reached. Try again later.") from error
@@ -90,8 +91,11 @@ async def _request(
     token: str | None = None,
     json: Any = None,
     files: Any = None,
+    data: Any = None,
 ) -> Any:
-    response = await _response(method, path, token=token, json=json, files=files)
+    response = await _response(
+        method, path, token=token, json=json, files=files, data=data
+    )
     return response.json() if response.content else None
 
 
@@ -249,17 +253,40 @@ async def delete_user(token: str, user_id: int) -> None:
     await _request("DELETE", f"/api/users/{user_id}", token=token)
 
 
-async def reset_password(token: str, user_id: int, temporary_password: str) -> None:
-    await _request(
+async def reset_password(token: str, user_id: int) -> str:
+    """Give the User a new generated Temporary password; that password."""
+    body = await _request("POST", f"/api/users/{user_id}/reset-password", token=token)
+    return body["temporary_password"]
+
+
+async def import_users(
+    token: str,
+    filename: str,
+    content: bytes,
+    *,
+    role: str,
+    programme: str | None = None,
+    year: str | None = None,
+) -> dict[str, Any]:
+    """Import a `Firstname,Lastname,email` CSV file: `created` (each with its
+    temporary_password) and `skipped` (line, email, reason)."""
+    form = {"role": role}
+    if programme:
+        form["programme"] = programme
+    if year:
+        form["year"] = year
+    return await _request(
         "POST",
-        f"/api/users/{user_id}/reset-password",
+        "/api/users/import",
         token=token,
-        json={"temporary_password": temporary_password},
+        files={"file": (filename, content, "text/csv")},
+        data=form,
     )
 
 
 async def create_user(token: str, new_user: dict[str, Any]) -> dict[str, Any]:
-    """Create a Teacher or Student; `new_user` matches the backend's create body."""
+    """Create a Teacher or Student; `new_user` matches the backend's create body.
+    The result includes the generated `temporary_password`, shown once."""
     return await _request("POST", "/api/users", token=token, json=new_user)
 
 

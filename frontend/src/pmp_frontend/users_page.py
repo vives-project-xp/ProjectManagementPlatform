@@ -16,14 +16,18 @@ from pmp_frontend.shell import (
     role_page,
     token,
 )
+from pmp_frontend.user_import import (
+    ROLES,
+    YEARS,
+    import_button,
+    show_temporary_password,
+)
 
-ROLES = {"teacher": "Teacher", "student": "Student"}
 ROLE_FILTER = {"": "All", "superuser": "Superuser"} | ROLES
 # Status filter label -> the backend's `active` value.
 STATUS_FILTER: dict[str, bool | None] = {"": None, "Active": True, "Deactivated": False}
 # Fixed list (ADR 0004); Programmes come from the backend because they will
 # become manageable later.
-YEARS = ["1", "2", "3", "International"]
 
 COLUMNS = [
     {
@@ -80,7 +84,6 @@ def register() -> None:
                 "first_name": first_name.value,
                 "last_name": last_name.value,
                 "email": email.value,
-                "temporary_password": temporary_password.value,
             }
             if role.value == "student":
                 new_user |= {"programme": programme.value, "year": year.value}
@@ -90,11 +93,13 @@ def register() -> None:
                 error_message.show(error.message)
                 return
             dialog.close()
-            ui.notify(f"{created['first_name']} {created['last_name']} was created.")
+            name = f"{created['first_name']} {created['last_name']}"
+            ui.notify(f"{name} was created.")
+            show_temporary_password(name, created["temporary_password"])
             await refresh()
 
         def open_dialog() -> None:
-            for field in (first_name, last_name, email, temporary_password):
+            for field in (first_name, last_name, email):
                 field.value = ""
             programme.value = programmes[0] if len(programmes) == 1 else None
             year.value = None
@@ -115,11 +120,9 @@ def register() -> None:
                 )
                 year = ui.select(YEARS, label="Year").classes("w-full").mark("year")
             student_fields.bind_visibility_from(role, "value", value="student")
-            temporary_password = (
-                ui.input("Temporary password (at least 8 characters)")
-                .classes("w-full")
-                .mark("temporary-password")
-            )
+            ui.label(
+                "A Temporary password is generated and shown after creating."
+            ).classes("text-caption")
             error_message = ErrorMessage()
             with ui.row():
                 ui.button("Create", on_click=create).mark("create-user")
@@ -128,6 +131,7 @@ def register() -> None:
         with ui.row().classes("w-full items-center"):
             ui.label("Users").classes("text-h4")
             ui.space()
+            import_button(programmes, refresh)
             ui.button("New user", on_click=open_dialog).mark("new-user")
         with ui.row().classes("items-center gap-4"):
             role_filter = ui.select(
@@ -203,14 +207,20 @@ def register() -> None:
                 )
 
             async def reset() -> None:
+                name = f"{shown['first_name']} {shown['last_name']}"
+                question = (
+                    f"Reset the password of {name}? They get a new Temporary "
+                    "password and must choose their own at the next login."
+                )
+                if not await confirm(question, "Reset"):
+                    return
                 try:
-                    await api.reset_password(token(), user_id, new_password.value)
+                    password = await api.reset_password(token(), user_id)
                 except api.ApiError as error:
                     reset_error.show(error.message)
                     return
                 reset_error.hide()
-                new_password.value = ""
-                ui.notify("The password was reset. It must be changed at next login.")
+                show_temporary_password(name, password)
 
             async def delete() -> None:
                 name = f"{shown['first_name']} {shown['last_name']}"
@@ -263,10 +273,9 @@ def register() -> None:
 
             with ui.card().classes("w-full max-w-lg"):
                 ui.label("Reset password").classes("text-h6")
-                new_password = ui.input(
-                    "New Temporary password (at least 8 characters)"
-                ).classes("w-full")
-                new_password.mark("reset-password-value")
+                ui.label("Generates a new Temporary password, shown once.").classes(
+                    "text-caption"
+                )
                 reset_error = ErrorMessage()
                 ui.button("Reset password", on_click=reset).mark("reset-password")
 
