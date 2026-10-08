@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Response, UploadFile, status
+from fastapi import APIRouter, Response, UploadFile, status
 from pydantic import BaseModel, Field, StringConstraints
 
 from pmp_backend.api.deps import (
@@ -11,7 +11,7 @@ from pmp_backend.api.deps import (
     TeacherOrSuperuserDep,
 )
 from pmp_backend.api.schemas import PersonOut, StudentOut
-from pmp_backend.domain import ProjectStatus, Role
+from pmp_backend.domain import ProjectStatus
 from pmp_backend.models import Project, User
 from pmp_backend.services import memberships, photos, projects
 from pmp_backend.services.projects import ProjectFields
@@ -177,8 +177,7 @@ def delete_project(
     settings: SettingsDep,
     user: TeacherOrSuperuserDep,
 ) -> Response:
-    projects.delete_project(session, project_id)
-    photos.discard(settings.photos_dir, project_id)
+    photos.delete_project(session, settings.photos_dir, project_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -213,13 +212,7 @@ def remove_photo(
 def get_photo(
     project_id: int, session: SessionDep, settings: SettingsDep, user: CurrentUserDep
 ) -> Response:
-    # A Student sees only the photo of the Project they are a Member of.
-    if user.role == Role.STUDENT.value and user.project_id != project_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You don't have access to this.",
-        )
-    data, media_type = photos.read_photo(session, settings.photos_dir, project_id)
+    data, media_type = photos.read_photo(session, settings.photos_dir, project_id, user)
     return Response(content=data, media_type=media_type)
 
 

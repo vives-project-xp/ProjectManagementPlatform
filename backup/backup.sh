@@ -49,7 +49,7 @@ backup() {
     -mtime +"$((KEEP_DAYS - 1))" -print -delete
 }
 
-newest() {
+newest_backup_matching() {
   ls -1 "$BACKUP_DIR"/$1 | sort | tail -n 1
 }
 
@@ -74,7 +74,7 @@ row_counts() {
 
 restore_test() {
   backup
-  file="$(newest 'pmp-*.dump')"
+  file="$(newest_backup_matching 'pmp-*.dump')"
   dropdb --if-exists "$SCRATCH_DB"
   createdb "$SCRATCH_DB"
   trap 'dropdb --if-exists "$SCRATCH_DB"' EXIT
@@ -88,7 +88,7 @@ restore_test() {
   fi
   log "restore test passed: $file"
 
-  photos="$(newest 'photos-*.tar.gz')"
+  photos="$(newest_backup_matching 'photos-*.tar.gz')"
   live="$(photo_count)"
   archived="$(archived_photo_count "$photos")"
   echo "photos $archived"

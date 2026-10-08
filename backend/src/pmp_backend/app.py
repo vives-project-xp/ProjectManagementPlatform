@@ -7,7 +7,7 @@ from sqlalchemy.orm import sessionmaker
 
 from pmp_backend.api import auth, programmes, projects, students, users
 from pmp_backend.database import is_reachable, make_engine
-from pmp_backend.errors import Conflict, NotFound, Refused
+from pmp_backend.errors import Conflict, Forbidden, NotFound, Refused
 from pmp_backend.services.seeding import seed_starting_accounts
 from pmp_backend.settings import Settings
 
@@ -38,6 +38,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # Services refuse with a message fit to show; only the status differs.
         if isinstance(error, NotFound):
             code = status.HTTP_404_NOT_FOUND
+        elif isinstance(error, Forbidden):
+            code = status.HTTP_403_FORBIDDEN
         elif isinstance(error, Conflict):
             code = status.HTTP_409_CONFLICT
         else:

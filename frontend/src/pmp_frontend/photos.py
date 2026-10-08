@@ -2,13 +2,14 @@
 server's user storage), so photos reach it through a frontend route that fetches
 them over the REST API (ADR 0003)."""
 
+from collections.abc import Awaitable
 from typing import Any
 
 from nicegui import app, events, ui
 from starlette.responses import Response
 
 from pmp_frontend import api
-from pmp_frontend.shell import TOKEN_KEY, ErrorMessage, confirm, token
+from pmp_frontend.shell import ErrorMessage, confirm, token
 
 MAX_BYTES = 5 * 1024 * 1024
 # Greys from the house style: 20% black behind a 60% black icon.
@@ -58,29 +59,25 @@ def photo_card(project: dict[str, Any], *, editable: bool) -> None:
     (Archived Projects keep their photo, read-only)."""
     project_id = project["id"]
 
-    async def upload(event: events.UploadEventArguments) -> None:
+    async def change(call: Awaitable[Any]) -> None:
+        """Run the API call; reload the page, or show why it was refused."""
         try:
-            await api.upload_photo(
-                token(),
-                project_id,
-                event.file.name,
-                await event.file.read(),
-                event.file.content_type,
-            )
+            await call
         except api.ApiError as error:
             photo_error.show(error.message)
             return
         ui.navigate.to(f"/projects/{project_id}")
 
+    async def upload(event: events.UploadEventArguments) -> None:
+        file = event.file
+        data = await file.read()
+        await change(
+            api.upload_photo(token(), project_id, file.name, data, file.content_type)
+        )
+
     async def remove() -> None:
-        if not await confirm(f"Remove the photo of {project['title']}?", "Remove"):
-            return
-        try:
-            await api.remove_photo(token(), project_id)
-        except api.ApiError as error:
-            photo_error.show(error.message)
-            return
-        ui.navigate.to(f"/projects/{project_id}")
+        if await confirm(f"Remove the photo of {project['title']}?", "Remove"):
+            await change(api.remove_photo(token(), project_id))
 
     with ui.card().classes("w-full max-w-lg"):
         ui.label("Photo").classes("text-h6")
@@ -93,7 +90,10 @@ def photo_card(project: dict[str, Any], *, editable: bool) -> None:
             auto_upload=True,
             max_file_size=MAX_BYTES,
             on_upload=upload,
-            on_rejected=lambda: photo_error.show("The photo is larger than 5 MB."),
+            # Rejected for its type or its size; the browser does not say which.
+            on_rejected=lambda: photo_error.show(
+                "Only JPG and PNG photos up to 5 MB are accepted."
+            ),
         ).props('accept=".jpg,.jpeg,.png" flat bordered').classes("w-full").mark(
             "photo-upload"
         )
@@ -106,11 +106,10 @@ def photo_card(project: dict[str, Any], *, editable: bool) -> None:
 def register() -> None:
     @app.get("/photos/{project_id}")
     async def photo(project_id: int) -> Response:
-        stored_token = app.storage.user.get(TOKEN_KEY)
-        if not stored_token:
+        if not token():
             return Response(status_code=401)
         try:
-            data, media_type = await api.project_photo(stored_token, project_id)
+            data, media_type = await api.project_photo(token(), project_id)
         except api.ApiError as error:
             return Response(status_code=error.status_code)
         # The URL carries the photo's version, so the browser may keep it a while.

@@ -5,8 +5,10 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
-from pmp_backend.errors import NotFound, Refused
-from pmp_backend.models import Project
+from pmp_backend.domain import Role
+from pmp_backend.errors import Forbidden, NotFound, Refused
+from pmp_backend.models import Project, User
+from pmp_backend.services import projects
 from pmp_backend.services.projects import changeable_project, get_project
 
 MAX_BYTES = 5 * 1024 * 1024
@@ -19,6 +21,10 @@ class PhotoError(Refused):
 
 
 class NoPhotoError(PhotoError, NotFound):
+    pass
+
+
+class PhotoForbiddenError(PhotoError, Forbidden):
     pass
 
 
@@ -66,10 +72,19 @@ def discard(photos_dir: Path, project_id: int) -> None:
     _path(photos_dir, project_id).unlink(missing_ok=True)
 
 
+def delete_project(session: Session, photos_dir: Path, project_id: int) -> None:
+    """Delete the Project (see projects.delete_project) and its photo with it."""
+    projects.delete_project(session, project_id)
+    discard(photos_dir, project_id)
+
+
 def read_photo(
-    session: Session, photos_dir: Path, project_id: int
+    session: Session, photos_dir: Path, project_id: int, viewer: User
 ) -> tuple[bytes, str]:
-    """The photo's bytes and media type."""
+    """The photo's bytes and media type. A Student sees only the photo of the
+    Project they are a Member of; Teachers and the Superuser see every photo."""
+    if viewer.role == Role.STUDENT.value and viewer.project_id != project_id:
+        raise PhotoForbiddenError("You don't have access to this.")
     project = get_project(session, project_id)
     path = _path(photos_dir, project_id)
     if project.photo_version is None or not path.is_file():
