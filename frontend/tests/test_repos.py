@@ -2,7 +2,13 @@ from nicegui import ui
 from nicegui.testing import User
 
 from pmp_backend.testing import FakeGitHub
-from tests.conftest import choose_student, create_project, ready_to_work
+from pmp_frontend import api
+from tests.conftest import (
+    STARTING_ACCOUNTS,
+    choose_student,
+    create_project,
+    ready_to_work,
+)
 
 
 async def project_with_the_student(user: User, title: str) -> None:
@@ -64,3 +70,54 @@ async def test_teacher_chooses_the_repository_name(user: User):
     user.find(marker="save-repo-name").click()
 
     await user.should_see("The repository will be called Greenhouse2026.", retries=30)
+
+
+async def test_check_members_updates_the_status(user: User, github: FakeGitHub):
+    await ready_to_work(user, "teacher")
+    await project_with_the_student(user, "Drone")
+    await user.open("/projects")
+    await user.should_see(marker="create-repos", retries=30)
+    user.find(marker="create-repos").click()
+    await user.should_see("Create repositories for 1 Project in TestOrg?", retries=30)
+    user.find(marker="confirm").click()
+    await user.should_see("Drone: Created", retries=30)
+
+    await user.open("/projects/1")
+    await user.should_see(
+        "Student Account (Member): No GitHub username yet", retries=30
+    )
+    # The Student adds a username; checking invites them.
+    github.add_account("Stu-D")
+    email, password = STARTING_ACCOUNTS["student"]
+    student_token, _ = await api.login(email, password)
+    await api.change_password(student_token, password, "student-own-password")
+    await api.set_my_github_username(student_token, "Stu-D")
+    user.find(marker="check-members").click()
+
+    await user.should_see("Invited Stu-D.", retries=30)
+    await user.should_see(
+        "Student Account (Member): Invited, not accepted yet", retries=30
+    )
+    github.accept("Drone", "Stu-D")
+    await user.open("/projects/1")
+    await user.should_see("Student Account (Member): Has access", retries=30)
+
+
+async def test_check_all_members_shows_a_result_per_project(
+    user: User, github: FakeGitHub
+):
+    await ready_to_work(user, "teacher")
+    await project_with_the_student(user, "Drone")
+    await user.open("/projects")
+    await user.should_see(marker="create-repos", retries=30)
+    user.find(marker="create-repos").click()
+    await user.should_see("Create repositories for 1 Project in TestOrg?", retries=30)
+    user.find(marker="confirm").click()
+    await user.should_see("Drone: Created", retries=30)
+    user.find(marker="results-done").click()
+
+    user.find(marker="check-all-members").click()
+    await user.should_see("Check the members of every repository?", retries=30)
+    user.find(marker="confirm").click()
+
+    await user.should_see("Drone: Everything was already in order.", retries=30)

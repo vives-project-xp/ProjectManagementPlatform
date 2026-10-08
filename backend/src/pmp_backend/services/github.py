@@ -40,6 +40,27 @@ class CreatedRepo:
     html_url: str
 
 
+@dataclass(frozen=True)
+class RepoInfo:
+    full_name: str
+    html_url: str
+
+
+@dataclass(frozen=True)
+class Collaborator:
+    login: str
+    # "write", "admin", or another GitHub role such as "maintain" or "read".
+    permission: str
+
+
+@dataclass(frozen=True)
+class Invitation:
+    id: int
+    login: str
+    permission: str
+    expired: bool
+
+
 def repo_exists_error(org: str, name: str) -> GitHubError:
     return GitHubError(
         f"A repository called {name} already exists in {org}. "
@@ -55,6 +76,24 @@ class GitHub(Protocol):
     def create_org_repo(self, org: str, name: str) -> CreatedRepo:
         """A new public, completely empty repository in the organisation."""
         ...
+
+    def repo(self, repo_id: int) -> RepoInfo | None:
+        """The repository with this id (it survives renames), or None if gone."""
+        ...
+
+    def collaborators(self, full_name: str) -> list[Collaborator]:
+        """People added to the repository directly (not through the org)."""
+        ...
+
+    def invitations(self, full_name: str) -> list[Invitation]: ...
+
+    def invite(self, full_name: str, login: str, permission: str) -> None:
+        """Invite with "write" or "admin"; for a collaborator: change the role."""
+        ...
+
+    def remove_collaborator(self, full_name: str, login: str) -> None: ...
+
+    def delete_invitation(self, full_name: str, invitation_id: int) -> None: ...
 
 
 class HttpGitHub:
@@ -106,6 +145,63 @@ class HttpGitHub:
             raise self._refused(response, org)
         body = response.json()
         return CreatedRepo(id=body["id"], html_url=body["html_url"])
+
+    def _ok(self, response: httpx.Response, full_name: str) -> httpx.Response:
+        if response.is_error:
+            raise self._refused(response, full_name.split("/")[0])
+        return response
+
+    def repo(self, repo_id: int) -> RepoInfo | None:
+        response = self._send("GET", f"/repositories/{repo_id}")
+        if response.status_code == 404:
+            return None
+        body = self._ok(response, "").json()
+        return RepoInfo(full_name=body["full_name"], html_url=body["html_url"])
+
+    def collaborators(self, full_name: str) -> list[Collaborator]:
+        response = self._send(
+            "GET",
+            f"/repos/{full_name}/collaborators",
+            params={"affiliation": "direct", "per_page": 100},
+        )
+        return [
+            Collaborator(login=person["login"], permission=person["role_name"])
+            for person in self._ok(response, full_name).json()
+        ]
+
+    def invitations(self, full_name: str) -> list[Invitation]:
+        response = self._send(
+            "GET", f"/repos/{full_name}/invitations", params={"per_page": 100}
+        )
+        return [
+            Invitation(
+                id=item["id"],
+                login=item["invitee"]["login"],
+                permission=item["permissions"],
+                expired=item.get("expired", False),
+            )
+            for item in self._ok(response, full_name).json()
+        ]
+
+    def invite(self, full_name: str, login: str, permission: str) -> None:
+        # GitHub's API calls "write" "push".
+        api_permission = "push" if permission == "write" else permission
+        response = self._send(
+            "PUT",
+            f"/repos/{full_name}/collaborators/{login}",
+            json={"permission": api_permission},
+        )
+        self._ok(response, full_name)
+
+    def remove_collaborator(self, full_name: str, login: str) -> None:
+        response = self._send("DELETE", f"/repos/{full_name}/collaborators/{login}")
+        self._ok(response, full_name)
+
+    def delete_invitation(self, full_name: str, invitation_id: int) -> None:
+        response = self._send(
+            "DELETE", f"/repos/{full_name}/invitations/{invitation_id}"
+        )
+        self._ok(response, full_name)
 
     def user(self, username: str) -> GitHubAccount | None:
         response = self._get(f"/users/{username}")

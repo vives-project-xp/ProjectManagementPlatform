@@ -8,7 +8,7 @@ from starlette.responses import Response
 
 from pmp_frontend import api
 from pmp_frontend.photos import THUMBNAIL_CELL, photo_card, photo_url
-from pmp_frontend.repos import create_repos_button, repository_card
+from pmp_frontend.repos import github_buttons, repository_card
 from pmp_frontend.shell import (
     ErrorMessage,
     confirm,
@@ -134,7 +134,7 @@ def register() -> None:
         with ui.row().classes("w-full items-center"):
             ui.label("Projects").classes("text-h4")
             ui.space()
-            await create_repos_button(refresh)
+            await github_buttons(refresh)
             ui.button("New Project", on_click=dialog.open).mark("new-project")
         # Active Projects are the current work; Archived ones the history overview.
         status_filter = ui.toggle(
@@ -246,7 +246,7 @@ def register() -> None:
                 ).mark("open-for-choice")
             status_error = ErrorMessage()
             photo_card(project, editable=not archived)
-            repository_card(project, editable=not archived)
+            await repository_card(project, editable=not archived)
             if archived:
                 # Archived Projects are read-only: shown, never edited.
                 with ui.card().classes("w-full max-w-lg"):
