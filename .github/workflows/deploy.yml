@@ -47,6 +47,12 @@ jobs:
       - name: Start services
         run: docker compose --env-file "$ENV_FILE" up -d --remove-orphans
 
+      # Caddy and backup read single files from this checkout (Caddyfile,
+      # backup.sh). The checkout replaces those files, and a running container
+      # keeps the old one, so recreate both to pick up every change.
+      - name: Reload mounted files
+        run: docker compose --env-file "$ENV_FILE" up -d --no-deps --force-recreate caddy backup
+
       - name: Health check
         run: |
           # Read only SITE_ADDRESS; never source the secrets file as shell code.
