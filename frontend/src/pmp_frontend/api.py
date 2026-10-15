@@ -467,6 +467,42 @@ async def my_trello_board(token: str) -> dict[str, Any]:
     return await _request("GET", "/api/my-project/trello", token=token)
 
 
+async def project_deadlines(token: str, project_id: int) -> list[dict[str, Any]]:
+    """The Project's own and all-Projects deadlines, earliest first (id, project_id,
+    project_title, title, due_at, description, when)."""
+    return await _request("GET", f"/api/projects/{project_id}/deadlines", token=token)
+
+
+async def add_deadline(
+    token: str, project_id: int | None, deadline: dict[str, Any]
+) -> dict[str, Any]:
+    """A deadline for one Project, or for every Active Project (`project_id` None)."""
+    path = f"/api/projects/{project_id}/deadlines" if project_id else "/api/deadlines"
+    return await _request("POST", path, token=token, json=deadline)
+
+
+async def update_deadline(
+    token: str, deadline_id: int, deadline: dict[str, Any]
+) -> dict[str, Any]:
+    return await _request(
+        "PUT", f"/api/deadlines/{deadline_id}", token=token, json=deadline
+    )
+
+
+async def delete_deadline(token: str, deadline_id: int) -> None:
+    await _request("DELETE", f"/api/deadlines/{deadline_id}", token=token)
+
+
+async def planning(token: str, *, mine: bool = False) -> list[dict[str, Any]]:
+    """Today's and later deadlines across Active Projects."""
+    path = "/api/planning?mine=true" if mine else "/api/planning"
+    return await _request("GET", path, token=token)
+
+
+async def my_planning(token: str) -> list[dict[str, Any]]:
+    return await _request("GET", "/api/my-project/planning", token=token)
+
+
 async def set_repo_name(
     token: str, project_id: int, name: str | None
 ) -> dict[str, Any]:

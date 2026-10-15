@@ -1,14 +1,13 @@
 """The Top 3 screen (Teachers and the Superuser): the one Top 3 round (spec #37)."""
 
-from datetime import datetime
 from typing import Any
-from zoneinfo import ZoneInfo
 
 from nicegui import ui
 
 from pmp_frontend import api
 from pmp_frontend.projects_page import add_member_moving_if_confirmed
 from pmp_frontend.shell import ErrorMessage, confirm, role_page, token
+from pmp_frontend.times import moment_from, shown
 from pmp_frontend.users_page import YEARS
 
 STAFF = {"superuser", "teacher"}
@@ -21,23 +20,6 @@ SUMMARY_COLUMNS = [
     {"name": "second", "label": "2nd", "field": "second", "sortable": True},
     {"name": "third", "label": "3rd", "field": "third", "sortable": True},
 ]
-# Deadlines are entered and shown in Belgian time.
-BRUSSELS = ZoneInfo("Europe/Brussels")
-
-
-def shown(moment: str) -> str:
-    return (
-        datetime.fromisoformat(moment).astimezone(BRUSSELS).strftime("%d/%m/%Y %H:%M")
-    )
-
-
-def deadline_from(date_text: str, time_text: str) -> str | None:
-    """The ISO deadline for a date and time in Belgian time, or None if unreadable."""
-    try:
-        local = datetime.fromisoformat(f"{date_text}T{time_text}")
-    except ValueError:
-        return None
-    return local.replace(tzinfo=BRUSSELS).isoformat()
 
 
 def choice_text(choice: dict[str, Any]) -> str:
@@ -96,7 +78,7 @@ def register() -> None:
             new_button.set_visibility(deadline is not None)
 
         def chosen_deadline() -> str | None:
-            deadline = deadline_from(date.value or "", time.value or "")
+            deadline = moment_from(date.value or "", time.value or "")
             if deadline is None:
                 error.show("Choose a date and a time.")
             return deadline

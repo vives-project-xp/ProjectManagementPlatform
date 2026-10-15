@@ -221,3 +221,23 @@ class TrelloGrant(Base):
         ForeignKey("users.id", ondelete="SET NULL")
     )
     email: Mapped[str] = mapped_column(String(254))
+
+
+class Deadline(Base):
+    """A Deadline (spec #68): for one Project, or for every Active Project when
+    `project_id` is null."""
+
+    __tablename__ = "deadlines"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    project_id: Mapped[int | None] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), index=True
+    )
+    title: Mapped[str] = mapped_column(String(200))
+    due_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    description: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    project: Mapped[Project | None] = relationship()

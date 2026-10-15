@@ -4,7 +4,7 @@ from nicegui import ui
 from nicegui.testing import User
 
 from pmp_frontend import api
-from pmp_frontend.top3_page import deadline_from
+from pmp_frontend.times import moment_from
 from tests.conftest import STARTING_ACCOUNTS, eventually, ready_to_work
 
 
@@ -43,7 +43,7 @@ async def open_round_with(titles: list[str]) -> list[int]:
         await api.set_open_for_choice(token, project["id"], True)
         ids.append(project["id"])
     tomorrow = (date.today() + timedelta(days=1)).isoformat()
-    await api.set_top3_deadline(token, deadline_from(tomorrow, "23:59"))
+    await api.set_top3_deadline(token, moment_from(tomorrow, "23:59"))
     return ids
 
 
