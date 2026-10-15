@@ -467,10 +467,11 @@ async def my_trello_board(token: str) -> dict[str, Any]:
     return await _request("GET", "/api/my-project/trello", token=token)
 
 
-async def project_deadlines(token: str, project_id: int) -> list[dict[str, Any]]:
-    """The Project's own and all-Projects deadlines, earliest first (id, project_id,
-    project_title, title, due_at, description, when)."""
-    return await _request("GET", f"/api/projects/{project_id}/deadlines", token=token)
+async def project_planning(token: str, project_id: int) -> dict[str, Any]:
+    """The Project's agenda: `items` (deadlines, meetings and this week's weekly
+    meetings, earliest first: kind, id, project_id, project_title, title,
+    starts_at, ends_at, place, details, when) and its `weekly_slot` (or None)."""
+    return await _request("GET", f"/api/projects/{project_id}/planning", token=token)
 
 
 async def add_deadline(
@@ -493,14 +494,61 @@ async def delete_deadline(token: str, deadline_id: int) -> None:
     await _request("DELETE", f"/api/deadlines/{deadline_id}", token=token)
 
 
-async def planning(token: str, *, mine: bool = False) -> list[dict[str, Any]]:
-    """Today's and later deadlines across Active Projects."""
+async def planning(token: str, *, mine: bool = False) -> dict[str, Any]:
+    """What is coming up across Active Projects: `items` and `weekly_slots`."""
     path = "/api/planning?mine=true" if mine else "/api/planning"
     return await _request("GET", path, token=token)
 
 
-async def my_planning(token: str) -> list[dict[str, Any]]:
+async def my_planning(token: str) -> dict[str, Any]:
+    """The Student's Project's agenda: `items` and `weekly_slot`."""
     return await _request("GET", "/api/my-project/planning", token=token)
+
+
+async def add_meeting(
+    token: str, project_id: int, meeting: dict[str, Any]
+) -> dict[str, Any]:
+    return await _request(
+        "POST", f"/api/projects/{project_id}/meetings", token=token, json=meeting
+    )
+
+
+async def update_meeting(
+    token: str, meeting_id: int, meeting: dict[str, Any]
+) -> dict[str, Any]:
+    return await _request(
+        "PUT", f"/api/meetings/{meeting_id}", token=token, json=meeting
+    )
+
+
+async def delete_meeting(token: str, meeting_id: int) -> None:
+    await _request("DELETE", f"/api/meetings/{meeting_id}", token=token)
+
+
+async def set_weekly_slot(
+    token: str, project_id: int, slot: dict[str, Any]
+) -> dict[str, Any]:
+    """`slot`: weekday (0 = Monday), starts, ends ("HH:MM"), place."""
+    return await _request(
+        "PUT", f"/api/projects/{project_id}/weekly-slot", token=token, json=slot
+    )
+
+
+async def clear_weekly_slot(token: str, project_id: int) -> None:
+    await _request("DELETE", f"/api/projects/{project_id}/weekly-slot", token=token)
+
+
+async def skip_date(token: str, project_id: int, day: str) -> dict[str, Any]:
+    """No weekly meeting on `day` (ISO date)."""
+    return await _request(
+        "POST", f"/api/projects/{project_id}/weekly-slot/skips/{day}", token=token
+    )
+
+
+async def unskip_date(token: str, project_id: int, day: str) -> dict[str, Any]:
+    return await _request(
+        "DELETE", f"/api/projects/{project_id}/weekly-slot/skips/{day}", token=token
+    )
 
 
 async def set_repo_name(

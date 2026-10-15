@@ -1,14 +1,16 @@
-from datetime import datetime
+from datetime import date, datetime, time
 
 from sqlalchemy import (
     BigInteger,
     CheckConstraint,
+    Date,
     DateTime,
     ForeignKey,
     Index,
     SmallInteger,
     String,
     Text,
+    Time,
     UniqueConstraint,
     false,
     func,
@@ -241,3 +243,59 @@ class Deadline(Base):
     )
 
     project: Mapped[Project | None] = relationship()
+
+
+class Meeting(Base):
+    """A one-off Meeting of a Project's team (spec #68)."""
+
+    __tablename__ = "meetings"
+    __table_args__ = (
+        CheckConstraint("ends_at > starts_at", name="ck_meetings_end_after_start"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), index=True
+    )
+    starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    # A room, or a link to an online meeting.
+    place: Mapped[str] = mapped_column(String(500))
+    note: Mapped[str | None] = mapped_column(Text)
+
+    project: Mapped[Project] = relationship()
+
+
+class WeeklySlot(Base):
+    """A Project's fixed Weekly slot (spec #68): weekday 0 is Monday, the times
+    are Belgian time."""
+
+    __tablename__ = "weekly_slots"
+    __table_args__ = (
+        CheckConstraint("weekday BETWEEN 0 AND 6", name="ck_weekly_slots_weekday"),
+        CheckConstraint("ends > starts", name="ck_weekly_slots_end_after_start"),
+    )
+
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), primary_key=True
+    )
+    weekday: Mapped[int] = mapped_column(SmallInteger)
+    starts: Mapped[time] = mapped_column(Time)
+    ends: Mapped[time] = mapped_column(Time)
+    place: Mapped[str] = mapped_column(String(500))
+
+    project: Mapped[Project] = relationship()
+    skips: Mapped[list["WeeklySlotSkip"]] = relationship(
+        order_by="WeeklySlotSkip.day", cascade="all, delete-orphan", lazy="selectin"
+    )
+
+
+class WeeklySlotSkip(Base):
+    """A date on which the Weekly slot doesn't take place."""
+
+    __tablename__ = "weekly_slot_skips"
+
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey("weekly_slots.project_id", ondelete="CASCADE"), primary_key=True
+    )
+    day: Mapped[date] = mapped_column(Date, primary_key=True)

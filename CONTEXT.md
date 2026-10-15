@@ -100,6 +100,14 @@ _Avoid_: Sync, refresh access
 A moment something is due, in Belgian time: for one Project (set by a Teacher or the Superuser on its page) or for every Active Project (on the Planning screen), never for Archived ones. It has a title and an optional description but no "done" state; tasks belong in Trello. Today's deadlines are shown in the Today banner; past ones are greyed under "Earlier". An Archived Project keeps its own deadlines, read-only.
 _Avoid_: Due date, task, milestone
 
+**Meeting**:
+A one-off meeting of a Project's team: a date, a start and end time in Belgian time, a place (a room, or a link to an online meeting) and an optional note. Planned by a Teacher or the Superuser; an Archived Project keeps its Meetings, read-only.
+_Avoid_: Appointment, event, session
+
+**Weekly slot**:
+A Project's one fixed weekly meeting: a weekday, a start and end time in Belgian time, and a place. Single dates can be skipped (holidays); clearing it stops it (e.g. during exams). Its meetings of the coming seven days show alongside the Deadlines and Meetings; an Archived Project has none.
+_Avoid_: Recurring meeting, standup, timetable
+
 **Makers**:
 The permanent record of the Students (name, Programme, Year) who were Members of a Project when it was archived. Nobody is ever removed from it: archiving a restored Project again only adds the new Members (a Student already listed is not added twice). Shown as "Made by".
 _Avoid_: History, former members, credits

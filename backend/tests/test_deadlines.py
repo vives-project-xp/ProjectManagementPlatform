@@ -26,7 +26,10 @@ def add(
 
 
 def titles(response) -> list[tuple[str, str]]:
-    return [(d["title"], d["when"]) for d in response.json()]
+    body = response.json()
+    # The planning endpoints return an agenda; the deadlines endpoint a list.
+    items = body["items"] if isinstance(body, dict) else body
+    return [(d["title"], d["when"]) for d in items]
 
 
 def test_a_project_shows_its_own_and_the_all_projects_deadlines(client: TestClient):
@@ -162,7 +165,8 @@ def test_planning_shows_what_is_coming_across_active_projects(client: TestClient
         ("Robot demo", "upcoming"),
         ("Drone demo", "upcoming"),
     ]
-    assert [d["project_title"] for d in everything.json()] == [None, "Robot", "Drone"]
+    items = everything.json()["items"]
+    assert [d["project_title"] for d in items] == [None, "Robot", "Drone"]
     assert titles(only_mine) == [
         ("Final presentation", "today"),
         ("Drone demo", "upcoming"),
@@ -189,7 +193,9 @@ def test_a_student_sees_their_projects_deadlines(client: TestClient):
 def test_a_student_without_project_sees_nothing(client: TestClient):
     student = ready_to_work(client, "student")
 
-    assert client.get("/api/my-project/planning", headers=student).json() == []
+    response = client.get("/api/my-project/planning", headers=student)
+
+    assert response.json() == {"items": [], "weekly_slot": None}
 
 
 def test_students_cannot_plan(client: TestClient):
