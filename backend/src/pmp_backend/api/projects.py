@@ -35,6 +35,8 @@ class ProjectOut(BaseModel):
     # The repository's name (chosen or suggested) and its URL once it exists.
     repo_name: str
     repo_url: str | None
+    # Its Trello board's URL once it exists (spec #61).
+    trello_board_url: str | None
 
     @classmethod
     def of(cls, project: Project) -> "ProjectOut":
@@ -51,6 +53,7 @@ class ProjectOut(BaseModel):
             open_for_choice=project.open_for_choice,
             repo_name=repos.repo_name(project),
             repo_url=project.github_repo_url,
+            trello_board_url=project.trello_board_url,
         )
 
 

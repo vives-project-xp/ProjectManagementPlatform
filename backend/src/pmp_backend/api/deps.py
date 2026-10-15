@@ -11,6 +11,7 @@ from pmp_backend.domain import Role
 from pmp_backend.models import User
 from pmp_backend.security import read_token
 from pmp_backend.services.github import GitHub
+from pmp_backend.services.trello import Trello
 from pmp_backend.settings import Settings
 
 _bearer = HTTPBearer(auto_error=False)
@@ -34,6 +35,13 @@ def get_github(request: Request) -> GitHub:
 
 
 GitHubDep = Annotated[GitHub, Depends(get_github)]
+
+
+def get_trello(request: Request) -> Trello:
+    return request.app.state.trello
+
+
+TrelloDep = Annotated[Trello, Depends(get_trello)]
 
 
 def _unauthorized() -> HTTPException:

@@ -88,6 +88,10 @@ _Avoid_: Election, vote, enrolment period
 The public GitHub repository of a Project, in the organisation the platform is connected to; created completely empty by "Create repos for all Projects" for every Active Project with Members. Its name is suggested from the title (`SmartGreenhouse`) and can be changed until it exists; renaming the Project doesn't rename it. A Project that has one can't be deleted, only archived.
 _Avoid_: Repo (in UI text), GitHub project, code base
 
+**Trello board**:
+The private Trello board of a Project, alone in a Trello Workspace of its own (ADR 0007), both named after the Project's title and owned by the platform's dedicated Trello account. Created by "Create Trello boards for all Projects" for every Active Project with Members, with the lists Backlog, To do, Doing, Review and Done. Its Members join as normal members and its Product Owner as admin, invited by their platform email; someone without a Trello account with that email stays invited until they sign up.
+_Avoid_: Trello project, task board, Kanban (for the platform itself)
+
 **Check members**:
 Bringing a Project repository's access in line with the Project: active Members with a GitHub username get write access and the Product Owner admin access (GitHub sends them an invitation to accept); expired invitations are sent again; people the platform knows (a User's GitHub username, or an account the platform itself invited there) who no longer belong lose their access. Accounts the platform doesn't know, such as coaches added by hand, are never touched. Runs right after a repository is created, per Project, or for all repositories at once.
 _Avoid_: Sync, refresh access

@@ -18,6 +18,7 @@ from pmp_frontend.shell import (
     role_page,
     token,
 )
+from pmp_frontend.trello import trello_buttons, trello_card
 
 STAFF = {"superuser", "teacher"}
 
@@ -135,6 +136,7 @@ def register() -> None:
             ui.label("Projects").classes("text-h4")
             ui.space()
             await github_buttons(refresh)
+            await trello_buttons(refresh)
             ui.button("New Project", on_click=dialog.open).mark("new-project")
         # Active Projects are the current work; Archived ones the history overview.
         status_filter = ui.toggle(
@@ -250,6 +252,7 @@ def register() -> None:
             status_error = ErrorMessage()
             photo_card(project, editable=not archived)
             await repository_card(project, editable=not archived)
+            trello_card(project)
             if archived:
                 # Archived Projects are read-only: shown, never edited.
                 with ui.card().classes("w-full max-w-lg"):

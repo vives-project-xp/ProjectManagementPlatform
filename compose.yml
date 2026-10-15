@@ -31,6 +31,10 @@ services:
       # token for it. Without a token, the GitHub actions are off.
       GITHUB_ORG: ${GITHUB_ORG:-}
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      # Trello boards (spec #61): the API key and token of the dedicated Trello
+      # account. Without them, the Trello actions are off.
+      TRELLO_API_KEY: ${TRELLO_API_KEY:-}
+      TRELLO_TOKEN: ${TRELLO_TOKEN:-}
     volumes:
       # Project photos, one file per Project (outside the database).
       - photos:/data/photos

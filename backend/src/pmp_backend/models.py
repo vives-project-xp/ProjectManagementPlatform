@@ -124,6 +124,10 @@ class Project(Base):
     repo_name: Mapped[str | None] = mapped_column(String(100))
     github_repo_id: Mapped[int | None] = mapped_column(BigInteger)
     github_repo_url: Mapped[str | None] = mapped_column(String(300))
+    # Its own Trello Workspace and board (spec #61), once they exist.
+    trello_workspace_id: Mapped[str | None] = mapped_column(String(64))
+    trello_board_id: Mapped[str | None] = mapped_column(String(64))
+    trello_board_url: Mapped[str | None] = mapped_column(String(300))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -199,3 +203,21 @@ class RepoGrant(Base):
         ForeignKey("projects.id", ondelete="CASCADE"), primary_key=True
     )
     login: Mapped[str] = mapped_column(String(39), primary_key=True)
+
+
+class TrelloGrant(Base):
+    """A Trello member the platform itself invited to a Project's board, and the
+    User and email it was for (spec #61): Trello never shows email addresses, so
+    this is how "Check members" knows who is who and whom it may remove. A
+    Deleted User leaves `user_id` null."""
+
+    __tablename__ = "trello_grants"
+
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), primary_key=True
+    )
+    trello_member_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
+    email: Mapped[str] = mapped_column(String(254))

@@ -28,3 +28,8 @@ class Settings(DatabaseSettings):
     github_org: str | None = None
     github_token: str | None = None
     github_api_url: str = "https://api.github.com"
+    # The dedicated Trello account that owns every Project's Workspace and board
+    # (spec #61). Only in /opt/pmp/.env.
+    trello_api_key: str | None = None
+    trello_token: str | None = None
+    trello_api_url: str = "https://api.trello.com/1"

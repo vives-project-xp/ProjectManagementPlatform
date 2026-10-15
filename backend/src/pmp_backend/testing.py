@@ -17,6 +17,12 @@ from pmp_backend.services.github import (
     RepoInfo,
     repo_exists_error,
 )
+from pmp_backend.services.trello import (
+    CreatedBoard,
+    Membership,
+    TrelloError,
+    TrelloUnavailableError,
+)
 
 TEST_DATABASE_URL = os.environ.get(
     "TEST_DATABASE_URL",
@@ -166,3 +172,109 @@ class FakeGitHub:
     def set_archived(self, full_name: str, archived: bool) -> None:
         self._check()
         self._by_full_name(full_name).archived = archived
+
+
+@dataclass
+class FakeMember:
+    member_id: str
+    # None for the owner account (Trello never shows emails anyway).
+    email: str | None
+    member_type: str
+    unconfirmed: bool = False
+
+
+@dataclass
+class FakeBoard:
+    id: str
+    workspace_id: str
+    name: str
+    private: bool
+    lists: list[str] = field(default_factory=list)
+    closed: bool = False
+    # By member id; the owner account is on every board as admin.
+    members: dict[str, FakeMember] = field(default_factory=dict)
+
+    @property
+    def url(self) -> str:
+        return f"https://trello.com/b/{self.id}"
+
+    def emails(self) -> dict[str, str]:
+        """Each invited email and its membership type."""
+        return {
+            m.email: m.member_type for m in self.members.values() if m.email is not None
+        }
+
+
+OWNER_ID = "owner"
+
+
+class FakeTrello:
+    """Trello for tests: Workspaces and boards in memory, no network. Emails in
+    `accounts` have a Trello account (they join at once); others stay
+    unconfirmed. Set `failing` to make every call fail as if Trello could not be
+    reached, or put a name in `refused_names` to refuse that board."""
+
+    def __init__(self) -> None:
+        # By id: the Workspace's display name.
+        self.workspaces: dict[str, str] = {}
+        self.boards: dict[str, FakeBoard] = {}
+        self.accounts: set[str] = set()
+        self.failing = False
+        self.refused_names: set[str] = set()
+        self._ids = 0
+
+    def _check(self) -> None:
+        if self.failing:
+            raise TrelloUnavailableError()
+
+    def _next_id(self, prefix: str) -> str:
+        self._ids += 1
+        return f"{prefix}{self._ids}"
+
+    def board_named(self, name: str) -> FakeBoard:
+        return next(b for b in self.boards.values() if b.name == name)
+
+    def create_workspace(self, name: str) -> str:
+        self._check()
+        workspace_id = self._next_id("w")
+        self.workspaces[workspace_id] = name
+        return workspace_id
+
+    def delete_workspace(self, workspace_id: str) -> None:
+        self._check()
+        del self.workspaces[workspace_id]
+        for board_id in [
+            b.id for b in self.boards.values() if b.workspace_id == workspace_id
+        ]:
+            del self.boards[board_id]
+
+    def create_board(self, workspace_id: str, name: str) -> CreatedBoard:
+        self._check()
+        if name in self.refused_names:
+            raise TrelloError("Trello refused: the board limit was reached")
+        board = FakeBoard(self._next_id("b"), workspace_id, name, private=True)
+        board.members[OWNER_ID] = FakeMember(OWNER_ID, None, "admin")
+        self.boards[board.id] = board
+        return CreatedBoard(id=board.id, url=board.url)
+
+    def add_list(self, board_id: str, name: str) -> None:
+        self._check()
+        self.boards[board_id].lists.append(name)
+
+    def memberships(self, board_id: str) -> list[Membership]:
+        self._check()
+        return [
+            Membership(m.member_id, m.member_type, m.unconfirmed)
+            for m in self.boards[board_id].members.values()
+        ]
+
+    def invite(self, board_id: str, email: str, member_type: str) -> str | None:
+        self._check()
+        board = self.boards[board_id]
+        if email in board.emails():
+            return None
+        member = FakeMember(
+            self._next_id("m"), email, member_type, email not in self.accounts
+        )
+        board.members[member.member_id] = member
+        return member.member_id
