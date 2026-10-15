@@ -8,6 +8,7 @@ from starlette.responses import Response
 
 from pmp_frontend import api
 from pmp_frontend.photos import THUMBNAIL_CELL, photo_card, photo_url
+from pmp_frontend.planning import planning_card
 from pmp_frontend.repos import github_buttons, repository_card
 from pmp_frontend.shell import (
     ErrorMessage,
@@ -257,6 +258,7 @@ def register() -> None:
             photo_card(project, editable=not archived)
             await repository_card(project, editable=not archived)
             await trello_card(project, editable=not archived)
+            await planning_card(project, editable=not archived)
             if archived:
                 # Archived Projects are read-only: shown, never edited.
                 with ui.card().classes("w-full max-w-lg"):

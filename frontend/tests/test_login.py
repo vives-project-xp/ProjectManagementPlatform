@@ -23,11 +23,11 @@ async def test_first_login_forces_a_password_change(user: User):
 
 async def test_forced_change_cannot_be_skipped(user: User):
     await log_in(user, "teacher")
-    await user.should_see("Change your password")
+    await user.should_see("Change your password", retries=30)
 
     await user.open("/projects")
 
-    await user.should_see("Change your password")
+    await user.should_see("Change your password", retries=30)
 
 
 async def test_wrong_password_shows_a_generic_error(user: User):

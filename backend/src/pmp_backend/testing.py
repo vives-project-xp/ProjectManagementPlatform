@@ -45,7 +45,7 @@ def reset(database_url: str = TEST_DATABASE_URL) -> None:
     with engine.begin() as connection:
         connection.execute(
             text(
-                "TRUNCATE projects, users, programmes, top3_round "
+                "TRUNCATE projects, users, programmes, top3_round, deadlines "
                 "RESTART IDENTITY CASCADE"
             )
         )

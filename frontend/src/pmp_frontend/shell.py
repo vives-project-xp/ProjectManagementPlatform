@@ -21,11 +21,13 @@ NAVIGATION: dict[str, list[tuple[str, str, str]]] = {
         ("Members", "/members", "badge"),
         ("Programmes", "/programmes", "school"),
         ("Top 3", "/top3", "format_list_numbered"),
+        ("Planning", "/planning", "event"),
     ],
     "teacher": [
         ("Projects", "/projects", "folder"),
         ("Members", "/members", "badge"),
         ("Top 3", "/top3", "format_list_numbered"),
+        ("Planning", "/planning", "event"),
     ],
     "student": [("My project", "/my-project", "work")],
 }

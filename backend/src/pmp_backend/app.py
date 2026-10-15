@@ -9,6 +9,7 @@ from pmp_backend.api import (
     auth,
     dev_login,
     github,
+    planning,
     programmes,
     projects,
     students,
@@ -53,6 +54,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(top3.router)
     app.include_router(github.router)
     app.include_router(trello.router)
+    app.include_router(planning.router)
     if settings.dev_login:
         app.include_router(dev_login.router)
 
