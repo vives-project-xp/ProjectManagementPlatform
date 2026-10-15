@@ -13,6 +13,7 @@ from pmp_backend.api import (
     projects,
     students,
     top3,
+    trello,
     users,
 )
 from pmp_backend.database import is_reachable, make_engine
@@ -20,6 +21,7 @@ from pmp_backend.errors import Conflict, Forbidden, NotFound, Refused, Unavailab
 from pmp_backend.services.auth import LoginGuard
 from pmp_backend.services.github import HttpGitHub
 from pmp_backend.services.seeding import seed_starting_accounts
+from pmp_backend.services.trello import HttpTrello
 from pmp_backend.settings import Settings
 
 
@@ -41,6 +43,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.login_guard = LoginGuard()
     # Tests replace it with testing.FakeGitHub.
     app.state.github = HttpGitHub(settings)
+    # Tests replace it with testing.FakeTrello.
+    app.state.trello = HttpTrello(settings)
     app.include_router(auth.router)
     app.include_router(users.router)
     app.include_router(programmes.router)
@@ -48,6 +52,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(students.router)
     app.include_router(top3.router)
     app.include_router(github.router)
+    app.include_router(trello.router)
     if settings.dev_login:
         app.include_router(dev_login.router)
 

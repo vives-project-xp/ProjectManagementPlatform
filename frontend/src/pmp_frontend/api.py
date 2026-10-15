@@ -432,6 +432,17 @@ async def create_repos(token: str) -> list[dict[str, Any]]:
     return await _request("POST", "/api/github/repos", token=token)
 
 
+async def trello_status(token: str) -> dict[str, Any]:
+    """Whether Trello is connected (`connected`)."""
+    return await _request("GET", "/api/trello/status", token=token)
+
+
+async def create_trello_boards(token: str) -> list[dict[str, Any]]:
+    """Create a Workspace and board for all Projects that need one; a result per
+    Project (project_id, title, created, message)."""
+    return await _request("POST", "/api/trello/boards", token=token)
+
+
 async def set_repo_name(
     token: str, project_id: int, name: str | None
 ) -> dict[str, Any]:

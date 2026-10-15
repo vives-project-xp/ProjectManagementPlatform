@@ -48,6 +48,8 @@ def settings(logins_file: Path, tmp_path: Path) -> Settings:
         photos_dir=tmp_path / "photos",
         github_org="TestOrg",
         github_token="test-token",
+        trello_api_key="test-key",
+        trello_token="test-trello-token",
     )
 
 
@@ -57,9 +59,17 @@ def github() -> testing.FakeGitHub:
 
 
 @pytest.fixture
-def client(settings: Settings, github: testing.FakeGitHub) -> Iterator[TestClient]:
+def trello() -> testing.FakeTrello:
+    return testing.FakeTrello()
+
+
+@pytest.fixture
+def client(
+    settings: Settings, github: testing.FakeGitHub, trello: testing.FakeTrello
+) -> Iterator[TestClient]:
     app = create_app(settings)
     app.state.github = github
+    app.state.trello = trello
     # Entering the client runs the app's startup, which creates the starting accounts.
     with TestClient(app) as client:
         yield client

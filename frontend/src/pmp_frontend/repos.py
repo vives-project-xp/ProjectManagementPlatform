@@ -87,7 +87,7 @@ async def repository_card(project: dict[str, Any], *, editable: bool) -> None:
         )
 
 
-def _show_results(title: str, lines: list[tuple[str, bool]]) -> None:
+def show_results(title: str, lines: list[tuple[str, bool]]) -> None:
     """`lines`: (text, whether it went well)."""
     with ui.dialog() as dialog, ui.card().classes("w-full max-w-lg"):
         ui.label(title).classes("text-h6")
@@ -129,7 +129,7 @@ async def github_buttons(after) -> None:
         except api.ApiError as problem:
             ui.notify(problem.message, type="negative")
             return
-        _show_results(
+        show_results(
             "Repositories",
             [
                 (
@@ -155,7 +155,7 @@ async def github_buttons(after) -> None:
         except api.ApiError as problem:
             ui.notify(problem.message, type="negative")
             return
-        _show_results(
+        show_results(
             "Members checked",
             [
                 (f"{r['title']}: {r['message']}", not r["message"].startswith("Failed"))

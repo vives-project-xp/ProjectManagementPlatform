@@ -36,9 +36,17 @@ def github() -> testing.FakeGitHub:
     return testing.FakeGitHub()
 
 
+@pytest.fixture
+def trello() -> testing.FakeTrello:
+    return testing.FakeTrello()
+
+
 @pytest.fixture(autouse=True)
 def backend_in_process(
-    tmp_path: Path, request: pytest.FixtureRequest, github: testing.FakeGitHub
+    tmp_path: Path,
+    request: pytest.FixtureRequest,
+    github: testing.FakeGitHub,
+    trello: testing.FakeTrello,
 ):
     """Route the frontend's API calls to the real backend app, in this process."""
     testing.reset(testing.TEST_DATABASE_URL)
@@ -57,10 +65,13 @@ def backend_in_process(
             photos_dir=tmp_path / "photos",
             github_org="TestOrg",
             github_token="test-token",
+            trello_api_key="test-key",
+            trello_token="test-trello-token",
             dev_login=request.node.get_closest_marker("dev_login") is not None,
         )
     )
     backend.state.github = github
+    backend.state.trello = trello
     # ASGITransport does not run the backend's startup, so seed here.
     with backend.state.sessionmaker() as session:
         seed_starting_accounts(session, logins_file)
