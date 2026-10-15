@@ -91,6 +91,10 @@ async def test_every_page_has_the_vives_footer(user: User):
         assert isinstance(link, ui.link)
         assert link.props["href"] == url
         assert link.props["target"] == "_blank"
+    for name in ("instagram", "tiktok", "youtube", "linkedin"):
+        icon = user.find(marker=f"icon-{name}").elements.pop()
+        assert isinstance(icon, ui.html)
+        assert f"bi-{name}" in icon.content
 
     await ready_to_work(user, "student")
     await user.should_see(marker="footer", retries=30)
