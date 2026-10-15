@@ -443,6 +443,30 @@ async def create_trello_boards(token: str) -> list[dict[str, Any]]:
     return await _request("POST", "/api/trello/boards", token=token)
 
 
+async def check_trello_members(token: str, project_id: int) -> dict[str, Any]:
+    """Bring the board in line with the Project: invited, removed, updated,
+    renamed, board_gone and a `message`."""
+    return await _request(
+        "POST", f"/api/projects/{project_id}/trello/check", token=token
+    )
+
+
+async def check_all_trello_members(token: str) -> list[dict[str, Any]]:
+    """Check every Active Project's board: project_id, title, message."""
+    return await _request("POST", "/api/trello/check-all", token=token)
+
+
+async def board_access(token: str, project_id: int) -> dict[str, Any]:
+    """The board's `board_url` and `people` (name, role, email, status)."""
+    return await _request("GET", f"/api/projects/{project_id}/trello", token=token)
+
+
+async def my_trello_board(token: str) -> dict[str, Any]:
+    """The Student's board: board_url, status (no_board, not_invited, invited,
+    has_access) and the email they were invited with."""
+    return await _request("GET", "/api/my-project/trello", token=token)
+
+
 async def set_repo_name(
     token: str, project_id: int, name: str | None
 ) -> dict[str, Any]:

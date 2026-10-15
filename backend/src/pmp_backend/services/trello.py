@@ -31,6 +31,12 @@ class CreatedBoard:
 
 
 @dataclass(frozen=True)
+class BoardInfo:
+    name: str
+    url: str
+
+
+@dataclass(frozen=True)
 class Membership:
     member_id: str
     # "normal", "admin" or "observer".
@@ -54,6 +60,14 @@ class Trello(Protocol):
         """A list at the right end of the board."""
         ...
 
+    def board(self, board_id: str) -> BoardInfo | None:
+        """The board, or None when it was deleted."""
+        ...
+
+    def rename(self, workspace_id: str, board_id: str, name: str) -> None:
+        """Give the Workspace and its board this name."""
+        ...
+
     def memberships(self, board_id: str) -> list[Membership]: ...
 
     def invite(self, board_id: str, email: str, member_type: str) -> str | None:
@@ -61,6 +75,12 @@ class Trello(Protocol):
         once with a Trello account, unconfirmed without one. The Trello member id,
         or None when the email already was on the board."""
         ...
+
+    def set_member_type(
+        self, board_id: str, member_id: str, member_type: str
+    ) -> None: ...
+
+    def remove_member(self, board_id: str, member_id: str) -> None: ...
 
 
 class HttpTrello:
@@ -92,7 +112,11 @@ class HttpTrello:
         if response.status_code == 429 or response.status_code >= 500:
             raise TrelloUnavailableError()
         if response.is_error:
-            raise TrelloError(f"Trello refused: {_reason(response)}")
+            error = TrelloError(f"Trello refused: {_reason(response)}")
+            # A deleted board or Workspace.
+            if response.status_code == 404:
+                error.code = "not_found"
+            raise error
         return response
 
     def create_workspace(self, name: str) -> str:
@@ -115,6 +139,25 @@ class HttpTrello:
 
     def add_list(self, board_id: str, name: str) -> None:
         self._send("POST", f"/boards/{board_id}/lists", name=name, pos="bottom")
+
+    def board(self, board_id: str) -> BoardInfo | None:
+        try:
+            body = self._send("GET", f"/boards/{board_id}", fields="name,url").json()
+        except TrelloError as error:
+            if error.code == "not_found":
+                return None
+            raise
+        return BoardInfo(name=body["name"], url=body["url"])
+
+    def rename(self, workspace_id: str, board_id: str, name: str) -> None:
+        self._send("PUT", f"/organizations/{workspace_id}", displayName=name)
+        self._send("PUT", f"/boards/{board_id}", name=name)
+
+    def set_member_type(self, board_id: str, member_id: str, member_type: str) -> None:
+        self._send("PUT", f"/boards/{board_id}/members/{member_id}", type=member_type)
+
+    def remove_member(self, board_id: str, member_id: str) -> None:
+        self._send("DELETE", f"/boards/{board_id}/members/{member_id}")
 
     def memberships(self, board_id: str) -> list[Membership]:
         response = self._send("GET", f"/boards/{board_id}/memberships")

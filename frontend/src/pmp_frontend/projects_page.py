@@ -252,7 +252,7 @@ def register() -> None:
             status_error = ErrorMessage()
             photo_card(project, editable=not archived)
             await repository_card(project, editable=not archived)
-            trello_card(project)
+            await trello_card(project, editable=not archived)
             if archived:
                 # Archived Projects are read-only: shown, never edited.
                 with ui.card().classes("w-full max-w-lg"):
