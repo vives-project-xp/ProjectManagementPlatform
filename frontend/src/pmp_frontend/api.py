@@ -107,6 +107,7 @@ class CurrentUser:
     role: str
     must_change_password: bool
     github_username: str | None = None
+    daily_email: bool = True
 
     @classmethod
     def of(cls, body: dict[str, Any]) -> "CurrentUser":
@@ -117,6 +118,7 @@ class CurrentUser:
             role=body["role"],
             must_change_password=body["must_change_password"],
             github_username=body.get("github_username"),
+            daily_email=body.get("daily_email", True),
         )
 
     @property
@@ -174,6 +176,14 @@ async def set_github_username(
         token=token,
         json={"github_username": username},
     )
+
+
+async def set_daily_email(token: str, on: bool) -> CurrentUser:
+    """Switch your own 08:30 Daily email on or off."""
+    body = await _request(
+        "PUT", "/api/me/daily-email", token=token, json={"daily_email": on}
+    )
+    return CurrentUser.of(body)
 
 
 async def me(token: str) -> CurrentUser:

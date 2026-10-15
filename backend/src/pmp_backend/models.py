@@ -15,6 +15,7 @@ from sqlalchemy import (
     false,
     func,
     text,
+    true,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -59,6 +60,8 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(255))
     # As GitHub spells it (spec #49); None until the User saves one.
     github_username: Mapped[str | None] = mapped_column(String(39))
+    # The 08:30 Daily email on days with deadlines or meetings (spec #68).
+    daily_email: Mapped[bool] = mapped_column(default=True, server_default=true())
     role: Mapped[str] = mapped_column(String(20))
     is_active: Mapped[bool] = mapped_column(default=True)
     must_change_password: Mapped[bool] = mapped_column(default=True)
@@ -297,5 +300,16 @@ class WeeklySlotSkip(Base):
 
     project_id: Mapped[int] = mapped_column(
         ForeignKey("weekly_slots.project_id", ondelete="CASCADE"), primary_key=True
+    )
+    day: Mapped[date] = mapped_column(Date, primary_key=True)
+
+
+class DailyEmailSent(Base):
+    """Who already got the Daily email of a day, so nobody gets it twice."""
+
+    __tablename__ = "daily_emails_sent"
+
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
     )
     day: Mapped[date] = mapped_column(Date, primary_key=True)

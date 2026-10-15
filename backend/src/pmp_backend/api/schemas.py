@@ -54,3 +54,4 @@ class UserOut(BaseModel):
     programme: str | None
     year: str | None
     github_username: str | None
+    daily_email: bool
