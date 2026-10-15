@@ -71,3 +71,26 @@ async def test_navigation_items_have_icons(user: User, role: str, icons: set[str
     await ready_to_work(user, role)
 
     assert icons <= navigation_icons(user)
+
+
+async def test_every_page_has_the_vives_footer(user: User):
+    await user.open("/login")
+    await user.should_see(marker="footer", retries=30)
+
+    await user.should_see("Xaverianenstraat 10, 8200 Brugge")
+    await user.should_see("VIVES. All rights reserved.")
+    expected = {
+        "footer-instagram": "https://www.instagram.com/viveshogeschool",
+        "footer-tiktok": "https://www.tiktok.com/@viveshogeschool",
+        "footer-youtube": "https://www.youtube.com/vivesvideo",
+        "footer-linkedin": "https://www.linkedin.com/school/vives/",
+        "footer-privacy": "https://www.vives.be/nl/over-vives/privacyverklaring",
+    }
+    for marker, url in expected.items():
+        link = user.find(marker=marker).elements.pop()
+        assert isinstance(link, ui.link)
+        assert link.props["href"] == url
+        assert link.props["target"] == "_blank"
+
+    await ready_to_work(user, "student")
+    await user.should_see(marker="footer", retries=30)

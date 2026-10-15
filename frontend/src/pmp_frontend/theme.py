@@ -2,6 +2,7 @@
 
 from collections.abc import Callable
 from contextlib import contextmanager, nullcontext
+from datetime import date
 from pathlib import Path
 
 from nicegui import app, ui
@@ -11,6 +12,16 @@ BLACK = "#1e1e1e"
 SAND = "#efeee9"
 
 STATIC_DIR = Path(__file__).parent / "static"
+
+# VIVES' official accounts, as linked in the footer of vives.be (#76).
+SOCIALS = [
+    ("Instagram", "https://www.instagram.com/viveshogeschool"),
+    ("TikTok", "https://www.tiktok.com/@viveshogeschool"),
+    ("YouTube", "https://www.youtube.com/vivesvideo"),
+    ("LinkedIn", "https://www.linkedin.com/school/vives/"),
+]
+PRIVACY_POLICY = "https://www.vives.be/nl/over-vives/privacyverklaring"
+ADDRESS = "VIVES Brugge Xaverianenstraat · Xaverianenstraat 10, 8200 Brugge"
 
 # Poppins is the primary typeface; the guide never uses weights above semibold (600).
 _HEAD_HTML = f"""
@@ -56,3 +67,26 @@ def frame(
             header()
     with ui.column().classes("w-full max-w-4xl mx-auto p-6 gap-6"):
         yield
+    footer()
+
+
+def footer() -> None:
+    """Black, with white text (house style): VIVES' socials, the campus address,
+    the privacy policy and the copyright. Scrolls with the page."""
+    with (
+        ui.footer(fixed=False)
+        .classes(f"bg-[{BLACK}] text-white px-6 py-4")
+        .mark("footer")
+    ):
+        with ui.row().classes("w-full max-w-4xl mx-auto items-center gap-x-6 gap-y-2"):
+            for label, url in SOCIALS:
+                ui.link(label, url, new_tab=True).classes("text-white").mark(
+                    f"footer-{label.lower()}"
+                )
+            ui.space()
+            ui.link("Privacy policy", PRIVACY_POLICY, new_tab=True).classes(
+                "text-white"
+            ).mark("footer-privacy")
+        with ui.column().classes("w-full max-w-4xl mx-auto gap-0 text-caption"):
+            ui.label(ADDRESS)
+            ui.label(f"© {date.today().year} VIVES. All rights reserved.")
