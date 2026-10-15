@@ -122,9 +122,16 @@ class HttpTrello:
 
     def invite(self, board_id: str, email: str, member_type: str) -> str | None:
         before = {m.member_id for m in self.memberships(board_id)}
-        body = self._send(
-            "PUT", f"/boards/{board_id}/members", email=email, type=member_type
-        ).json()
+        try:
+            body = self._send(
+                "PUT", f"/boards/{board_id}/members", email=email, type=member_type
+            ).json()
+        except TrelloError as error:
+            # Trello refuses an email that is already on the board ("Member
+            # already invited", seen in the real try of #62).
+            if "already" in str(error).lower():
+                return None
+            raise
         # Trello doesn't say which member the email became: the new one.
         added = {item["idMember"] for item in body["memberships"]} - before
         return added.pop() if len(added) == 1 else None
