@@ -8,6 +8,7 @@ from nicegui import ui
 from pmp_frontend import api
 from pmp_frontend.github_username import github_username_card
 from pmp_frontend.photos import show_photo
+from pmp_frontend.repos import my_repository_card
 from pmp_frontend.shell import ErrorMessage, confirm, role_page, token
 from pmp_frontend.top3_page import RANKS, choice_text, shown
 
@@ -95,6 +96,7 @@ def register() -> None:
             if project["description"]:
                 ui.label(project["description"])
             ui.label(f"Product Owner: {project['product_owner']}")
+        await my_repository_card()
         with ui.card().classes("w-full"):
             ui.label("Fellow Members").classes("text-h6")
             if project["fellow_members"]:

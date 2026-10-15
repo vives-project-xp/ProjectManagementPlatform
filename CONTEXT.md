@@ -65,7 +65,7 @@ The minimum and maximum number of Members a Project wants.
 _Avoid_: Capacity, group size
 
 **Archived Project**:
-A finished Project, kept read-only for the history overview. Archiving frees its Students, and restoring it does not bring them back. It can never be deleted, nor can a restored Project that has Makers. It is never Open for choice: archiving switches that off.
+A finished Project, kept read-only for the history overview. Archiving frees its Students, and restoring it does not bring them back. It can never be deleted, nor can a restored Project that has Makers. It is never Open for choice: archiving switches that off. Its Project repository is archived on GitHub too (read-only), and unarchived when the Project is restored.
 _Avoid_: Deleted project, closed project, historical project
 
 **Project photo**:
@@ -85,7 +85,7 @@ The one period, ending at a deadline in Belgian time, in which Students submit t
 _Avoid_: Election, vote, enrolment period
 
 **Project repository**:
-The public GitHub repository of a Project, in the organisation the platform is connected to; created completely empty by "Create repos for all Projects" for every Active Project with Members. Its name is suggested from the title (`SmartGreenhouse`) and can be changed until it exists; renaming the Project doesn't rename it.
+The public GitHub repository of a Project, in the organisation the platform is connected to; created completely empty by "Create repos for all Projects" for every Active Project with Members. Its name is suggested from the title (`SmartGreenhouse`) and can be changed until it exists; renaming the Project doesn't rename it. A Project that has one can't be deleted, only archived.
 _Avoid_: Repo (in UI text), GitHub project, code base
 
 **Check members**:

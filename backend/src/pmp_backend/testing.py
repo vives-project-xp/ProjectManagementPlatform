@@ -162,3 +162,7 @@ class FakeGitHub:
 
     def expire(self, repo_name: str, login: str) -> None:
         self.repos[repo_name.lower()].invitations[login.lower()].expired = True
+
+    def set_archived(self, full_name: str, archived: bool) -> None:
+        self._check()
+        self._by_full_name(full_name).archived = archived

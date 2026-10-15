@@ -463,6 +463,12 @@ async def check_all_members(token: str) -> list[dict[str, Any]]:
     return await _request("POST", "/api/github/check-all", token=token)
 
 
+async def my_repository(token: str) -> dict[str, Any]:
+    """The Student's repository: repo_url, status (no_repository, no_username,
+    not_invited, invited, has_access) and invitation_url."""
+    return await _request("GET", "/api/my-project/github", token=token)
+
+
 async def delete_project(token: str, project_id: int) -> None:
     await _request("DELETE", f"/api/projects/{project_id}", token=token)
 
