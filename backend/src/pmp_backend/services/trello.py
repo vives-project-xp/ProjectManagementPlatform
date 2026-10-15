@@ -68,6 +68,10 @@ class Trello(Protocol):
         """Give the Workspace and its board this name."""
         ...
 
+    def set_closed(self, board_id: str, closed: bool) -> None:
+        """Close the board (read-only in Trello) or reopen it."""
+        ...
+
     def memberships(self, board_id: str) -> list[Membership]: ...
 
     def invite(self, board_id: str, email: str, member_type: str) -> str | None:
@@ -152,6 +156,9 @@ class HttpTrello:
     def rename(self, workspace_id: str, board_id: str, name: str) -> None:
         self._send("PUT", f"/organizations/{workspace_id}", displayName=name)
         self._send("PUT", f"/boards/{board_id}", name=name)
+
+    def set_closed(self, board_id: str, closed: bool) -> None:
+        self._send("PUT", f"/boards/{board_id}", closed=str(closed).lower())
 
     def set_member_type(self, board_id: str, member_id: str, member_type: str) -> None:
         self._send("PUT", f"/boards/{board_id}/members/{member_id}", type=member_type)

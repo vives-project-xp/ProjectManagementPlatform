@@ -126,3 +126,22 @@ async def test_student_sees_how_to_get_access(user: User, trello: FakeTrello):
     trello.sign_up("student@pmp.local")
     await user.open("/my-project")
     await user.should_see(marker="trello-has_access", retries=30)
+
+
+async def test_a_rename_trello_missed_shows_a_warning(user: User, trello: FakeTrello):
+    await ready_to_work(user, "teacher")
+    await project_with_the_student(user, "Drone")
+    await create_boards_for_all(user)
+    await user.should_see("Drone: Created", retries=30)
+    trello.failing = True
+
+    await user.open("/projects/1")
+    await user.should_see(marker="save-project", retries=30)
+    user.find(marker="title").elements.pop().set_value("Flying Drone")
+    user.find(marker="save-project").click()
+
+    await user.should_see(
+        "Saved, but the Trello board couldn't be renamed: Trello can't be reached. "
+        "Try again later. Check members renames it later.",
+        retries=30,
+    )
