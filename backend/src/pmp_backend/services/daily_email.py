@@ -2,8 +2,10 @@
 deadlines or meetings for them, sent once, catching up until 18:00."""
 
 import asyncio
+import ipaddress
 import logging
 from datetime import UTC, datetime, time
+from urllib.parse import urlsplit
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
@@ -35,6 +37,17 @@ def _line(item: AgendaItem) -> str:
     return line
 
 
+def _where(site_url: str) -> str:
+    """Where to look: a link, but not to a bare IP address, which spam filters
+    distrust; the link appears once the site has a hostname."""
+    host = urlsplit(site_url).hostname or ""
+    try:
+        ipaddress.ip_address(host)
+    except ValueError:
+        return f"See your planning on {site_url}"
+    return "Open the Project Management Platform to see your planning."
+
+
 def _body(user: User, per_project: dict[str, list[AgendaItem]], site_url: str) -> str:
     parts = [f"Hello {user.first_name},", ""]
     for title, items in per_project.items():
@@ -42,7 +55,7 @@ def _body(user: User, per_project: dict[str, list[AgendaItem]], site_url: str) -
         parts += [_line(item) for item in items]
         parts.append("")
     parts += [
-        f"See your planning on {site_url}",
+        _where(site_url),
         "",
         "You get this email on days with deadlines or meetings. You can switch it "
         "off on My account.",

@@ -89,7 +89,9 @@ def test_members_and_the_product_owner_get_one_email(
         "- 14:00 Deadline: Final presentation",
         "- 23:59 Deadline: Poster due",
     ]
-    assert "See your planning on https://10.20.10.33" in email.body
+    # No link to the site's bare IP address: spam filters distrust those.
+    assert "Open the Project Management Platform to see your planning." in email.body
+    assert "10.20.10.33" not in email.body
     # The Superuser is on no Project and gets nothing.
     assert not mailer.to("superuser@pmp.local")
 
@@ -224,3 +226,14 @@ def test_the_switch_is_on_by_default(client: TestClient):
     me = client.get("/api/auth/me", headers=student).json()
 
     assert me["daily_email"] is True
+
+
+def test_with_a_hostname_the_email_links_to_the_site(
+    client: TestClient, mailer: FakeMailer, run, drone, mail_settings: Settings
+):
+    staff, project = drone
+    add_deadline(client, staff, project, "Poster due", at(23, 59))
+
+    run(settings=mail_settings.model_copy(update={"site_url": "https://pmp.vives.be"}))
+
+    assert "See your planning on https://pmp.vives.be" in mailer.to(LISA)[0].body
