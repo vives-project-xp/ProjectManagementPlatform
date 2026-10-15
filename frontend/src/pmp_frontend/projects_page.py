@@ -177,6 +177,10 @@ def register() -> None:
                     return
                 error_message.hide()
                 heading.text = saved["title"]
+                if saved.get("warning"):
+                    # Saved in the platform; Trello catches up with Check members.
+                    await confirm(saved["warning"], "OK")
+                    return
                 ui.notify("The changes were saved.")
 
             async def change_status() -> None:

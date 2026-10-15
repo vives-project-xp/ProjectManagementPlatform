@@ -183,6 +183,11 @@ def delete_project(session: Session, project_id: int) -> None:
         raise ProjectConflictError(
             "This Project has a GitHub repository; archive it instead."
         )
+    if project.trello_board_id is not None:
+        # Its work lives on in Trello; archiving closes the board (spec #61).
+        raise ProjectConflictError(
+            "This Project has a Trello board; archive it instead."
+        )
     if project.status == ProjectStatus.ARCHIVED.value:
         raise ProjectConflictError(
             f"{project.title} is archived, so it cannot be deleted."

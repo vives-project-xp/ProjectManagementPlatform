@@ -65,7 +65,7 @@ The minimum and maximum number of Members a Project wants.
 _Avoid_: Capacity, group size
 
 **Archived Project**:
-A finished Project, kept read-only for the history overview. Archiving frees its Students, and restoring it does not bring them back. It can never be deleted, nor can a restored Project that has Makers. It is never Open for choice: archiving switches that off. Its Project repository is archived on GitHub too (read-only), and unarchived when the Project is restored.
+A finished Project, kept read-only for the history overview. Archiving frees its Students, and restoring it does not bring them back. It can never be deleted, nor can a restored Project that has Makers. It is never Open for choice: archiving switches that off. Its Project repository is archived on GitHub too (read-only), and unarchived when the Project is restored; likewise its Trello board is closed and reopened.
 _Avoid_: Deleted project, closed project, historical project
 
 **Project photo**:
@@ -89,7 +89,7 @@ The public GitHub repository of a Project, in the organisation the platform is c
 _Avoid_: Repo (in UI text), GitHub project, code base
 
 **Trello board**:
-The private Trello board of a Project, alone in a Trello Workspace of its own (ADR 0007), both named after the Project's title and owned by the platform's dedicated Trello account. Created by "Create Trello boards for all Projects" for every Active Project with Members, with the lists Backlog, To do, Doing, Review and Done. Its Members join as normal members and its Product Owner as admin, invited by their platform email; someone without a Trello account with that email stays invited until they sign up.
+The private Trello board of a Project, alone in a Trello Workspace of its own (ADR 0007), both named after the Project's title and owned by the platform's dedicated Trello account. Created by "Create Trello boards for all Projects" for every Active Project with Members, with the lists Backlog, To do, Doing, Review and Done. Its Members join as normal members and its Product Owner as admin, invited by their platform email; someone without a Trello account with that email stays invited until they sign up. The board and its Workspace follow the Project's title; a Project with a board can't be deleted, only archived.
 _Avoid_: Trello project, task board, Kanban (for the platform itself)
 
 **Check members**:

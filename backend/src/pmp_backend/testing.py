@@ -290,6 +290,10 @@ class FakeTrello:
         self.workspaces[workspace_id] = name
         self.boards[board_id].name = name
 
+    def set_closed(self, board_id: str, closed: bool) -> None:
+        self._check()
+        self.boards[board_id].closed = closed
+
     def set_member_type(self, board_id: str, member_id: str, member_type: str) -> None:
         self._check()
         self.boards[board_id].members[member_id].member_type = member_type

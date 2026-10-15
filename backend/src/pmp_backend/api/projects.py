@@ -10,11 +10,12 @@ from pmp_backend.api.deps import (
     SettingsDep,
     StudentDep,
     TeacherOrSuperuserDep,
+    TrelloDep,
 )
 from pmp_backend.api.schemas import PersonOut, StudentOut
 from pmp_backend.domain import ProjectStatus
 from pmp_backend.models import Project, User
-from pmp_backend.services import memberships, photos, projects, repos, top3
+from pmp_backend.services import boards, memberships, photos, projects, repos, top3
 from pmp_backend.services.projects import ProjectFields
 
 router = APIRouter(prefix="/api", tags=["projects"])
@@ -76,7 +77,8 @@ class ProjectDetailsOut(ProjectOut):
     members: list[StudentOut]
     makers: list[MakerOut]
     top3_ranks: list[Top3RankOut]
-    # Set when archiving or restoring worked but GitHub didn't follow.
+    # Set when archiving, restoring or saving worked but GitHub or Trello
+    # didn't follow.
     warning: str | None = None
 
     @classmethod
@@ -170,16 +172,24 @@ def list_projects(
     return [ProjectOut.of(project) for project in found]
 
 
+def _warnings(*warnings: str | None) -> str | None:
+    return " ".join(w for w in warnings if w) or None
+
+
 @router.post("/projects/{project_id}/archive")
 def archive_project(
     project_id: int,
     session: SessionDep,
     client: GitHubDep,
+    trello: TrelloDep,
     settings: SettingsDep,
     user: TeacherOrSuperuserDep,
 ) -> ProjectDetailsOut:
     project = projects.archive_project(session, project_id)
-    warning = repos.archive_repository(session, client, settings, project)
+    warning = _warnings(
+        repos.archive_repository(session, client, settings, project),
+        boards.follow_status(trello, settings, project),
+    )
     return ProjectDetailsOut.of(project).model_copy(update={"warning": warning})
 
 
@@ -188,11 +198,15 @@ def restore_project(
     project_id: int,
     session: SessionDep,
     client: GitHubDep,
+    trello: TrelloDep,
     settings: SettingsDep,
     user: TeacherOrSuperuserDep,
 ) -> ProjectDetailsOut:
     project = projects.restore_project(session, project_id)
-    warning = repos.archive_repository(session, client, settings, project)
+    warning = _warnings(
+        repos.archive_repository(session, client, settings, project),
+        boards.follow_status(trello, settings, project),
+    )
     return ProjectDetailsOut.of(project).model_copy(update={"warning": warning})
 
 
@@ -212,10 +226,19 @@ def get_project(
 
 @router.put("/projects/{project_id}")
 def update_project(
-    project_id: int, body: ProjectIn, session: SessionDep, user: TeacherOrSuperuserDep
+    project_id: int,
+    body: ProjectIn,
+    session: SessionDep,
+    trello: TrelloDep,
+    settings: SettingsDep,
+    user: TeacherOrSuperuserDep,
 ) -> ProjectDetailsOut:
+    before = projects.get_project(session, project_id).title
     project = projects.update_project(session, project_id, body.fields())
-    return ProjectDetailsOut.of(project)
+    warning = None
+    if project.title != before:
+        warning = boards.follow_title(trello, settings, project)
+    return ProjectDetailsOut.of(project).model_copy(update={"warning": warning})
 
 
 @router.delete("/projects/{project_id}", status_code=status.HTTP_204_NO_CONTENT)

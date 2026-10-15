@@ -321,3 +321,39 @@ def student_access(
     info = _board(client, project)
     status = _statuses(session, client, project).get(student.id, "not_invited")
     return StudentAccess(info.url, status, student.email)
+
+
+# Following the Project (spec #61): a warning to show when Trello refused, never
+# an error, so Trello problems never block the platform.
+
+
+def follow_status(client: Trello, settings: Settings, project: Project) -> str | None:
+    """Close the board of an Archived Project, reopen it for an Active one."""
+    if project.trello_board_id is None or not is_connected(settings):
+        return None
+    archived = project.status == ProjectStatus.ARCHIVED.value
+    try:
+        client.set_closed(project.trello_board_id, archived)
+    except TrelloError as error:
+        verb, action = ("archived", "closed") if archived else ("restored", "reopened")
+        return (
+            f"{project.title} was {verb}, but its Trello board could not be "
+            f"{action}: {error}"
+        )
+    return None
+
+
+def follow_title(client: Trello, settings: Settings, project: Project) -> str | None:
+    """Give the board and its Workspace the Project's (new) title."""
+    if project.trello_board_id is None or not is_connected(settings):
+        return None
+    try:
+        client.rename(
+            project.trello_workspace_id, project.trello_board_id, project.title
+        )
+    except TrelloError as error:
+        return (
+            f"Saved, but the Trello board couldn't be renamed: {error} "
+            "Check members renames it later."
+        )
+    return None
