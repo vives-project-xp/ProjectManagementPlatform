@@ -93,7 +93,7 @@ The private Trello board of a Project, alone in a Trello Workspace of its own (A
 _Avoid_: Trello project, task board, Kanban (for the platform itself)
 
 **Check members**:
-Bringing a Project repository's access in line with the Project: active Members with a GitHub username get write access and the Product Owner admin access (GitHub sends them an invitation to accept); expired invitations are sent again; people the platform knows (a User's GitHub username, or an account the platform itself invited there) who no longer belong lose their access. Accounts the platform doesn't know, such as coaches added by hand, are never touched. Runs right after a repository is created, per Project, or for all repositories at once.
+Bringing a Project repository's access in line with the Project: active Members with a GitHub username get write access and the Product Owner admin access (GitHub sends them an invitation to accept); expired invitations are sent again; people the platform knows (a User's GitHub username, or an account the platform itself invited there) who no longer belong lose their access. Accounts the platform doesn't know, such as coaches added by hand, are never touched. Runs right after a repository is created, per Project, or for all repositories at once. For a Trello board it works the same way by platform email: active Members join as normal members and the Product Owner as admin; members the platform added who no longer belong (including the old member after a User's email changed) are removed; members it didn't add and the owner account are never touched; the board and its Workspace get the Project's title again.
 _Avoid_: Sync, refresh access
 
 **Makers**:

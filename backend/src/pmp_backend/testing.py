@@ -18,6 +18,7 @@ from pmp_backend.services.github import (
     repo_exists_error,
 )
 from pmp_backend.services.trello import (
+    BoardInfo,
     CreatedBoard,
     Membership,
     TrelloError,
@@ -278,3 +279,32 @@ class FakeTrello:
         )
         board.members[member.member_id] = member
         return member.member_id
+
+    def board(self, board_id: str) -> BoardInfo | None:
+        self._check()
+        board = self.boards.get(board_id)
+        return None if board is None else BoardInfo(board.name, board.url)
+
+    def rename(self, workspace_id: str, board_id: str, name: str) -> None:
+        self._check()
+        self.workspaces[workspace_id] = name
+        self.boards[board_id].name = name
+
+    def set_member_type(self, board_id: str, member_id: str, member_type: str) -> None:
+        self._check()
+        self.boards[board_id].members[member_id].member_type = member_type
+
+    def remove_member(self, board_id: str, member_id: str) -> None:
+        self._check()
+        del self.boards[board_id].members[member_id]
+
+    # What people do on Trello, for tests.
+
+    def sign_up(self, email: str) -> None:
+        """The person makes a Trello account with this email: their invitations
+        are confirmed."""
+        self.accounts.add(email)
+        for board in self.boards.values():
+            for member in board.members.values():
+                if member.email == email:
+                    member.unconfirmed = False
