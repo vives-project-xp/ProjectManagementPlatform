@@ -45,7 +45,7 @@ async def test_teacher_adds_a_deadline_the_student_sees_it(user: User):
     email, password = STARTING_ACCOUNTS["student"]
     student_token, _ = await api.login(email, password)
     await api.change_password(student_token, password, "student-own-password")
-    assert [d["title"] for d in await api.my_planning(student_token)] == [
+    assert [d["title"] for d in (await api.my_planning(student_token))["items"]] == [
         "Prototype demo"
     ]
 
@@ -107,3 +107,62 @@ async def test_a_student_sees_the_planning_on_my_project(user: User):
     await user.should_see(marker="my-planning", retries=30)
     await user.should_see("Poster due", retries=30)
     await user.should_not_see(marker="add-deadline")
+
+
+async def test_teacher_sets_a_weekly_meeting_the_student_sees_it(user: User):
+    await ready_to_work(user, "student")
+    email, password = STARTING_ACCOUNTS["superuser"]
+    staff, _ = await api.login(email, password)
+    await api.change_password(staff, password, "superuser-own-password")
+    owner = (await api.teachers(staff))[0]["id"]
+    project = await api.create_project(
+        staff,
+        {
+            "title": "Drone",
+            "description": None,
+            "product_owner_id": owner,
+            "team_size_min": 1,
+            "team_size_max": 3,
+        },
+    )
+    # User 3 is the Student starting account.
+    await api.add_member(staff, project["id"], 3)
+    await api.set_weekly_slot(
+        staff,
+        project["id"],
+        {"weekday": 1, "starts": "10:00", "ends": "10:30", "place": "B2.14"},
+    )
+    await api.add_meeting(
+        staff,
+        project["id"],
+        {
+            "starts_at": f"{in_days(2)}T14:00:00+01:00",
+            "ends_at": f"{in_days(2)}T15:00:00+01:00",
+            "place": "https://teams.example/demo",
+        },
+    )
+
+    await user.open("/my-project")
+
+    await user.should_see(marker="weekly-slot", retries=30)
+    await user.should_see("Every Tuesday 10:00–10:30 · B2.14", retries=30)
+    await user.should_see("https://teams.example/demo", retries=30)
+    await user.should_not_see(marker="add-meeting")
+
+
+async def test_teacher_adds_a_meeting_on_the_project_page(user: User):
+    await ready_to_work(user, "teacher")
+    await create_project(user, "Drone", 1, 3)
+    await user.open("/projects/1")
+    await user.should_see(marker="add-meeting", retries=30)
+
+    user.find(marker="add-meeting").click()
+    await user.should_see(marker="meeting-date", retries=30)
+    user.find(marker="meeting-date").elements.pop().set_value(in_days(1))
+    user.find(marker="meeting-starts").elements.pop().set_value("14:00")
+    user.find(marker="meeting-ends").elements.pop().set_value("15:00")
+    user.find(marker="meeting-place").elements.pop().set_value("B2.14")
+    user.find(marker="save-meeting").click()
+
+    await user.should_see("The meeting was added.", retries=30)
+    await user.should_see(marker="edit-meeting", retries=30)

@@ -1,16 +1,22 @@
-"""Deadlines (spec #68): for one Project or for every Active Project, and what is
-coming up, in Belgian time."""
+"""Deadlines, Meetings and Weekly slots (spec #68), and what is coming up, in
+Belgian time."""
 
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from pmp_backend.domain import ProjectStatus
-from pmp_backend.errors import NotFound, Refused
-from pmp_backend.models import Deadline, Project
+from pmp_backend.errors import Conflict, NotFound, Refused
+from pmp_backend.models import (
+    Deadline,
+    Meeting,
+    Project,
+    WeeklySlot,
+    WeeklySlotSkip,
+)
 from pmp_backend.services.projects import changeable_project, get_project
 
 # "Today", "upcoming" and "earlier" are decided in Belgian time.
@@ -126,3 +132,262 @@ def upcoming(session: Session, owner_id: int | None = None) -> list[Deadline]:
             .order_by(Deadline.due_at)
         )
     )
+
+
+# Meetings and the Weekly slot
+
+
+class MeetingNotFoundError(PlanningError, NotFound):
+    pass
+
+
+class PlanningConflictError(PlanningError, Conflict):
+    pass
+
+
+WEEKDAYS = (
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+    "Sunday",
+)
+# Weekly slot occurrences are shown for today and the six days after it.
+WEEK = 7
+
+
+@dataclass(frozen=True)
+class MeetingFields:
+    starts_at: datetime
+    ends_at: datetime
+    place: str
+    note: str | None
+
+
+@dataclass(frozen=True)
+class SlotFields:
+    weekday: int
+    starts: time
+    ends: time
+    place: str
+
+
+def _apply_meeting(meeting: Meeting, fields: MeetingFields) -> None:
+    if fields.ends_at <= fields.starts_at:
+        raise PlanningError("A meeting must end after it starts.")
+    meeting.starts_at = fields.starts_at
+    meeting.ends_at = fields.ends_at
+    meeting.place = fields.place
+    meeting.note = fields.note or None
+
+
+def add_meeting(session: Session, project_id: int, fields: MeetingFields) -> Meeting:
+    changeable_project(session, project_id)
+    meeting = Meeting(project_id=project_id)
+    _apply_meeting(meeting, fields)
+    session.add(meeting)
+    session.commit()
+    return meeting
+
+
+def _changeable_meeting(session: Session, meeting_id: int) -> Meeting:
+    meeting = session.get(Meeting, meeting_id)
+    if meeting is None:
+        raise MeetingNotFoundError("This meeting does not exist.")
+    # Archived Projects keep their meetings, read-only.
+    changeable_project(session, meeting.project_id)
+    return meeting
+
+
+def update_meeting(session: Session, meeting_id: int, fields: MeetingFields) -> Meeting:
+    meeting = _changeable_meeting(session, meeting_id)
+    _apply_meeting(meeting, fields)
+    session.commit()
+    return meeting
+
+
+def delete_meeting(session: Session, meeting_id: int) -> None:
+    session.delete(_changeable_meeting(session, meeting_id))
+    session.commit()
+
+
+def set_weekly_slot(
+    session: Session, project_id: int, fields: SlotFields
+) -> WeeklySlot:
+    """Set (or change) the Project's one Weekly slot; skipped dates stay."""
+    changeable_project(session, project_id)
+    if fields.ends <= fields.starts:
+        raise PlanningError("The weekly meeting must end after it starts.")
+    slot = session.get(WeeklySlot, project_id) or WeeklySlot(project_id=project_id)
+    slot.weekday = fields.weekday
+    slot.starts = fields.starts
+    slot.ends = fields.ends
+    slot.place = fields.place
+    session.add(slot)
+    session.commit()
+    return slot
+
+
+def _changeable_slot(session: Session, project_id: int) -> WeeklySlot:
+    project = changeable_project(session, project_id)
+    slot = session.get(WeeklySlot, project_id)
+    if slot is None:
+        raise PlanningConflictError(f"{project.title} has no weekly meeting.")
+    return slot
+
+
+def clear_weekly_slot(session: Session, project_id: int) -> None:
+    """No more Weekly slot (e.g. during exams); its skipped dates go with it."""
+    session.delete(_changeable_slot(session, project_id))
+    session.commit()
+
+
+def skip_date(session: Session, project_id: int, day: date) -> WeeklySlot:
+    """The Weekly slot doesn't take place on `day` (which must be its weekday)."""
+    slot = _changeable_slot(session, project_id)
+    if day.weekday() != slot.weekday:
+        raise PlanningError(
+            f"{day:%d/%m/%Y} isn't a {WEEKDAYS[slot.weekday]}, the day of the "
+            "weekly meeting."
+        )
+    if day not in {skip.day for skip in slot.skips}:
+        slot.skips.append(WeeklySlotSkip(day=day))
+    session.commit()
+    return slot
+
+
+def unskip_date(session: Session, project_id: int, day: date) -> WeeklySlot:
+    slot = _changeable_slot(session, project_id)
+    slot.skips = [skip for skip in slot.skips if skip.day != day]
+    session.commit()
+    return slot
+
+
+# The agenda: deadlines, meetings and Weekly slot occurrences in one list.
+
+DEADLINE, MEETING, WEEKLY = "deadline", "meeting", "weekly"
+
+
+@dataclass(frozen=True)
+class AgendaItem:
+    kind: str
+    # The deadline's or meeting's id; the Project's id for a weekly occurrence.
+    id: int
+    # None: a deadline for every Active Project.
+    project_id: int | None
+    project_title: str | None
+    title: str
+    starts_at: datetime
+    ends_at: datetime | None
+    place: str | None
+    details: str | None
+
+
+def _deadline_item(deadline: Deadline) -> AgendaItem:
+    return AgendaItem(
+        DEADLINE,
+        deadline.id,
+        deadline.project_id,
+        deadline.project.title if deadline.project else None,
+        deadline.title,
+        deadline.due_at,
+        None,
+        None,
+        deadline.description,
+    )
+
+
+def meeting_item(meeting: Meeting) -> AgendaItem:
+    return AgendaItem(
+        MEETING,
+        meeting.id,
+        meeting.project_id,
+        meeting.project.title,
+        "Meeting",
+        meeting.starts_at,
+        meeting.ends_at,
+        meeting.place,
+        meeting.note,
+    )
+
+
+def occurrences(slot: WeeklySlot, first: date, days: int) -> list[AgendaItem]:
+    """The Weekly slot's meetings from `first` on for `days` days, without the
+    skipped dates."""
+    skipped = {skip.day for skip in slot.skips}
+    items = []
+    for offset in range(days):
+        day = first + timedelta(days=offset)
+        if day.weekday() != slot.weekday or day in skipped:
+            continue
+        items.append(
+            AgendaItem(
+                WEEKLY,
+                slot.project_id,
+                slot.project_id,
+                slot.project.title,
+                "Weekly meeting",
+                datetime.combine(day, slot.starts, tzinfo=BRUSSELS),
+                datetime.combine(day, slot.ends, tzinfo=BRUSSELS),
+                slot.place,
+                None,
+            )
+        )
+    return items
+
+
+def _sorted(items: list[AgendaItem]) -> list[AgendaItem]:
+    return sorted(items, key=lambda item: (item.starts_at, item.kind, item.id))
+
+
+def project_agenda(
+    session: Session, project: Project
+) -> tuple[list[AgendaItem], WeeklySlot | None]:
+    """Everything of a Project, earliest first: its own and the all-Projects
+    deadlines, its meetings and, while it is Active, this week's weekly meetings;
+    and its Weekly slot."""
+    items = [_deadline_item(d) for d in project_deadlines(session, project)]
+    meetings = session.scalars(select(Meeting).where(Meeting.project_id == project.id))
+    items += [meeting_item(m) for m in meetings]
+    slot = session.get(WeeklySlot, project.id)
+    if slot is not None and project.status == ProjectStatus.ACTIVE.value:
+        items += occurrences(slot, today(), WEEK)
+    return _sorted(items), slot
+
+
+def agenda_of(
+    session: Session, project_id: int
+) -> tuple[list[AgendaItem], WeeklySlot | None]:
+    return project_agenda(session, get_project(session, project_id))
+
+
+def overview(
+    session: Session, owner_id: int | None = None
+) -> tuple[list[AgendaItem], list[WeeklySlot]]:
+    """What is coming up across Active Projects (with `owner_id`, only that
+    Product Owner's, plus the all-Projects deadlines): today's and later
+    deadlines and meetings, and this week's weekly meetings; and every Active
+    Project's Weekly slot."""
+    active = select(Project.id).where(Project.status == ProjectStatus.ACTIVE.value)
+    if owner_id is not None:
+        active = active.where(Project.product_owner_id == owner_id)
+    items = [_deadline_item(d) for d in upcoming(session, owner_id)]
+    meetings = session.scalars(
+        select(Meeting).where(
+            Meeting.project_id.in_(active), Meeting.ends_at >= _start_of_today()
+        )
+    )
+    items += [meeting_item(m) for m in meetings]
+    slots = list(
+        session.scalars(
+            select(WeeklySlot)
+            .join(Project)
+            .where(WeeklySlot.project_id.in_(active))
+            .order_by(WeeklySlot.weekday, WeeklySlot.starts, func.lower(Project.title))
+        )
+    )
+    for slot in slots:
+        items += occurrences(slot, today(), WEEK)
+    return _sorted(items), slots
