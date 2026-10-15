@@ -21,6 +21,9 @@ SOCIALS = [
     ("LinkedIn", "https://www.linkedin.com/school/vives/"),
 ]
 PRIVACY_POLICY = "https://www.vives.be/nl/over-vives/privacyverklaring"
+# Bootstrap Icons (MIT, see static/icons/LICENSE-bootstrap-icons.txt), inlined so
+# they take the text colour and nothing loads from elsewhere.
+ICONS_DIR = STATIC_DIR / "icons"
 ADDRESS = "VIVES Brugge Xaverianenstraat · Xaverianenstraat 10, 8200 Brugge"
 
 # Poppins is the primary typeface; the guide never uses weights above semibold (600).
@@ -80,9 +83,18 @@ def footer() -> None:
     ):
         with ui.row().classes("w-full max-w-4xl mx-auto items-center gap-x-6 gap-y-2"):
             for label, url in SOCIALS:
-                ui.link(label, url, new_tab=True).classes("text-white").mark(
-                    f"footer-{label.lower()}"
-                )
+                name = label.lower()
+                with (
+                    ui.link(target=url, new_tab=True)
+                    .classes("text-white flex items-center gap-1")
+                    .mark(f"footer-{name}")
+                ):
+                    # Our own files, so no sanitising needed.
+                    ui.html(
+                        (ICONS_DIR / f"{name}.svg").read_text(encoding="utf-8"),
+                        sanitize=False,
+                    ).classes("flex").mark(f"icon-{name}")
+                    ui.label(label)
             ui.space()
             ui.link("Privacy policy", PRIVACY_POLICY, new_tab=True).classes(
                 "text-white"
