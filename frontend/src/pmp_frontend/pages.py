@@ -25,6 +25,28 @@ from pmp_frontend.shell import (
 from pmp_frontend.theme import frame
 
 
+def _daily_email_card(on: bool) -> None:
+    """The switch for the 08:30 Daily email (spec #68)."""
+
+    async def change(event) -> None:
+        try:
+            await api.set_daily_email(token(), event.value)
+        except api.ApiError as error:
+            ui.notify(error.message, type="negative")
+            return
+        ui.notify(
+            "You'll get the daily email." if event.value else "No more daily emails."
+        )
+
+    with ui.card().classes("w-full max-w-md"):
+        ui.label("Daily email").classes("text-h6")
+        ui.switch(
+            "Email me at 08:30 on days with deadlines or meetings",
+            value=on,
+            on_change=change,
+        ).mark("daily-email")
+
+
 def register_pages() -> None:
     @ui.page("/")
     async def start_page() -> Response:
@@ -160,6 +182,9 @@ def register_pages() -> None:
                     user.github_username,
                     lambda username: api.set_my_github_username(token(), username),
                 )
+            # The Superuser is on no Project, so never gets the Daily email.
+            if not user.must_change_password and user.role != "superuser":
+                _daily_email_card(user.daily_email)
         return None
 
     users_page.register()

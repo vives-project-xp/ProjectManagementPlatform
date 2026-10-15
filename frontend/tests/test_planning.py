@@ -166,3 +166,27 @@ async def test_teacher_adds_a_meeting_on_the_project_page(user: User):
 
     await user.should_see("The meeting was added.", retries=30)
     await user.should_see(marker="edit-meeting", retries=30)
+
+
+async def test_switching_the_daily_email_off(user: User):
+    await ready_to_work(user, "student")
+    await user.open("/account")
+    await user.should_see(marker="daily-email", retries=30)
+    switch = user.find(marker="daily-email").elements.pop()
+    assert isinstance(switch, ui.switch)
+    assert switch.value is True
+
+    switch.set_value(False)
+
+    await user.should_see("No more daily emails.", retries=30)
+    email, _ = STARTING_ACCOUNTS["student"]
+    token, me = await api.login(email, "student-own-password")
+    assert me.daily_email is False
+
+
+async def test_the_superuser_has_no_daily_email_switch(user: User):
+    await ready_to_work(user, "superuser")
+    await user.open("/account")
+    await user.should_see("My account", retries=30)
+
+    await user.should_not_see(marker="daily-email")

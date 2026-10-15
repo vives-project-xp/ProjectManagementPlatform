@@ -33,3 +33,12 @@ class Settings(DatabaseSettings):
     trello_api_key: str | None = None
     trello_token: str | None = None
     trello_api_url: str = "https://api.trello.com/1"
+    # The mailbox for the 08:30 daily email (spec #68); without SMTP_HOST no
+    # email is sent. Only in /opt/pmp/.env.
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_user: str | None = None
+    smtp_password: str | None = None
+    mail_from: str = "VIVES Project Experience <noreply@pmp.local>"
+    # The address of the site, for links in emails.
+    site_url: str = "https://10.20.10.33"

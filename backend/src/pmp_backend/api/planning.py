@@ -5,12 +5,14 @@ from fastapi import APIRouter, Response, status
 from pydantic import AwareDatetime, BaseModel, Field, StringConstraints
 
 from pmp_backend.api.deps import (
+    CurrentUserDep,
     SessionDep,
     StudentDep,
     TeacherOrSuperuserDep,
 )
+from pmp_backend.api.schemas import UserOut
 from pmp_backend.models import Deadline, WeeklySlot
-from pmp_backend.services import planning
+from pmp_backend.services import planning, users
 from pmp_backend.services.planning import (
     AgendaItem,
     DeadlineFields,
@@ -284,3 +286,17 @@ def unskip_date(
     project_id: int, day: date, session: SessionDep, user: TeacherOrSuperuserDep
 ) -> SlotOut:
     return SlotOut.of(planning.unskip_date(session, project_id, day))
+
+
+class DailyEmailIn(BaseModel):
+    daily_email: bool
+
+
+@router.put("/me/daily-email")
+def set_daily_email(
+    body: DailyEmailIn, session: SessionDep, user: CurrentUserDep
+) -> UserOut:
+    """Switch your own 08:30 Daily email on or off."""
+    return UserOut.model_validate(
+        users.set_daily_email(session, user.id, body.daily_email)
+    )

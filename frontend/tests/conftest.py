@@ -72,6 +72,7 @@ def backend_in_process(
     )
     backend.state.github = github
     backend.state.trello = trello
+    backend.state.mailer = testing.FakeMailer()
     # ASGITransport does not run the backend's startup, so seed here.
     with backend.state.sessionmaker() as session:
         seed_starting_accounts(session, logins_file)

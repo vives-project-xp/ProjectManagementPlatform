@@ -35,6 +35,14 @@ services:
       # account. Without them, the Trello actions are off.
       TRELLO_API_KEY: ${TRELLO_API_KEY:-}
       TRELLO_TOKEN: ${TRELLO_TOKEN:-}
+      # The 08:30 daily email (spec #68): the mailbox it is sent from. Without
+      # SMTP_HOST no email is sent.
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      MAIL_FROM: ${MAIL_FROM:-VIVES Project Experience <noreply@pmp.local>}
+      SITE_URL: ${SITE_URL:-https://10.20.10.33}
     volumes:
       # Project photos, one file per Project (outside the database).
       - photos:/data/photos

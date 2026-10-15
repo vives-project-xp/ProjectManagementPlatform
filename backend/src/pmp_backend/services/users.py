@@ -420,3 +420,11 @@ def import_users(
             "Import the file again."
         ) from error
     return created, skipped
+
+
+def set_daily_email(session: Session, user_id: int, value: bool) -> User:
+    """Switch the User's 08:30 Daily email on or off (spec #68)."""
+    user = get_user(session, user_id)
+    user.daily_email = value
+    session.commit()
+    return user

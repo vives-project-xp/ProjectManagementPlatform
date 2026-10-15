@@ -312,3 +312,27 @@ class FakeTrello:
             for member in board.members.values():
                 if member.email == email:
                     member.unconfirmed = False
+
+
+@dataclass(frozen=True)
+class SentEmail:
+    to: str
+    subject: str
+    body: str
+
+
+class FakeMailer:
+    """A mailbox for tests: keeps what was sent, no network. Addresses in
+    `failing` can't be delivered to."""
+
+    def __init__(self) -> None:
+        self.sent: list[SentEmail] = []
+        self.failing: set[str] = set()
+
+    def send(self, to: str, subject: str, body: str) -> None:
+        if to in self.failing:
+            raise OSError(f"Can't deliver to {to}")
+        self.sent.append(SentEmail(to, subject, body))
+
+    def to(self, address: str) -> list[SentEmail]:
+        return [email for email in self.sent if email.to == address]

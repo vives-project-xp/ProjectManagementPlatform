@@ -391,3 +391,26 @@ def overview(
     for slot in slots:
         items += occurrences(slot, today(), WEEK)
     return _sorted(items), slots
+
+
+def items_on(session: Session, project: Project, day: date) -> list[AgendaItem]:
+    """An Active Project's deadlines (own and for every Project), meetings and
+    weekly meeting on `day` (Belgian time), earliest first."""
+    start = datetime.combine(day, datetime.min.time(), tzinfo=BRUSSELS)
+    end = start + timedelta(days=1)
+    deadlines = [
+        d for d in project_deadlines(session, project) if start <= d.due_at < end
+    ]
+    items = [_deadline_item(d) for d in deadlines]
+    meetings = session.scalars(
+        select(Meeting).where(
+            Meeting.project_id == project.id,
+            Meeting.starts_at >= start,
+            Meeting.starts_at < end,
+        )
+    )
+    items += [meeting_item(m) for m in meetings]
+    slot = session.get(WeeklySlot, project.id)
+    if slot is not None:
+        items += occurrences(slot, day, 1)
+    return _sorted(items)

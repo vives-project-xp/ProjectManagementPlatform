@@ -96,6 +96,10 @@ _Avoid_: Trello project, task board, Kanban (for the platform itself)
 Bringing a Project repository's access in line with the Project: active Members with a GitHub username get write access and the Product Owner admin access (GitHub sends them an invitation to accept); expired invitations are sent again; people the platform knows (a User's GitHub username, or an account the platform itself invited there) who no longer belong lose their access. Accounts the platform doesn't know, such as coaches added by hand, are never touched. Runs right after a repository is created, per Project, or for all repositories at once. For a Trello board it works the same way by platform email: active Members join as normal members and the Product Owner as admin; members the platform added who no longer belong (including the old member after a User's email changed) are removed; members it didn't add and the owner account are never touched; the board and its Workspace get the Project's title again.
 _Avoid_: Sync, refresh access
 
+**Daily email**:
+The one email a User gets at 08:30 Belgian time on a day with Deadlines or Meetings for them (including their Weekly slot, unless that date is skipped): active Members and the Product Owner of Active Projects only, never the Superuser. Sent once a day, catching up until 18:00 when the site was down; switched off per User on My account (on by default).
+_Avoid_: Notification, reminder, digest
+
 **Deadline**:
 A moment something is due, in Belgian time: for one Project (set by a Teacher or the Superuser on its page) or for every Active Project (on the Planning screen), never for Archived ones. It has a title and an optional description but no "done" state; tasks belong in Trello. Today's deadlines are shown in the Today banner; past ones are greyed under "Earlier". An Archived Project keeps its own deadlines, read-only.
 _Avoid_: Due date, task, milestone

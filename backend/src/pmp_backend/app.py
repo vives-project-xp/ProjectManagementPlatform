@@ -1,5 +1,6 @@
+import asyncio
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
@@ -19,6 +20,7 @@ from pmp_backend.api import (
 )
 from pmp_backend.database import is_reachable, make_engine
 from pmp_backend.errors import Conflict, Forbidden, NotFound, Refused, Unavailable
+from pmp_backend.services import daily_email, mail
 from pmp_backend.services.auth import LoginGuard
 from pmp_backend.services.github import HttpGitHub
 from pmp_backend.services.seeding import seed_starting_accounts
@@ -35,7 +37,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         with make_session() as session:
             seed_starting_accounts(session, settings.logins_file)
+        # The 08:30 Daily email, only with a mailbox configured (spec #68).
+        sender = None
+        if mail.is_configured(settings):
+            sender = asyncio.create_task(
+                daily_email.run_forever(make_session, app.state.mailer, settings)
+            )
         yield
+        if sender is not None:
+            sender.cancel()
+            with suppress(asyncio.CancelledError):
+                await sender
         engine.dispose()
 
     app = FastAPI(title="VIVES Project Management Platform API", lifespan=lifespan)
@@ -46,6 +58,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.github = HttpGitHub(settings)
     # Tests replace it with testing.FakeTrello.
     app.state.trello = HttpTrello(settings)
+    # Tests replace it with testing.FakeMailer.
+    app.state.mailer = mail.SmtpMailer(settings)
     app.include_router(auth.router)
     app.include_router(users.router)
     app.include_router(programmes.router)
