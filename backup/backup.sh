@@ -8,8 +8,9 @@
 #   backup.sh once          one backup now
 #   backup.sh restore-test  one backup now; the dump is restored into a scratch
 #                           database and compared table by table with the live
-#                           database, the photo archive is compared file count
-#                           with the photos folder
+#                           database as it was during the dump (backed up again,
+#                           up to 3 times, when it changed meanwhile); the photo
+#                           archive is compared file count with the photos folder
 set -eu
 
 BACKUP_DIR=/backups
@@ -73,17 +74,34 @@ row_counts() {
 }
 
 restore_test() {
-  backup
+  # The site keeps writing (Chat, logins), so the live row counts are taken just
+  # before and just after the dump: when they are equal, nothing changed during
+  # the dump, and the restored database must hold exactly those counts.
+  attempt=1
+  while :; do
+    before="$(row_counts "$PGDATABASE")"
+    backup
+    after="$(row_counts "$PGDATABASE")"
+    [ "$before" = "$after" ] && break
+    if [ "$attempt" -ge 3 ]; then
+      log "restore test FAILED: the database kept changing during 3 backups" >&2
+      exit 1
+    fi
+    log "the database changed during the backup; backing up again"
+    attempt=$((attempt + 1))
+    sleep 5
+  done
   file="$(newest_backup_matching 'pmp-*.dump')"
   dropdb --if-exists "$SCRATCH_DB"
   createdb "$SCRATCH_DB"
   trap 'dropdb --if-exists "$SCRATCH_DB"' EXIT
   pg_restore --no-owner --exit-on-error --dbname="$SCRATCH_DB" "$file"
-  live="$(row_counts "$PGDATABASE")"
   restored="$(row_counts "$SCRATCH_DB")"
   echo "$restored"
-  if [ -z "$restored" ] || [ "$live" != "$restored" ]; then
+  if [ -z "$restored" ] || [ "$before" != "$restored" ]; then
     log "restore test FAILED: $file differs from the live database" >&2
+    echo "live database during the backup:" >&2
+    echo "$before" >&2
     exit 1
   fi
   log "restore test passed: $file"

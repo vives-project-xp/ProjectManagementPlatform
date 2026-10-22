@@ -23,7 +23,7 @@ docker exec pmp-backup-1 sh /backup.sh once
 
 ## Test a restore
 
-Makes a backup, restores it into the scratch database `pmp_restore_test`, compares every table's row count with the live database and drops the scratch database again. It also checks that the new photo archive can be read and holds as many files as the photos folder. The Deploy workflow runs this after every deploy.
+Makes a backup, restores it into the scratch database `pmp_restore_test`, compares every table's row count with the live database as it was during the backup, and drops the scratch database again. The site keeps writing (Chat, logins), so the live counts are taken just before and just after the dump; when they differ, the backup is made again (at most 3 times). It also checks that the new photo archive can be read and holds as many files as the photos folder. The Deploy workflow runs this after every deploy.
 
 ```sh
 docker exec pmp-backup-1 sh /backup.sh restore-test
