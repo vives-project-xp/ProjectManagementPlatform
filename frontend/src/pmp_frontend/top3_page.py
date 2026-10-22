@@ -30,7 +30,9 @@ def choice_text(choice: dict[str, Any]) -> str:
     return f"{RANKS[choice['rank'] - 1]}: {title}"
 
 
-def _student_card(student: dict[str, Any], reset, add_to) -> None:
+def _student_card(
+    student: dict[str, Any], projects: list[dict[str, Any]], reset, add_to
+) -> None:
     with ui.card().classes("w-full").mark(f"student-{student['id']}"):
         ui.label(student["name"]).classes("text-subtitle1")
         ui.label(f"{student['programme']}, year {student['year']}").classes(
@@ -38,26 +40,55 @@ def _student_card(student: dict[str, Any], reset, add_to) -> None:
         )
         project = student["project"]
         ui.label(f"Project: {project['title']}" if project else "No Project yet")
+        current = (project or {}).get("id")
+        offered = {current}
         if student["top3"] is None:
             ui.label("Hasn't chosen yet.")
-            return
-        current = (project or {}).get("id")
-        for choice in student["top3"]:
-            with ui.row().classes("w-full items-center"):
-                ui.label(choice_text(choice))
-                if choice["available"] and choice["project_id"] != current:
-                    ui.button(
-                        f"Add to {choice['title']}",
-                        on_click=lambda c=choice: add_to(student, c),
-                    ).props("flat dense color=primary").mark(
-                        f"add-{student['id']}-to-{choice['project_id']}"
-                    )
-        ui.label(f"Submitted on {shown(student['submitted_at'])}.").classes(
-            "text-caption"
+        else:
+            for choice in student["top3"]:
+                with ui.row().classes("w-full items-center"):
+                    ui.label(choice_text(choice))
+                    if choice["available"] and choice["project_id"] != current:
+                        offered.add(choice["project_id"])
+                        ui.button(
+                            f"Add to {choice['title']}",
+                            on_click=lambda c=choice: add_to(student, c),
+                        ).props("flat dense color=primary").mark(
+                            f"add-{student['id']}-to-{choice['project_id']}"
+                        )
+            ui.label(f"Submitted on {shown(student['submitted_at'])}.").classes(
+                "text-caption"
+            )
+        _other_project_row(student, projects, offered, add_to)
+        if student["top3"] is not None:
+            ui.button("Reset top 3", on_click=lambda: reset(student)).props(
+                "outline color=dark"
+            ).mark(f"reset-top3-{student['id']}")
+
+
+def _other_project_row(
+    student: dict[str, Any], projects: list[dict[str, Any]], offered: set, add_to
+) -> None:
+    """Any other Active Project, also one the Student didn't choose (#80)."""
+    others = {p["id"]: p["title"] for p in projects if p["id"] not in offered}
+    if not others:
+        return
+
+    async def add() -> None:
+        if other.value is not None:
+            await add_to(
+                student, {"project_id": other.value, "title": others[other.value]}
+            )
+
+    with ui.row().classes("w-full items-center"):
+        other = (
+            ui.select(others, label="Add to another Project", with_input=True)
+            .classes("w-64")
+            .mark(f"other-project-{student['id']}")
         )
-        ui.button("Reset top 3", on_click=lambda: reset(student)).props(
-            "outline color=dark"
-        ).mark(f"reset-top3-{student['id']}")
+        ui.button("Add", on_click=add).props("flat dense color=primary").mark(
+            f"add-{student['id']}-to-other"
+        )
 
 
 def register() -> None:
@@ -100,12 +131,13 @@ def register() -> None:
                 year=year.value or None,
                 without_top3=without_top3.value,
             )
+            projects = await api.list_projects(token(), status="active")
             students.clear()
             with students:
                 if not found["students"]:
                     ui.label("No Students match these filters.")
                 for student in found["students"]:
-                    _student_card(student, reset, add_to)
+                    _student_card(student, projects, reset, add_to)
             summary.rows = found["summary"]
 
         async def add_to(student: dict[str, Any], choice: dict[str, Any]) -> None:

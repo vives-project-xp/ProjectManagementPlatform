@@ -16,6 +16,13 @@ async def staff_token() -> str:
     return token
 
 
+async def staff_token_again() -> str:
+    """The Superuser's token once `staff_token` has changed their password."""
+    email, _ = STARTING_ACCOUNTS["superuser"]
+    token, _ = await api.login(email, "superuser-own-password")
+    return token
+
+
 async def student_submits(project_ids: list[int]) -> None:
     email, password = STARTING_ACCOUNTS["student"]
     token, _ = await api.login(email, password)
@@ -100,6 +107,54 @@ async def test_add_to_makes_the_student_a_member(user: User):
     await user.should_see("Student Account was added to Robot.")
     await user.should_see("Project: Robot", retries=30)
     await user.should_not_see(marker=f"add-3-to-{robot}")
+
+
+async def test_add_to_a_project_the_student_did_not_choose(user: User):
+    drone, robot, greenhouse = await open_round_with(
+        ["Drone", "Robot", "Smart Greenhouse"]
+    )
+    token = await staff_token_again()
+    teachers = await api.teachers(token)
+    owner = next(t["id"] for t in teachers if t["name"] == "Teacher Account")
+    await api.create_project(
+        token,
+        {
+            "title": "Weather Station",
+            "description": None,
+            "product_owner_id": owner,
+            "team_size_min": 1,
+            "team_size_max": 3,
+        },
+    )
+    await student_submits([robot, greenhouse, drone])
+    await ready_to_work(user, "teacher")
+    await user.open("/top3")
+    await user.should_see(marker="other-project-3", retries=30)
+
+    other = user.find(marker="other-project-3").elements.pop()
+    assert isinstance(other, ui.select)
+    # Only Projects outside the Top 3 (those already have their own button).
+    assert list(other.options.values()) == ["Weather Station"]
+    other.set_value(next(iter(other.options)))
+    user.find(marker="add-3-to-other").click()
+
+    await user.should_see("Student Account was added to Weather Station.")
+    await user.should_see("Project: Weather Station", retries=30)
+
+
+async def test_add_a_student_who_has_not_chosen_yet(user: User):
+    await open_round_with(["Drone"])
+    await ready_to_work(user, "teacher")
+    await user.open("/top3")
+    await user.should_see("Hasn't chosen yet.", retries=30)
+
+    other = user.find(marker="other-project-3").elements.pop()
+    assert isinstance(other, ui.select)
+    other.set_value(next(iter(other.options)))
+    user.find(marker="add-3-to-other").click()
+
+    await user.should_see("Student Account was added to Drone.")
+    await user.should_see("Project: Drone", retries=30)
 
 
 async def test_members_section_shows_the_rank(user: User):
