@@ -117,3 +117,16 @@ async def test_footer_links_come_from_the_environment(
     await user.should_see("VIVES Kortrijk · Doorniksesteenweg 145")
     youtube = user.find(marker="footer-youtube").elements.pop()
     assert youtube.props["href"] == "https://www.youtube.com/vivesvideo"
+
+
+async def test_tables_fit_the_screen(user: User):
+    await ready_to_work(user, "superuser")
+    await user.should_see(marker="users", retries=30)
+
+    # The wide content column, and email addresses that may break (#89).
+    columns = user.find(kind=ui.column).elements
+    assert any("max-w-7xl" in column.classes for column in columns)
+    table = user.find(marker="users").elements.pop()
+    assert isinstance(table, ui.table)
+    email = next(c for c in table.columns if c["name"] == "email")
+    assert email["classes"] == "break-anywhere"

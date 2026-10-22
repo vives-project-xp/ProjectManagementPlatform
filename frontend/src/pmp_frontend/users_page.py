@@ -16,6 +16,7 @@ from pmp_frontend.shell import (
     role_page,
     token,
 )
+from pmp_frontend.theme import BREAK_ANYWHERE
 from pmp_frontend.user_import import (
     ROLES,
     YEARS,
@@ -37,8 +38,20 @@ COLUMNS = [
         "sortable": True,
         "align": "left",
     },
-    {"name": "email", "label": "Email", "field": "email", "align": "left"},
-    {"name": "github", "label": "GitHub", "field": "github", "align": "left"},
+    {
+        "name": "email",
+        "label": "Email",
+        "field": "email",
+        "align": "left",
+        "classes": BREAK_ANYWHERE,
+    },
+    {
+        "name": "github",
+        "label": "GitHub",
+        "field": "github",
+        "align": "left",
+        "classes": BREAK_ANYWHERE,
+    },
     {
         "name": "role",
         "label": "Role",
