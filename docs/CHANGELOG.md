@@ -226,7 +226,8 @@ Newest first. "Live" means deployed to the VIVES VM by the Deploy workflow. "Mig
 | Changed | Footer links and address from the environment (`FOOTER_*`) | #79 | #83 |
 | New | Top 3 screen: add a Student to a Project outside their Top 3 | #80 | #84 |
 | Changed | Projects screen: GitHub ▾ / Trello ▾ menus; Status card on a Project's page | #81 | #85 |
-| New | This changelog (`docs/CHANGELOG.md`) | #82 | this PR |
+| New | This changelog (`docs/CHANGELOG.md`) | #82 | #86 |
+| Fixed | "Create Trello boards for all Projects" said *The server cannot be reached*: the frontend waited only 5 s. The four actions for all Projects now wait up to 5 minutes and show a spinning "Working…" notification (found in the team's dummy test) | #87 | #88 |
 
 ### 2026-10-15: deadlines, meetings, daily email, footer (spec #68, #76)
 
