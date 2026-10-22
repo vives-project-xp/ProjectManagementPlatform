@@ -1,6 +1,7 @@
 """Project repositories on GitHub (spec #49): the repository card on a Project's
 page, and "Create repos for all Projects" / "Check all members"."""
 
+from collections.abc import Awaitable
 from typing import Any
 
 from nicegui import ui
@@ -87,6 +88,16 @@ async def repository_card(project: dict[str, Any], *, editable: bool) -> None:
         )
 
 
+async def while_working[T](text: str, call: Awaitable[T]) -> T:
+    """Await `call` with a spinning notification: the actions for all Projects
+    can take a minute or more (#87)."""
+    working = ui.notification(text, spinner=True, timeout=None)
+    try:
+        return await call
+    finally:
+        working.dismiss()
+
+
 def show_results(title: str, lines: list[tuple[str, bool]]) -> None:
     """`lines`: (text, whether it went well)."""
     with ui.dialog() as dialog, ui.card().classes("w-full max-w-lg"):
@@ -125,7 +136,9 @@ async def github_buttons(after) -> None:
         if not await confirm(question, "Create"):
             return
         try:
-            results = await api.create_repos(token())
+            results = await while_working(
+                "Creating repositories…", api.create_repos(token())
+            )
         except api.ApiError as problem:
             ui.notify(problem.message, type="negative")
             return
@@ -151,7 +164,9 @@ async def github_buttons(after) -> None:
         if not await confirm(question, "Check"):
             return
         try:
-            results = await api.check_all_members(token())
+            results = await while_working(
+                "Checking members…", api.check_all_members(token())
+            )
         except api.ApiError as problem:
             ui.notify(problem.message, type="negative")
             return

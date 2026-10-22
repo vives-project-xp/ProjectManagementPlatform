@@ -10,6 +10,11 @@ from pmp_frontend.settings import Settings
 
 _transport: httpx.AsyncBaseTransport | None = None
 
+# Seconds to wait for the backend. The actions for all Projects call GitHub or
+# Trello several times per Project, so they get much longer (#87).
+TIMEOUT = 5
+BULK_TIMEOUT = 300
+
 
 def use_transport(transport: httpx.AsyncBaseTransport | None) -> None:
     """Send API calls through `transport` instead of the network (used by tests)."""
@@ -17,9 +22,9 @@ def use_transport(transport: httpx.AsyncBaseTransport | None) -> None:
     _transport = transport
 
 
-def _client() -> httpx.AsyncClient:
+def _client(timeout: float = TIMEOUT) -> httpx.AsyncClient:
     base_url = "http://backend" if _transport else Settings().backend_url
-    return httpx.AsyncClient(base_url=base_url, transport=_transport, timeout=5)
+    return httpx.AsyncClient(base_url=base_url, transport=_transport, timeout=timeout)
 
 
 class ApiError(Exception):
@@ -58,11 +63,12 @@ async def _response(
     json: Any = None,
     files: Any = None,
     data: Any = None,
+    timeout: float = TIMEOUT,
 ) -> httpx.Response:
     """The backend's answer; ApiError when it refuses or cannot be reached."""
     headers = {"Authorization": f"Bearer {token}"} if token else {}
     try:
-        async with _client() as client:
+        async with _client(timeout) as client:
             response = await client.request(
                 method, path, headers=headers, json=json, files=files, data=data
             )
@@ -92,9 +98,10 @@ async def _request(
     json: Any = None,
     files: Any = None,
     data: Any = None,
+    timeout: float = TIMEOUT,
 ) -> Any:
     response = await _response(
-        method, path, token=token, json=json, files=files, data=data
+        method, path, token=token, json=json, files=files, data=data, timeout=timeout
     )
     return response.json() if response.content else None
 
@@ -439,7 +446,9 @@ async def github_status(token: str) -> dict[str, Any]:
 async def create_repos(token: str) -> list[dict[str, Any]]:
     """Create repositories for all Projects that need one; a result per Project
     (project_id, title, created, message)."""
-    return await _request("POST", "/api/github/repos", token=token)
+    return await _request(
+        "POST", "/api/github/repos", token=token, timeout=BULK_TIMEOUT
+    )
 
 
 async def trello_status(token: str) -> dict[str, Any]:
@@ -450,7 +459,9 @@ async def trello_status(token: str) -> dict[str, Any]:
 async def create_trello_boards(token: str) -> list[dict[str, Any]]:
     """Create a Workspace and board for all Projects that need one; a result per
     Project (project_id, title, created, message)."""
-    return await _request("POST", "/api/trello/boards", token=token)
+    return await _request(
+        "POST", "/api/trello/boards", token=token, timeout=BULK_TIMEOUT
+    )
 
 
 async def check_trello_members(token: str, project_id: int) -> dict[str, Any]:
@@ -463,7 +474,9 @@ async def check_trello_members(token: str, project_id: int) -> dict[str, Any]:
 
 async def check_all_trello_members(token: str) -> list[dict[str, Any]]:
     """Check every Active Project's board: project_id, title, message."""
-    return await _request("POST", "/api/trello/check-all", token=token)
+    return await _request(
+        "POST", "/api/trello/check-all", token=token, timeout=BULK_TIMEOUT
+    )
 
 
 async def board_access(token: str, project_id: int) -> dict[str, Any]:
@@ -589,7 +602,9 @@ async def check_members(token: str, project_id: int) -> dict[str, Any]:
 
 async def check_all_members(token: str) -> list[dict[str, Any]]:
     """Check every Active Project's repository: project_id, title, message."""
-    return await _request("POST", "/api/github/check-all", token=token)
+    return await _request(
+        "POST", "/api/github/check-all", token=token, timeout=BULK_TIMEOUT
+    )
 
 
 async def my_repository(token: str) -> dict[str, Any]:

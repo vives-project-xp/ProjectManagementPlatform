@@ -7,7 +7,7 @@ from typing import Any
 from nicegui import ui
 
 from pmp_frontend import api
-from pmp_frontend.repos import show_results
+from pmp_frontend.repos import show_results, while_working
 from pmp_frontend.shell import ErrorMessage, confirm, token
 
 SIGN_UP_URL = "https://trello.com/signup"
@@ -98,7 +98,9 @@ async def trello_buttons(after) -> None:
         if not await confirm(question, "Create"):
             return
         try:
-            results = await api.create_trello_boards(token())
+            results = await while_working(
+                "Creating Trello boards…", api.create_trello_boards(token())
+            )
         except api.ApiError as problem:
             ui.notify(problem.message, type="negative")
             return
@@ -124,7 +126,9 @@ async def trello_buttons(after) -> None:
         if not await confirm(question, "Check"):
             return
         try:
-            results = await api.check_all_trello_members(token())
+            results = await while_working(
+                "Checking Trello members…", api.check_all_trello_members(token())
+            )
         except api.ApiError as problem:
             ui.notify(problem.message, type="negative")
             return
