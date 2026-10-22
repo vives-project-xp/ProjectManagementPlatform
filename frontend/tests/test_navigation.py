@@ -98,3 +98,22 @@ async def test_every_page_has_the_vives_footer(user: User):
 
     await ready_to_work(user, "student")
     await user.should_see(marker="footer", retries=30)
+
+
+async def test_footer_links_come_from_the_environment(
+    user: User, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.setenv("FOOTER_INSTAGRAM", "https://www.instagram.com/vivesbrugge")
+    monkeypatch.setenv("FOOTER_TIKTOK", "none")
+    monkeypatch.setenv("FOOTER_YOUTUBE", "")
+    monkeypatch.setenv("FOOTER_ADDRESS", "VIVES Kortrijk · Doorniksesteenweg 145")
+
+    await user.open("/login")
+    await user.should_see(marker="footer", retries=30)
+
+    link = user.find(marker="footer-instagram").elements.pop()
+    assert link.props["href"] == "https://www.instagram.com/vivesbrugge"
+    await user.should_not_see(marker="footer-tiktok")
+    await user.should_see("VIVES Kortrijk · Doorniksesteenweg 145")
+    youtube = user.find(marker="footer-youtube").elements.pop()
+    assert youtube.props["href"] == "https://www.youtube.com/vivesvideo"

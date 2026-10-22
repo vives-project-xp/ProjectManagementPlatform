@@ -80,6 +80,14 @@ services:
       STORAGE_SECRET: ${STORAGE_SECRET}
       # Caddy serves only HTTPS, so the session cookie gets the Secure flag.
       SECURE_COOKIES: "true"
+      # The footer (#79): unset or empty keeps the built-in VIVES value, "none"
+      # hides that part (frontend settings.py).
+      FOOTER_INSTAGRAM: ${FOOTER_INSTAGRAM:-}
+      FOOTER_TIKTOK: ${FOOTER_TIKTOK:-}
+      FOOTER_YOUTUBE: ${FOOTER_YOUTUBE:-}
+      FOOTER_LINKEDIN: ${FOOTER_LINKEDIN:-}
+      FOOTER_PRIVACY_URL: ${FOOTER_PRIVACY_URL:-}
+      FOOTER_ADDRESS: ${FOOTER_ADDRESS:-}
     volumes:
       # NiceGUI's per-browser storage (holds the API token); kept on a volume so
       # a redeploy, which recreates the container, does not log everyone out.

@@ -7,24 +7,19 @@ from pathlib import Path
 
 from nicegui import app, ui
 
+from pmp_frontend.settings import Settings
+
 VIVES_RED = "#e00020"
 BLACK = "#1e1e1e"
 SAND = "#efeee9"
 
 STATIC_DIR = Path(__file__).parent / "static"
 
-# VIVES' official accounts, as linked in the footer of vives.be (#76).
-SOCIALS = [
-    ("Instagram", "https://www.instagram.com/viveshogeschool"),
-    ("TikTok", "https://www.tiktok.com/@viveshogeschool"),
-    ("YouTube", "https://www.youtube.com/vivesvideo"),
-    ("LinkedIn", "https://www.linkedin.com/school/vives/"),
-]
-PRIVACY_POLICY = "https://www.vives.be/nl/over-vives/privacyverklaring"
+# The footer's social links; their URLs come from the settings (#79).
+SOCIALS = ["Instagram", "TikTok", "YouTube", "LinkedIn"]
 # Bootstrap Icons (MIT, see static/icons/LICENSE-bootstrap-icons.txt), inlined so
 # they take the text colour and nothing loads from elsewhere.
 ICONS_DIR = STATIC_DIR / "icons"
-ADDRESS = "VIVES Brugge Xaverianenstraat · Xaverianenstraat 10, 8200 Brugge"
 
 # Poppins is the primary typeface; the guide never uses weights above semibold (600).
 _HEAD_HTML = f"""
@@ -75,15 +70,20 @@ def frame(
 
 def footer() -> None:
     """Black, with white text (house style): VIVES' socials, the campus address,
-    the privacy policy and the copyright. Scrolls with the page."""
+    the privacy policy and the copyright. Scrolls with the page. The links and
+    the address come from the settings, so they change without a new release."""
+    settings = Settings()
     with (
         ui.footer(fixed=False)
         .classes(f"bg-[{BLACK}] text-white px-6 py-4")
         .mark("footer")
     ):
         with ui.row().classes("w-full max-w-4xl mx-auto items-center gap-x-6 gap-y-2"):
-            for label, url in SOCIALS:
+            for label in SOCIALS:
                 name = label.lower()
+                url = getattr(settings, f"footer_{name}")
+                if not url:
+                    continue
                 with (
                     ui.link(target=url, new_tab=True)
                     .classes("text-white flex items-center gap-1")
@@ -96,9 +96,11 @@ def footer() -> None:
                     ).classes("flex").mark(f"icon-{name}")
                     ui.label(label)
             ui.space()
-            ui.link("Privacy policy", PRIVACY_POLICY, new_tab=True).classes(
-                "text-white"
-            ).mark("footer-privacy")
+            if settings.footer_privacy_url:
+                ui.link(
+                    "Privacy policy", settings.footer_privacy_url, new_tab=True
+                ).classes("text-white").mark("footer-privacy")
         with ui.column().classes("w-full max-w-4xl mx-auto gap-0 text-caption"):
-            ui.label(ADDRESS)
+            if settings.footer_address:
+                ui.label(settings.footer_address)
             ui.label(f"© {date.today().year} VIVES. All rights reserved.")
