@@ -133,18 +133,24 @@ def register() -> None:
                 ui.button("Create", on_click=create).mark("create-project")
                 ui.button("Cancel", on_click=dialog.close).props("flat color=dark")
 
+        # The one everyday action next to the heading; the GitHub and Trello
+        # actions for all Projects in a menu each, by the filter (#81).
         with ui.row().classes("w-full items-center"):
             ui.label("Projects").classes("text-h4")
             ui.space()
+            ui.button("New Project", icon="add", on_click=dialog.open).mark(
+                "new-project"
+            )
+        with ui.row().classes("w-full items-center gap-2"):
+            # Active Projects are the current work; Archived ones the history.
+            status_filter = ui.toggle(
+                {"active": "Active", "archived": "Archived"},
+                value="active",
+                on_change=refresh,
+            ).mark("status-filter")
+            ui.space()
             await github_buttons(refresh)
             await trello_buttons(refresh)
-            ui.button("New Project", on_click=dialog.open).mark("new-project")
-        # Active Projects are the current work; Archived ones the history overview.
-        status_filter = ui.toggle(
-            {"active": "Active", "archived": "Archived"},
-            value="active",
-            on_change=refresh,
-        ).mark("status-filter")
         table = ui.table(columns=COLUMNS, rows=[], row_key="id").classes("w-full")
         table.mark("projects")
         table.add_slot("body-cell-photo", THUMBNAIL_CELL)
@@ -236,25 +242,36 @@ def register() -> None:
             archived = project["status"] == "archived"
             ui.link("← Projects", "/projects").classes("text-dark")
             heading = ui.label(project["title"]).classes("text-h4")
-            with ui.row().classes("items-center gap-4"):
-                ui.label(f"Status: {project['status'].capitalize()}")
-                ui.button(
-                    "Restore" if archived else "Archive", on_click=change_status
-                ).props("outline color=dark").mark("change-status")
-                # Only Active Projects without Makers can be deleted (the backend
-                # also refuses one with Members, with a message).
-                if not archived and not project["makers"]:
-                    ui.button("Delete", on_click=delete).props(
-                        "outline color=negative"
-                    ).mark("delete-project")
-            if not archived:
-                # Students can pick it in their Top 3 (spec #37).
-                ui.switch(
-                    "Open for choice",
-                    value=project["open_for_choice"],
-                    on_change=toggle_choice,
-                ).mark("open-for-choice")
-            status_error = ErrorMessage()
+            # Status, Open for choice, Archive/Restore and Delete together in one
+            # card instead of loose under the title (#81).
+            with ui.card().classes("w-full max-w-lg").mark("status-card"):
+                with ui.row().classes("w-full items-center"):
+                    ui.label("Status").classes("text-h6")
+                    ui.badge(
+                        project["status"].capitalize(),
+                        color="grey-7" if archived else "positive",
+                    ).mark("status-badge")
+                if not archived:
+                    # Students can pick it in their Top 3 (spec #37).
+                    ui.switch(
+                        "Open for choice",
+                        value=project["open_for_choice"],
+                        on_change=toggle_choice,
+                    ).mark("open-for-choice")
+                status_error = ErrorMessage()
+                with ui.row().classes("w-full items-center gap-2"):
+                    ui.button(
+                        "Restore" if archived else "Archive",
+                        icon="unarchive" if archived else "archive",
+                        on_click=change_status,
+                    ).props("outline color=dark").mark("change-status")
+                    ui.space()
+                    # Only Active Projects without Makers can be deleted (the
+                    # backend also refuses one with Members, with a message).
+                    if not archived and not project["makers"]:
+                        ui.button("Delete", icon="delete", on_click=delete).props(
+                            "flat color=negative"
+                        ).mark("delete-project")
             photo_card(project, editable=not archived)
             await repository_card(project, editable=not archived)
             await trello_card(project, editable=not archived)
@@ -369,11 +386,12 @@ async def _members_section(project: dict[str, Any]) -> None:
                 ).mark("remove-member")
 
     members()
-    choice = ui.select({}, label="Add a Student", with_input=True).classes("w-full")
-    choice.mark("student-choice")
+    with ui.row().classes("w-full items-center no-wrap"):
+        choice = ui.select({}, label="Add a Student", with_input=True).classes("grow")
+        choice.mark("student-choice")
+        ui.button("Add Member", icon="person_add", on_click=add).mark("add-member")
     update_choices()
     add_error = ErrorMessage()
-    ui.button("Add Member", on_click=add).mark("add-member")
 
 
 def _read_only_details(project: dict[str, Any]) -> None:

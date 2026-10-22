@@ -102,8 +102,8 @@ def show_results(title: str, lines: list[tuple[str, bool]]) -> None:
 
 
 async def github_buttons(after) -> None:
-    """ "Create repos for all Projects" and "Check all members", or why they are
-    missing; `after` reloads the Projects table."""
+    """A "GitHub" menu with "Create repos for all Projects" and "Check all
+    members", or why it is missing; `after` reloads the Projects table."""
     status = await api.github_status(token())
     if not status["connected"]:
         ui.label("GitHub isn't connected.").classes("text-caption").mark(
@@ -164,12 +164,13 @@ async def github_buttons(after) -> None:
         )
         await after()
 
-    ui.button("Create repos for all Projects", on_click=create).props(
-        "outline color=dark"
-    ).mark("create-repos")
-    ui.button("Check all members", on_click=check_all).props("outline color=dark").mark(
-        "check-all-members"
-    )
+    with (
+        ui.dropdown_button("GitHub", icon="code")
+        .props("outline color=dark no-caps")
+        .mark("github-menu")
+    ):
+        ui.item("Create repos for all Projects", on_click=create).mark("create-repos")
+        ui.item("Check all members", on_click=check_all).mark("check-all-members")
 
 
 NEXT_STEP = {
