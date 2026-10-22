@@ -352,3 +352,22 @@ class ChatRead(Base):
         ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
     )
     last_read_id: Mapped[int] = mapped_column(default=0)
+
+
+class ChatGuest(Base):
+    """A Guest in a Project's Chat: any User added by the Product Owner, a
+    Teacher or the Superuser, on top of the Members and the Product Owner."""
+
+    __tablename__ = "chat_guests"
+
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), primary_key=True
+    )
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    added_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    user: Mapped[User] = relationship(lazy="joined")

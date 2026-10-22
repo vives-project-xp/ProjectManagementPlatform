@@ -117,8 +117,12 @@ A Project's one group chat (spec #91): short messages of its Chat people, shown 
 _Avoid_: Forum, channel, conversation, group
 
 **Chat people**:
-Whom a Project's Chat is for: its Members and its Product Owner. Only they count for the Unread badge; a Member who is removed or moved loses access to the Chat at once, and a new Member sees its whole history.
+Whom a Project's Chat is for: its Members, its Product Owner and its Guests. Only they count for the Unread badge; a Member who is removed or moved loses access to the Chat at once, and a new Member sees its whole history.
 _Avoid_: Participants, chat members
+
+**Guest**:
+Any active User added to a Project's Chat on top of its team, by the Product Owner, a Teacher or the Superuser (never by Members). A Guest reads the whole history and writes like the team, can leave, and can be removed by the same staff; archiving the Project ends their access.
+_Avoid_: Visitor, external member, invitee
 
 **Unread**:
 The messages of others in a Chat after the last one a User has seen; opening the Chat reads them. The Chat item in the navigation shows how many there are in the User's own Chats (for a Teacher: those where they are one of the Chat people).

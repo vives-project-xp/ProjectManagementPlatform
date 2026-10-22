@@ -77,7 +77,13 @@ def test_the_team_and_staff_talk_in_the_project_chat(client: TestClient):
         "Good luck!",
     ]
     chat = client.get(f"/api/projects/{drone}/chat", headers=student).json()
-    assert chat == {"project_id": drone, "title": "Drone", "read_only": False}
+    assert chat == {
+        "project_id": drone,
+        "title": "Drone",
+        "read_only": False,
+        "can_manage_guests": False,
+        "is_guest": False,
+    }
 
 
 def test_other_students_have_no_access(client: TestClient):

@@ -18,6 +18,19 @@ class ChatOut(BaseModel):
     title: str
     # Archived Projects' Chats are read-only.
     read_only: bool
+    # Teachers and the Superuser add and remove Guests.
+    can_manage_guests: bool
+    # The User is a Guest here, so they may leave.
+    is_guest: bool
+
+
+class ChatPersonOut(PersonOut):
+    # "Member", "Product Owner" or "Guest".
+    kind: str
+
+
+class GuestIn(BaseModel):
+    user_id: int
 
 
 class MessageIn(BaseModel):
@@ -69,11 +82,55 @@ class UnreadOut(BaseModel):
 @router.get("/projects/{project_id}/chat")
 def get_chat(project_id: int, session: SessionDep, user: CurrentUserDep) -> ChatOut:
     project = chat.readable_project(session, user, project_id)
+    read_only = project.status == ProjectStatus.ARCHIVED.value
     return ChatOut(
         project_id=project.id,
         title=project.title,
-        read_only=project.status == ProjectStatus.ARCHIVED.value,
+        read_only=read_only,
+        can_manage_guests=chat.is_staff(user) and not read_only,
+        is_guest=chat.is_guest(session, user, project) and not read_only,
     )
+
+
+@router.get("/projects/{project_id}/chat/people")
+def chat_people(
+    project_id: int, session: SessionDep, user: CurrentUserDep
+) -> list[ChatPersonOut]:
+    """The Product Owner, the Members, then the Guests."""
+    return [
+        ChatPersonOut(**PersonOut.of(person.user).model_dump(), kind=person.kind)
+        for person in chat.people(session, user, project_id)
+    ]
+
+
+@router.get("/projects/{project_id}/chat/guests/candidates")
+def guest_candidates(
+    project_id: int, session: SessionDep, user: CurrentUserDep
+) -> list[PersonOut]:
+    """Active Users who could join as a Guest (Teachers and the Superuser)."""
+    return [
+        PersonOut.of(candidate)
+        for candidate in chat.guest_candidates(session, user, project_id)
+    ]
+
+
+@router.post("/projects/{project_id}/chat/guests", status_code=status.HTTP_201_CREATED)
+def add_guest(
+    project_id: int, body: GuestIn, session: SessionDep, user: CurrentUserDep
+) -> PersonOut:
+    return PersonOut.of(chat.add_guest(session, user, project_id, body.user_id))
+
+
+@router.delete(
+    "/projects/{project_id}/chat/guests/{user_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def remove_guest(
+    project_id: int, user_id: int, session: SessionDep, user: CurrentUserDep
+) -> Response:
+    """Teachers and the Superuser remove a Guest; a Guest leaves with their own id."""
+    chat.remove_guest(session, user, project_id, user_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/projects/{project_id}/chat/messages")
@@ -105,8 +162,20 @@ def mark_read(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+@router.post(
+    "/projects/{project_id}/chat/leave", status_code=status.HTTP_204_NO_CONTENT
+)
+def leave_chat(project_id: int, session: SessionDep, user: CurrentUserDep) -> Response:
+    """A Guest leaves the Chat."""
+    chat.remove_guest(session, user, project_id, user.id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @router.get("/chats")
-def list_chats(session: SessionDep, user: CurrentUserDep) -> list[ChatSummaryOut]:
+def list_chats(
+    session: SessionDep, user: CurrentUserDep, mine: bool = False
+) -> list[ChatSummaryOut]:
+    """With `mine`: only the Chats where the User is one of the Chat people."""
     return [
         ChatSummaryOut(
             project_id=summary.project_id,
@@ -114,7 +183,7 @@ def list_chats(session: SessionDep, user: CurrentUserDep) -> list[ChatSummaryOut
             unread=summary.unread,
             mine=summary.mine,
         )
-        for summary in chat.chats(session, user)
+        for summary in chat.chats(session, user, mine=mine)
     ]
 
 

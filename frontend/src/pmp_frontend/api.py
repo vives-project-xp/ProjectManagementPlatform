@@ -697,12 +697,47 @@ async def mark_chat_read(token: str, project_id: int, message_id: int) -> None:
     )
 
 
-async def chats(token: str) -> list[dict[str, Any]]:
-    """The Chats the User sees: project_id, title, unread, mine."""
-    return await _request("GET", "/api/chats", token=token)
+async def chats(token: str, *, mine: bool = False) -> list[dict[str, Any]]:
+    """The Chats the User sees (with `mine`: only those where they are one of the
+    Chat people): project_id, title, unread, mine."""
+    query = "?mine=true" if mine else ""
+    return await _request("GET", f"/api/chats{query}", token=token)
 
 
 async def chat_unread(token: str) -> dict[str, Any]:
     """The badge: `count` of Unread messages in the User's own Chats, and
     `has_chat`."""
     return await _request("GET", "/api/chats/unread", token=token)
+
+
+async def chat_people(token: str, project_id: int) -> list[dict[str, Any]]:
+    """The Product Owner, the Members, then the Guests: id, name, kind."""
+    return await _request("GET", f"/api/projects/{project_id}/chat/people", token=token)
+
+
+async def chat_guest_candidates(token: str, project_id: int) -> list[dict[str, Any]]:
+    """Active Users who could join the Chat as a Guest: id, name."""
+    return await _request(
+        "GET", f"/api/projects/{project_id}/chat/guests/candidates", token=token
+    )
+
+
+async def add_chat_guest(token: str, project_id: int, user_id: int) -> dict[str, Any]:
+    return await _request(
+        "POST",
+        f"/api/projects/{project_id}/chat/guests",
+        token=token,
+        json={"user_id": user_id},
+    )
+
+
+async def remove_chat_guest(token: str, project_id: int, user_id: int) -> None:
+    """Remove a Guest; with your own id, leave the Chat."""
+    await _request(
+        "DELETE", f"/api/projects/{project_id}/chat/guests/{user_id}", token=token
+    )
+
+
+async def leave_chat(token: str, project_id: int) -> None:
+    """A Guest leaves the Chat."""
+    await _request("POST", f"/api/projects/{project_id}/chat/leave", token=token)
