@@ -8,6 +8,7 @@ from sqlalchemy.orm import sessionmaker
 
 from pmp_backend.api import (
     auth,
+    chat,
     dev_login,
     github,
     planning,
@@ -69,6 +70,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(github.router)
     app.include_router(trello.router)
     app.include_router(planning.router)
+    app.include_router(chat.router)
     if settings.dev_login:
         app.include_router(dev_login.router)
 

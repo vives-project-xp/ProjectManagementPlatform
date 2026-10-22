@@ -235,6 +235,14 @@ After the MVP went live, the team tried it and listed what bothered them. The li
 
 Newest first. "Live" means deployed to the VIVES VM by the Deploy workflow. "Migration" is the Alembic database version after that change.
 
+### 2026-10-22: Project chat (spec #91)
+
+Grilling Q1–Q22 with the team, spec #91 and tickets #92–#98. Built one ticket at a time.
+
+| | What | Issue | PR |
+|---|---|---|---|
+| New | **Chat basics:** one chat per Project (Members, Product Owner; every Teacher and the Superuser can also read and write), text messages with clickable links, new messages within ~2 s (ADR 0008), Unread badge on the Chat / Chats item, Chats screen, Chat button on a Project's page; migration `0014` | #92 | #99 |
+
 ### 2026-10-22: team change requests
 
 | | What | Issue | PR |

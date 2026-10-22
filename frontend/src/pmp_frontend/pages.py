@@ -4,6 +4,7 @@ from starlette.responses import Response
 
 from pmp_frontend import (
     api,
+    chat_page,
     members_page,
     my_project_page,
     photos,
@@ -195,3 +196,4 @@ def register_pages() -> None:
     photos.register()
     top3_page.register()
     planning.register()
+    chat_page.register()

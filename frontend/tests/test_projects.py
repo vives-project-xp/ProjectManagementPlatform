@@ -67,6 +67,14 @@ async def test_teacher_deletes_a_project_after_confirming(user: User):
     await eventually(lambda: project_titles(user) == [])
 
 
+def photo_source(user: User) -> str | None:
+    """The shown photo's address; None while the photo card is redrawn."""
+    try:
+        return user.find(marker="project-photo").elements.pop().source
+    except AssertionError:
+        return None
+
+
 async def test_teacher_uploads_replaces_and_removes_a_photo(user: User):
     await ready_to_work(user, "teacher")
     await create_project(user, "Drone", 1, 3)
@@ -76,11 +84,7 @@ async def test_teacher_uploads_replaces_and_removes_a_photo(user: User):
     await upload_photo(user)
     await user.should_see(marker="project-photo", retries=30)
     await upload_photo(user)
-    await eventually(
-        lambda: (
-            user.find(marker="project-photo").elements.pop().source == "/photos/1?v=2"
-        )
-    )
+    await eventually(lambda: photo_source(user) == "/photos/1?v=2")
 
     user.find(marker="remove-photo").click()
     await user.should_see("Remove the photo of Drone?", retries=10)

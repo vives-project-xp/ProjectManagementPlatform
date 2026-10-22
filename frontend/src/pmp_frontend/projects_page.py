@@ -241,7 +241,14 @@ def register() -> None:
 
             archived = project["status"] == "archived"
             ui.link("← Projects", "/projects").classes("text-dark")
-            heading = ui.label(project["title"]).classes("text-h4")
+            with ui.row().classes("w-full items-center"):
+                heading = ui.label(project["title"]).classes("text-h4")
+                ui.space()
+                ui.button(
+                    "Chat",
+                    icon="forum",
+                    on_click=lambda: ui.navigate.to(f"/chats/{project_id}"),
+                ).props("outline color=dark").mark("open-chat")
             # Status, Open for choice, Archive/Restore and Delete together in one
             # card instead of loose under the title (#81).
             with ui.card().classes("w-full max-w-lg").mark("status-card"):
