@@ -56,6 +56,8 @@ Discovery → Specification → Tickets → Implementation → Verification → 
 
 See `docs/coding-standards.md` for the rules every change follows.
 
+See [`docs/CHANGELOG.md`](docs/CHANGELOG.md) for everything built and changed so far, including every change the team asked for (before → asked → changed).
+
 ## Getting started
 
 Requirements: [uv](https://docs.astral.sh/uv/getting-started/installation/) and Docker.
