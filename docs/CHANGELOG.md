@@ -243,6 +243,7 @@ Grilling Q1–Q22 with the team, spec #91 and tickets #92–#98. Built one ticke
 |---|---|---|---|
 | New | **Chat basics:** one chat per Project (Members, Product Owner; every Teacher and the Superuser can also read and write), text messages with clickable links, new messages within ~2 s (ADR 0008), Unread badge on the Chat / Chats item, Chats screen, Chat button on a Project's page; migration `0014` | #92 | #99 |
 | Fixed | The restore test after a Deploy failed when the site wrote meanwhile (first seen after #99, with the new chat in use): it now compares with the row counts taken just before and after the dump, and backs up again (max 3 times) when they differ | – | #100 |
+| New | **Chat Guests:** the Product Owner, a Teacher or the Superuser adds any active User to a chat (People list, Add Guest, Remove); Guests can leave; "Only my chats" on the Chats screen (on by default); a Teacher's badge also counts chats where they are a Guest; Students in several chats get a list; migration `0015` | #93 | #101 |
 
 ### 2026-10-22: team change requests
 

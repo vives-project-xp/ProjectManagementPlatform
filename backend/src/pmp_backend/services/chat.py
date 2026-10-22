@@ -1,8 +1,8 @@
 """The Project Chat (spec #91): one group chat per Project.
 
-Its Chat people are the Members and the Product Owner; every Teacher and the
-Superuser can also read and write in every Chat. Unread counts come from how far
-each User read a Chat (`ChatRead`).
+Its Chat people are the Members, the Product Owner and the Guests; every
+Teacher and the Superuser can also read and write in every Chat. Unread counts
+come from how far each User read a Chat (`ChatRead`).
 """
 
 from dataclasses import dataclass
@@ -12,9 +12,10 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from pmp_backend.domain import ProjectStatus, Role
-from pmp_backend.errors import Conflict, Forbidden, Refused
-from pmp_backend.models import ChatMessage, ChatRead, Project, User
+from pmp_backend.errors import Conflict, Forbidden, NotFound, Refused
+from pmp_backend.models import ChatGuest, ChatMessage, ChatRead, Project, User
 from pmp_backend.services.projects import get_project
+from pmp_backend.services.users import get_user
 
 MAX_LENGTH = 4000
 # The newest messages a Chat opens with; older ones come later (search, #97).
@@ -33,24 +34,54 @@ class ChatConflictError(ChatError, Conflict):
     pass
 
 
+class ChatNotFoundError(ChatError, NotFound):
+    pass
+
+
 def is_staff(user: User) -> bool:
     return user.role in (Role.TEACHER, Role.SUPERUSER)
 
 
-def is_chat_person(user: User, project: Project) -> bool:
-    """A Member or the Product Owner: whom the Chat is for."""
+def is_team(user: User, project: Project) -> bool:
+    """A Member or the Product Owner."""
     return user.project_id == project.id or user.id == project.product_owner_id
 
 
-def can_read(user: User, project: Project) -> bool:
-    return is_staff(user) or is_chat_person(user, project)
+def guest_project_ids(session: Session, user: User) -> set[int]:
+    """The Projects in whose Chat the User is a Guest."""
+    return set(
+        session.scalars(
+            select(ChatGuest.project_id).where(ChatGuest.user_id == user.id)
+        )
+    )
+
+
+def is_guest(session: Session, user: User, project: Project) -> bool:
+    return session.get(ChatGuest, (project.id, user.id)) is not None
+
+
+def is_chat_person(session: Session, user: User, project: Project) -> bool:
+    """A Member, the Product Owner or a Guest: whom the Chat is for. Guests lose
+    access when the Project is archived."""
+    if is_team(user, project):
+        return True
+    active = project.status == ProjectStatus.ACTIVE.value
+    return active and is_guest(session, user, project)
 
 
 def readable_project(session: Session, user: User, project_id: int) -> Project:
     """The Project whose Chat `user` may read; refused otherwise."""
     project = get_project(session, project_id)
-    if not can_read(user, project):
+    if not (is_staff(user) or is_chat_person(session, user, project)):
         raise ChatForbiddenError("You don't have access to this chat.")
+    return project
+
+
+def writable_project(session: Session, user: User, project_id: int) -> Project:
+    """The Project whose Chat `user` may write in: Archived ones are read-only."""
+    project = readable_project(session, user, project_id)
+    if project.status == ProjectStatus.ARCHIVED.value:
+        raise ChatConflictError(f"{project.title} is archived: its chat is read-only.")
     return project
 
 
@@ -72,9 +103,7 @@ def messages(
 
 
 def send(session: Session, user: User, project_id: int, body: str) -> ChatMessage:
-    project = readable_project(session, user, project_id)
-    if project.status == ProjectStatus.ARCHIVED.value:
-        raise ChatConflictError(f"{project.title} is archived: its chat is read-only.")
+    project = writable_project(session, user, project_id)
     body = body.strip()
     if not body:
         raise ChatError("Write a message first.")
@@ -121,13 +150,17 @@ class ChatSummary:
     mine: bool
 
 
-def _visible_projects(session: Session, user: User) -> list[Project]:
-    """Staff see every Active Project's Chat; Students their own Project's."""
+def _visible_projects(
+    session: Session, user: User, guest_ids: set[int]
+) -> list[Project]:
+    """Staff see every Active Project's Chat; Students their own Project's and
+    those where they are a Guest."""
     query = select(Project).where(Project.status == ProjectStatus.ACTIVE.value)
     if not is_staff(user):
-        if user.project_id is None:
+        own = {user.project_id} if user.project_id is not None else set()
+        if not own | guest_ids:
             return []
-        query = query.where(Project.id == user.project_id)
+        query = query.where(Project.id.in_(own | guest_ids))
     return list(session.scalars(query.order_by(func.lower(Project.title))))
 
 
@@ -155,24 +188,107 @@ def _unread_counts(session: Session, user: User, project_ids: list[int]) -> dict
     return dict(rows.all())
 
 
-def chats(session: Session, user: User) -> list[ChatSummary]:
-    """The Chats the User sees, by title, with their Unread counts."""
-    projects = _visible_projects(session, user)
+def chats(session: Session, user: User, *, mine: bool = False) -> list[ChatSummary]:
+    """The Chats the User sees (with `mine`: only those where they are one of the
+    Chat people), by title, with their Unread counts."""
+    guest_ids = guest_project_ids(session, user)
+    projects = _visible_projects(session, user, guest_ids)
     counts = _unread_counts(session, user, [project.id for project in projects])
-    return [
+    summaries = [
         ChatSummary(
             project.id,
             project.title,
             counts.get(project.id, 0),
-            is_chat_person(user, project),
+            is_team(user, project) or project.id in guest_ids,
         )
         for project in projects
     ]
+    return [summary for summary in summaries if summary.mine or not mine]
 
 
 def unread_total(session: Session, user: User) -> tuple[int, bool]:
-    """The badge: Unread messages in the User's own Chats (for Teachers, those of
-    their Projects as Product Owner), and whether they have any Chat at all."""
+    """The badge: Unread messages in the User's own Chats (for Teachers, those
+    where they are the Product Owner or a Guest), and whether they have any Chat
+    at all."""
     summaries = chats(session, user)
     mine = [summary for summary in summaries if summary.mine]
     return sum(summary.unread for summary in mine), bool(summaries)
+
+
+# Who is in a Chat.
+
+MEMBER, PRODUCT_OWNER, GUEST = "Member", "Product Owner", "Guest"
+
+
+@dataclass(frozen=True)
+class ChatPerson:
+    user: User
+    # MEMBER, PRODUCT_OWNER or GUEST.
+    kind: str
+
+
+def people(session: Session, user: User, project_id: int) -> list[ChatPerson]:
+    """The Chat people: the Product Owner, the Members, then the Guests."""
+    project = readable_project(session, user, project_id)
+    found = [ChatPerson(project.product_owner, PRODUCT_OWNER)]
+    found += [ChatPerson(member, MEMBER) for member in project.members]
+    if project.status == ProjectStatus.ACTIVE.value:
+        found += [ChatPerson(guest.user, GUEST) for guest in _guests(session, project)]
+    return found
+
+
+def _guests(session: Session, project: Project) -> list[ChatGuest]:
+    return list(
+        session.scalars(
+            select(ChatGuest)
+            .join(ChatGuest.user)
+            .where(ChatGuest.project_id == project.id)
+            .order_by(User.last_name, User.first_name)
+        )
+    )
+
+
+def _managed_project(session: Session, actor: User, project_id: int) -> Project:
+    """The Project whose Guests `actor` may change: staff only, Active only."""
+    if not is_staff(actor):
+        raise ChatForbiddenError(
+            "Only the Product Owner, Teachers and the Superuser add or remove Guests."
+        )
+    return writable_project(session, actor, project_id)
+
+
+def guest_candidates(session: Session, actor: User, project_id: int) -> list[User]:
+    """Active Users who could be added as a Guest: not yet one of the Chat people."""
+    project = _managed_project(session, actor, project_id)
+    inside = {person.user.id for person in people(session, actor, project.id)}
+    users = session.scalars(
+        select(User)
+        .where(User.is_active.is_(True))
+        .order_by(User.last_name, User.first_name)
+    )
+    return [user for user in users if user.id not in inside]
+
+
+def add_guest(session: Session, actor: User, project_id: int, user_id: int) -> User:
+    project = _managed_project(session, actor, project_id)
+    guest = get_user(session, user_id)
+    if not guest.is_active:
+        raise ChatError(f"{guest.full_name} is deactivated, so can't join a chat.")
+    if is_team(guest, project) or is_guest(session, guest, project):
+        raise ChatConflictError(f"{guest.full_name} is already in this chat.")
+    session.add(ChatGuest(project_id=project.id, user_id=guest.id))
+    session.commit()
+    return guest
+
+
+def remove_guest(session: Session, actor: User, project_id: int, user_id: int) -> None:
+    """Staff remove a Guest; a Guest may also leave the Chat themselves."""
+    if actor.id == user_id:
+        project = writable_project(session, actor, project_id)
+    else:
+        project = _managed_project(session, actor, project_id)
+    guest = session.get(ChatGuest, (project.id, user_id))
+    if guest is None:
+        raise ChatNotFoundError("This person is not a Guest in this chat.")
+    session.delete(guest)
+    session.commit()
