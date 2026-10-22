@@ -22,15 +22,21 @@ NAVIGATION: dict[str, list[tuple[str, str, str]]] = {
         ("Programmes", "/programmes", "school"),
         ("Top 3", "/top3", "format_list_numbered"),
         ("Planning", "/planning", "event"),
+        ("Chats", "/chats", "forum"),
     ],
     "teacher": [
         ("Projects", "/projects", "folder"),
         ("Members", "/members", "badge"),
         ("Top 3", "/top3", "format_list_numbered"),
         ("Planning", "/planning", "event"),
+        ("Chats", "/chats", "forum"),
     ],
-    "student": [("My project", "/my-project", "work")],
+    "student": [("My project", "/my-project", "work"), ("Chat", "/chat", "chat")],
 }
+# The navigation items that show the Unread badge (spec #91), and how often it
+# is refreshed.
+CHAT_PATHS = {"/chat", "/chats"}
+BADGE_SECONDS = 10.0
 
 
 def home(user: api.CurrentUser) -> str:
@@ -74,7 +80,10 @@ def header(user: api.CurrentUser) -> None:
         # Until the Temporary password is changed, there is nowhere else to go.
         if not user.must_change_password:
             for label, path, icon in NAVIGATION[user.role]:
-                _navigation_link(label, path, icon).mark("navigation")
+                link = _navigation_link(label, path, icon).mark("navigation")
+                if path in CHAT_PATHS:
+                    # A Student without any Chat doesn't get the item at all.
+                    _unread_badge(link, hide_without_chat=user.role == "student")
             _navigation_link("My account", "/account", "account_circle")
         ui.label(user.full_name).classes("font-medium")
         ui.button("Log out", icon="logout", on_click=_logout).props("flat color=dark")
@@ -88,6 +97,29 @@ def _navigation_link(label: str, path: str, icon: str) -> ui.link:
         ui.icon(icon, color="dark")
         ui.label(label)
     return link
+
+
+def _unread_badge(link: ui.link, *, hide_without_chat: bool) -> None:
+    """The number of Unread messages on the Chat item, refreshed every few
+    seconds; hidden while there are none."""
+    with link:
+        badge = ui.badge(color="primary").props("rounded").mark("chat-badge")
+    badge.set_visibility(False)
+    if hide_without_chat:
+        link.set_visibility(False)
+
+    async def refresh() -> None:
+        try:
+            unread = await api.chat_unread(token())
+        except api.ApiError:
+            return
+        badge.text = str(unread["count"])
+        badge.set_visibility(unread["count"] > 0)
+        if hide_without_chat:
+            link.set_visibility(unread["has_chat"])
+
+    ui.timer(0.1, refresh, once=True)
+    ui.timer(BADGE_SECONDS, refresh)
 
 
 def page_frame(title: str, user: api.CurrentUser):

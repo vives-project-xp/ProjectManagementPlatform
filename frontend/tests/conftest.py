@@ -41,8 +41,28 @@ def trello() -> testing.FakeTrello:
     return testing.FakeTrello()
 
 
+class FinishingTransport(httpx.ASGITransport):
+    """Lets every backend request finish, even when the page that sent it goes
+    away at the end of a test, as a real server does. A request cancelled halfway
+    would leave its database transaction open, and the next test's reset would
+    wait for it forever (pages poll the backend since the Chat, spec #91)."""
+
+    def __init__(self, app) -> None:
+        super().__init__(app=app)
+        self.running: set[asyncio.Task] = set()
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        task = asyncio.ensure_future(super().handle_async_request(request))
+        self.running.add(task)
+        task.add_done_callback(self.running.discard)
+        return await asyncio.shield(task)
+
+    async def finish(self) -> None:
+        await asyncio.gather(*self.running, return_exceptions=True)
+
+
 @pytest.fixture(autouse=True)
-def backend_in_process(
+async def backend_in_process(
     tmp_path: Path,
     request: pytest.FixtureRequest,
     github: testing.FakeGitHub,
@@ -76,9 +96,12 @@ def backend_in_process(
     # ASGITransport does not run the backend's startup, so seed here.
     with backend.state.sessionmaker() as session:
         seed_starting_accounts(session, logins_file)
-    api.use_transport(httpx.ASGITransport(app=backend))
+    transport = FinishingTransport(backend)
+    api.use_transport(transport)
     yield
     api.use_transport(None)
+    await transport.finish()
+    backend.state.sessionmaker.kw["bind"].dispose()
 
 
 async def eventually(check: Callable[[], bool], retries: int = 60) -> None:

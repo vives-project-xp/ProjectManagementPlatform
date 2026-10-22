@@ -12,7 +12,10 @@ from tests.conftest import (
 
 def status_badge(user: User) -> str | None:
     """The text of the Status card's badge, once the page shows it."""
-    found = user.find(marker="status-badge").elements
+    try:
+        found = user.find(marker="status-badge").elements
+    except AssertionError:
+        return None
     return next((badge.text for badge in found if isinstance(badge, ui.badge)), None)
 
 
@@ -45,6 +48,7 @@ async def test_teacher_archives_and_restores_a_project(user: User):
     await eventually(lambda: project_titles(user) == ["Drone"])
 
     await user.open("/projects/1")
+    await user.should_see(marker="change-status", retries=30)
     user.find(marker="change-status").click()
     await user.should_see("Restore Drone?", retries=10)
     user.find(marker="confirm").click()

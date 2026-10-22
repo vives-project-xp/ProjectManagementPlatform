@@ -313,3 +313,42 @@ class DailyEmailSent(Base):
         ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
     )
     day: Mapped[date] = mapped_column(Date, primary_key=True)
+
+
+class ChatMessage(Base):
+    """A message in a Project's Chat (spec #91). A Deleted User leaves
+    `author_id` null: shown as "Deleted user"."""
+
+    __tablename__ = "chat_messages"
+    __table_args__ = (
+        CheckConstraint("char_length(body) <= 4000", name="ck_chat_messages_length"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), index=True
+    )
+    author_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
+    body: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    author: Mapped[User | None] = relationship(lazy="joined")
+
+
+class ChatRead(Base):
+    """How far a User has read a Project's Chat: the last message they saw.
+    Messages after it are Unread for them."""
+
+    __tablename__ = "chat_reads"
+
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), primary_key=True
+    )
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    last_read_id: Mapped[int] = mapped_column(default=0)

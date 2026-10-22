@@ -33,6 +33,7 @@ async def test_superuser_creates_a_student(user: User):
 async def test_duplicate_email_is_shown_in_the_dialog(user: User):
     await ready_to_work(user, "superuser")
     await user.open("/users")
+    await user.should_see(marker="users", retries=30)
 
     user.find(marker="new-user").click()
     user.find(marker="first-name").type("Copy")
@@ -46,6 +47,7 @@ async def test_duplicate_email_is_shown_in_the_dialog(user: User):
 async def test_invalid_input_gets_a_readable_message(user: User):
     await ready_to_work(user, "superuser")
     await user.open("/users")
+    await user.should_see(marker="users", retries=30)
 
     user.find(marker="new-user").click()
     user.find(marker="first-name").type("Ann")

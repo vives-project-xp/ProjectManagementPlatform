@@ -661,3 +661,48 @@ async def update_project(
     return await _request(
         "PUT", f"/api/projects/{project_id}", token=token, json=fields
     )
+
+
+async def chat(token: str, project_id: int) -> dict[str, Any]:
+    """A Project's Chat: project_id, title, read_only."""
+    return await _request("GET", f"/api/projects/{project_id}/chat", token=token)
+
+
+async def chat_messages(
+    token: str, project_id: int, *, after: int | None = None
+) -> list[dict[str, Any]]:
+    """Oldest first: every message after `after`, or the newest ones (id, author,
+    body, created_at, mine)."""
+    query = f"?after={after}" if after is not None else ""
+    return await _request(
+        "GET", f"/api/projects/{project_id}/chat/messages{query}", token=token
+    )
+
+
+async def send_chat_message(token: str, project_id: int, body: str) -> dict[str, Any]:
+    return await _request(
+        "POST",
+        f"/api/projects/{project_id}/chat/messages",
+        token=token,
+        json={"body": body},
+    )
+
+
+async def mark_chat_read(token: str, project_id: int, message_id: int) -> None:
+    await _request(
+        "POST",
+        f"/api/projects/{project_id}/chat/read",
+        token=token,
+        json={"message_id": message_id},
+    )
+
+
+async def chats(token: str) -> list[dict[str, Any]]:
+    """The Chats the User sees: project_id, title, unread, mine."""
+    return await _request("GET", "/api/chats", token=token)
+
+
+async def chat_unread(token: str) -> dict[str, Any]:
+    """The badge: `count` of Unread messages in the User's own Chats, and
+    `has_chat`."""
+    return await _request("GET", "/api/chats/unread", token=token)

@@ -112,6 +112,18 @@ _Avoid_: Appointment, event, session
 A Project's one fixed weekly meeting: a weekday, a start and end time in Belgian time, and a place. Single dates can be skipped (holidays); clearing it stops it (e.g. during exams). Its meetings of the coming seven days show alongside the Deadlines and Meetings; an Archived Project has none.
 _Avoid_: Recurring meeting, standup, timetable
 
+**Chat**:
+A Project's one group chat (spec #91): short messages of its Chat people, shown oldest first, with new ones appearing within seconds. Every Teacher and the Superuser can also read and write in every Chat without being one of its Chat people. An Archived Project's Chat is read-only.
+_Avoid_: Forum, channel, conversation, group
+
+**Chat people**:
+Whom a Project's Chat is for: its Members and its Product Owner. Only they count for the Unread badge; a Member who is removed or moved loses access to the Chat at once, and a new Member sees its whole history.
+_Avoid_: Participants, chat members
+
+**Unread**:
+The messages of others in a Chat after the last one a User has seen; opening the Chat reads them. The Chat item in the navigation shows how many there are in the User's own Chats (for a Teacher: those where they are one of the Chat people).
+_Avoid_: New messages, notifications
+
 **Makers**:
 The permanent record of the Students (name, Programme, Year) who were Members of a Project when it was archived. Nobody is ever removed from it: archiving a restored Project again only adds the new Members (a Student already listed is not added twice). Shown as "Made by".
 _Avoid_: History, former members, credits
