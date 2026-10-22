@@ -10,6 +10,12 @@ from tests.conftest import (
 )
 
 
+def status_badge(user: User) -> str | None:
+    """The text of the Status card's badge, once the page shows it."""
+    found = user.find(marker="status-badge").elements
+    return next((badge.text for badge in found if isinstance(badge, ui.badge)), None)
+
+
 async def test_teacher_archives_and_restores_a_project(user: User):
     await ready_to_work(user, "teacher")
     await create_project(user, "Drone", 1, 3)
@@ -24,7 +30,7 @@ async def test_teacher_archives_and_restores_a_project(user: User):
     user.find(marker="confirm").click()
 
     # Read-only, with the former Member listed as a Maker.
-    await user.should_see("Status: Archived", retries=30)
+    await eventually(lambda: status_badge(user) == "Archived")
     await user.should_see("Made by")
     await user.should_see("Student Account — Electronics-ICT, year 1")
     await user.should_not_see(marker="save-project")
@@ -43,6 +49,6 @@ async def test_teacher_archives_and_restores_a_project(user: User):
     await user.should_see("Restore Drone?", retries=10)
     user.find(marker="confirm").click()
 
-    await user.should_see("Status: Active", retries=30)
+    await eventually(lambda: status_badge(user) == "Active")
     await user.should_see("Members (0 / 1–3)")
     await user.should_see("Made by")

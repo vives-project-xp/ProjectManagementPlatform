@@ -76,8 +76,8 @@ async def trello_card(project: dict[str, Any], *, editable: bool) -> None:
 
 
 async def trello_buttons(after) -> None:
-    """ "Create Trello boards for all Projects" and "Check all Trello members", or
-    why they are missing; `after` reloads the Projects table."""
+    """A "Trello" menu with "Create Trello boards for all Projects" and "Check all
+    Trello members", or why it is missing; `after` reloads the Projects table."""
     status = await api.trello_status(token())
     if not status["connected"]:
         ui.label("Trello isn't connected.").classes("text-caption").mark(
@@ -137,12 +137,17 @@ async def trello_buttons(after) -> None:
         )
         await after()
 
-    ui.button("Create Trello boards for all Projects", on_click=create).props(
-        "outline color=dark"
-    ).mark("create-trello-boards")
-    ui.button("Check all Trello members", on_click=check_all).props(
-        "outline color=dark"
-    ).mark("check-all-trello-members")
+    with (
+        ui.dropdown_button("Trello", icon="view_kanban")
+        .props("outline color=dark no-caps")
+        .mark("trello-menu")
+    ):
+        ui.item("Create Trello boards for all Projects", on_click=create).mark(
+            "create-trello-boards"
+        )
+        ui.item("Check all Trello members", on_click=check_all).mark(
+            "check-all-trello-members"
+        )
 
 
 async def my_trello_card() -> None:
