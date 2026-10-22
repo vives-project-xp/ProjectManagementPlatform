@@ -15,6 +15,12 @@ SAND = "#efeee9"
 
 STATIC_DIR = Path(__file__).parent / "static"
 
+# Wide enough for the tables on a laptop screen (#89); forms keep their own
+# narrow cards.
+CONTENT_WIDTH = "max-w-7xl"
+# Table column classes for long values without spaces, such as email addresses.
+BREAK_ANYWHERE = "break-anywhere"
+
 # The footer's social links; their URLs come from the settings (#79).
 SOCIALS = ["Instagram", "TikTok", "YouTube", "LinkedIn"]
 # Bootstrap Icons (MIT, see static/icons/LICENSE-bootstrap-icons.txt), inlined so
@@ -32,6 +38,10 @@ _HEAD_HTML = f"""
     font-family: 'Poppins', Arial, sans-serif; color: {BLACK}; background: {SAND};
   }}
   b, strong, h1, h2, h3, h4, .text-bold {{ font-weight: 600 !important; }}
+  /* Tables fit the screen instead of scrolling sideways (#89): cells wrap
+     between words; columns with BREAK_ANYWHERE (email addresses) anywhere. */
+  .q-table td {{ white-space: normal; }}
+  .q-table td.break-anywhere {{ overflow-wrap: anywhere; }}
 </style>
 """
 
@@ -63,7 +73,7 @@ def frame(
         if header is not None:
             ui.space()
             header()
-    with ui.column().classes("w-full max-w-4xl mx-auto p-6 gap-6"):
+    with ui.column().classes(f"w-full {CONTENT_WIDTH} mx-auto p-6 gap-6"):
         yield
     footer()
 
@@ -78,7 +88,9 @@ def footer() -> None:
         .classes(f"bg-[{BLACK}] text-white px-6 py-4")
         .mark("footer")
     ):
-        with ui.row().classes("w-full max-w-4xl mx-auto items-center gap-x-6 gap-y-2"):
+        with ui.row().classes(
+            f"w-full {CONTENT_WIDTH} mx-auto items-center gap-x-6 gap-y-2"
+        ):
             for label in SOCIALS:
                 name = label.lower()
                 url = getattr(settings, f"footer_{name}")
@@ -100,7 +112,7 @@ def footer() -> None:
                 ui.link(
                     "Privacy policy", settings.footer_privacy_url, new_tab=True
                 ).classes("text-white").mark("footer-privacy")
-        with ui.column().classes("w-full max-w-4xl mx-auto gap-0 text-caption"):
+        with ui.column().classes(f"w-full {CONTENT_WIDTH} mx-auto gap-0 text-caption"):
             if settings.footer_address:
                 ui.label(settings.footer_address)
             ui.label(f"© {date.today().year} VIVES. All rights reserved.")

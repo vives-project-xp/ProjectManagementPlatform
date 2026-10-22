@@ -16,6 +16,22 @@ Numbers like #24 are GitHub issues or pull requests on [vives-project-xp/Project
 
 Newest first. Each request has the same four parts: **Before**, **Asked**, **Changed**, **Where**.
 
+### R13. Tables fit the screen (2026-10-22, #89, PR #90)
+
+**Before.** Page content was at most 896 px wide, and table cells never wrapped. The **Users** table (Name, Email, GitHub, Role, Programme, Year, Status) was wider than that, so on a laptop you had to **scroll to the right** to see Year and Status.
+
+**Asked.** *"change users table so it fits the whole screen, we have to go to the right to view year and status good, make it autoscale"*.
+
+**Changed.**
+- **Wider pages:** the content of every page (and the footer) can now be up to 1280 px wide. Forms and cards keep their narrow width; tables and lists use the extra room.
+- **Tables adapt to the screen:**
+  - table cells wrap between words;
+  - email addresses and GitHub names may break anywhere.
+
+  Every table now fits without scrolling sideways. At 1366 px the Users table fits with one line per row. In an 800 px window it fits too: only the emails and GitHub names break over lines, and words stay whole.
+
+**Where.** `frontend/src/pmp_frontend/theme.py` (`CONTENT_WIDTH`, `BREAK_ANYWHERE`, table CSS), `users_page.py`; test in `frontend/tests/test_navigation.py`.
+
 ### R12. Tidy the buttons on the Projects screen (2026-10-22, #81, PR #85)
 
 **Before.** The Projects screen had the heading and **five buttons on one row**: "Create repos for all Projects", "Check all members", "Create Trello boards for all Projects", "Check all Trello members" and "New Project". On a normal screen they wrapped onto several lines and looked cluttered. On a Project's page, the status, the Archive and Delete buttons and the "Open for choice" switch were **loose under the title**, and in the Members card the "Add a Student" select and the "Add Member" button were on separate lines.
@@ -225,6 +241,7 @@ Newest first. "Live" means deployed to the VIVES VM by the Deploy workflow. "Mig
 |---|---|---|---|
 | Changed | Footer links and address from the environment (`FOOTER_*`) | #79 | #83 |
 | New | Top 3 screen: add a Student to a Project outside their Top 3 | #80 | #84 |
+| Changed | Tables fit the screen: wider pages (1280 px), cells wrap, emails break (R13) | #89 | #90 |
 | Changed | Projects screen: GitHub ▾ / Trello ▾ menus; Status card on a Project's page | #81 | #85 |
 | New | This changelog (`docs/CHANGELOG.md`) | #82 | this PR |
 
