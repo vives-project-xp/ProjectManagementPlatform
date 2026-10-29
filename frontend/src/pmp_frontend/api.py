@@ -671,11 +671,12 @@ async def chat(token: str, project_id: int) -> dict[str, Any]:
 
 
 async def chat_messages(
-    token: str, project_id: int, *, after: int | None = None
+    token: str, project_id: int, *, since: int | None = None
 ) -> list[dict[str, Any]]:
-    """Oldest first: every message after `after`, or the newest ones (id, author,
-    body, created_at, mine)."""
-    query = f"?after={after}" if after is not None else ""
+    """The newest messages, oldest first (id, author, body, files, created_at,
+    mine, revision, edited, deleted, reply_to, can_edit, can_delete); with
+    `since` (a revision): every message sent, edited or deleted after it."""
+    query = f"?since={since}" if since is not None else ""
     return await _request(
         "GET", f"/api/projects/{project_id}/chat/messages{query}", token=token
     )
@@ -686,16 +687,31 @@ async def send_chat_message(
     project_id: int,
     body: str,
     files: list[tuple[str, bytes, str]] | None = None,
+    reply_to_id: int | None = None,
 ) -> dict[str, Any]:
-    """`files`: up to 5 (name, bytes, media type)."""
+    """`files`: up to 5 (name, bytes, media type); `reply_to_id`: the message
+    it answers."""
+    data = {"body": body}
+    if reply_to_id is not None:
+        data["reply_to_id"] = str(reply_to_id)
     return await _request(
         "POST",
         f"/api/projects/{project_id}/chat/messages",
         token=token,
-        data={"body": body},
+        data=data,
         files=[("files", file) for file in files or []],
         timeout=UPLOAD_TIMEOUT,
     )
+
+
+async def edit_chat_message(token: str, message_id: int, body: str) -> dict[str, Any]:
+    return await _request(
+        "PUT", f"/api/chat/messages/{message_id}", token=token, json={"body": body}
+    )
+
+
+async def delete_chat_message(token: str, message_id: int) -> None:
+    await _request("DELETE", f"/api/chat/messages/{message_id}", token=token)
 
 
 async def chat_file(token: str, file_id: int) -> httpx.Response:

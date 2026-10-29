@@ -1,6 +1,6 @@
 # Chat updates by polling
 
-An open Project Chat (spec #91) asks the backend every 2 seconds for the messages after the last one it shows, and the navigation asks every 10 seconds for the Unread count. The backend doesn't push anything: the frontend keeps calling its REST API, as for every other screen (ADR 0003).
+An open Project Chat (spec #91) asks the backend every 2 seconds for the messages sent, edited or deleted since the last change it saw (every change gets a new number from the `chat_revision` sequence; #95), and the navigation asks every 10 seconds for the Unread count. The backend doesn't push anything: the frontend keeps calling its REST API, as for every other screen (ADR 0003).
 
 The browser already has a live WebSocket to the NiceGUI frontend, so whatever the frontend learns appears at once. Only the step from the frontend to the backend is polled. With a few dozen people in open chats that is a few dozen small, indexed queries per second, which the VM handles easily.
 

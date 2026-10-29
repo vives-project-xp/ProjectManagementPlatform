@@ -10,7 +10,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path, PurePath
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -23,6 +23,7 @@ from pmp_backend.models import (
     ChatRead,
     Project,
     User,
+    chat_revision,
 )
 from pmp_backend.services.projects import get_project
 from pmp_backend.services.users import get_user
@@ -147,20 +148,77 @@ def writable_project(session: Session, user: User, project_id: int) -> Project:
 
 
 def messages(
-    session: Session, user: User, project_id: int, after: int | None = None
+    session: Session, user: User, project_id: int, since: int | None = None
 ) -> list[ChatMessage]:
-    """The Chat's messages, oldest first: all after message `after`, or else
-    the newest PAGE."""
+    """With `since`: every message sent, edited or deleted after that revision,
+    in the order they changed. Without: the newest PAGE, oldest first."""
     readable_project(session, user, project_id)
     query = select(ChatMessage).where(ChatMessage.project_id == project_id)
-    if after is not None:
+    if since is not None:
         return list(
             session.scalars(
-                query.where(ChatMessage.id > after).order_by(ChatMessage.id)
+                query.where(ChatMessage.revision > since).order_by(ChatMessage.revision)
             )
         )
     newest = session.scalars(query.order_by(ChatMessage.id.desc()).limit(PAGE))
     return list(reversed(list(newest)))
+
+
+def _message_in(session: Session, user: User, message_id: int) -> ChatMessage:
+    """A message in a Chat the User can write in, not yet deleted."""
+    message = session.get(ChatMessage, message_id)
+    if message is None:
+        raise ChatNotFoundError("This message doesn't exist.")
+    writable_project(session, user, message.project_id)
+    if message.deleted_at is not None:
+        raise ChatConflictError("This message was deleted.")
+    return message
+
+
+def _changed(session: Session, message: ChatMessage) -> None:
+    """Give the message a new revision, and the replies quoting it too, so open
+    Chats show the change."""
+    session.execute(
+        update(ChatMessage)
+        .where(or_(ChatMessage.id == message.id, ChatMessage.reply_to_id == message.id))
+        .values(revision=chat_revision.next_value())
+    )
+
+
+def edit(session: Session, user: User, message_id: int, body: str) -> ChatMessage:
+    """Change the text of your own message; shown "(edited)"."""
+    message = _message_in(session, user, message_id)
+    if message.author_id != user.id:
+        raise ChatForbiddenError("You can only edit your own messages.")
+    body = body.strip()
+    if not body and not message.files:
+        raise ChatError("Write a message first.")
+    if len(body) > MAX_LENGTH:
+        raise ChatError(f"A message can be at most {MAX_LENGTH} characters.")
+    message.body = body
+    message.edited_at = func.now()
+    session.flush()
+    _changed(session, message)
+    session.commit()
+    session.refresh(message)
+    return message
+
+
+def delete(session: Session, files_dir: Path, user: User, message_id: int) -> None:
+    """Delete your own message, or any message as a Teacher or the Superuser:
+    its text and files go, the row stays ("This message was deleted.")."""
+    message = _message_in(session, user, message_id)
+    if message.author_id != user.id and not is_staff(user):
+        raise ChatForbiddenError("You can only delete your own messages.")
+    paths = [_file_path(files_dir, message.project_id, f.id) for f in message.files]
+    message.body = ""
+    message.deleted_at = func.now()
+    message.files.clear()
+    session.flush()
+    _changed(session, message)
+    session.commit()
+    for path in paths:
+        path.unlink(missing_ok=True)
 
 
 def send(
@@ -170,17 +228,27 @@ def send(
     body: str,
     uploads: Sequence[Upload] = (),
     files_dir: Path | None = None,
+    reply_to_id: int | None = None,
 ) -> ChatMessage:
-    """Post a message: text, photos and files, or both. `files_dir` is needed
-    when there are `uploads`."""
+    """Post a message: text, photos and files, or both, optionally as a reply to
+    another message in the same Chat. `files_dir` is needed when there are
+    `uploads`."""
     project = writable_project(session, user, project_id)
+    if reply_to_id is not None:
+        original = session.get(ChatMessage, reply_to_id)
+        if original is None or original.project_id != project.id:
+            raise ChatError("You can only reply to a message in this chat.")
+        if original.deleted_at is not None:
+            raise ChatError("This message was deleted, so you can't reply to it.")
     body = body.strip()
     if not body and not uploads:
         raise ChatError("Write a message or attach a file first.")
     if len(body) > MAX_LENGTH:
         raise ChatError(f"A message can be at most {MAX_LENGTH} characters.")
     _check_uploads(uploads)
-    message = ChatMessage(project_id=project.id, author_id=user.id, body=body)
+    message = ChatMessage(
+        project_id=project.id, author_id=user.id, body=body, reply_to_id=reply_to_id
+    )
     session.add(message)
     session.flush()
     written = _attach(session, files_dir, message, uploads) if uploads else []
@@ -258,6 +326,7 @@ def _unread_counts(session: Session, user: User, project_ids: list[int]) -> dict
         .where(
             ChatMessage.project_id.in_(project_ids),
             ChatMessage.id > read_mark,
+            ChatMessage.deleted_at.is_(None),
             or_(ChatMessage.author_id.is_(None), ChatMessage.author_id != user.id),
         )
         .group_by(ChatMessage.project_id)

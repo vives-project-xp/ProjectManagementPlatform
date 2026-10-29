@@ -3,7 +3,9 @@ and the Superuser, and one Chat's page, kept up to date by polling (ADR 0008).""
 
 import html
 import re
+from collections.abc import Awaitable, Callable
 from contextlib import suppress
+from dataclasses import dataclass
 from typing import Any
 
 from nicegui import app, events, ui
@@ -27,6 +29,9 @@ MAX_LENGTH = 4000
 # Photos and files per message, and the size of each (the backend checks again).
 MAX_FILES = 5
 MAX_FILE_BYTES = 10 * 1024 * 1024
+# The longest first line a quote shows (as the backend's).
+QUOTE_LENGTH = 100
+DELETED = "This message was deleted."
 # A web link, without trailing punctuation such as the full stop ending a sentence.
 URL = re.compile(r"https?://[^\s<>\"']*[^\s<>\"'.,;:!?)\]]")
 
@@ -106,10 +111,70 @@ def _files(files: list[dict[str, Any]]) -> None:
             )
 
 
-def _message(message: dict[str, Any]) -> None:
+def author_name(message: dict[str, Any]) -> str:
+    return message["author"]["name"] if message["author"] else "Deleted user"
+
+
+def first_line(message: dict[str, Any]) -> str:
+    """What a quote of the message shows: its first line, or its first file."""
+    lines = message["body"].splitlines()
+    first = lines[0] if lines else ""
+    if not first and message["files"]:
+        first = message["files"][0]["name"]
+    return first if len(first) <= QUOTE_LENGTH else first[: QUOTE_LENGTH - 1] + "…"
+
+
+@dataclass(frozen=True)
+class _Actions:
+    """What a message's menu and quote do in an open Chat."""
+
+    # False in an Archived (read-only) Chat: no menu.
+    writable: bool
+    reply: Callable[[dict[str, Any]], None]
+    edit: Callable[[dict[str, Any]], Awaitable[None]]
+    delete: Callable[[dict[str, Any]], Awaitable[None]]
+    # Scroll to the message with this id.
+    go_to: Callable[[int], None]
+
+
+def _quote(quote: dict[str, Any], go_to: Callable[[int], None], marker: str) -> None:
+    """The quoted original above a reply; a click scrolls to it."""
+    text = DELETED if quote["deleted"] else quote["first_line"]
+    with (
+        ui.column()
+        .classes("gap-0 border-l-4 pl-2 mb-1 cursor-pointer")
+        .style("border-color: #e00020")
+        .on("click", lambda: go_to(quote["id"]))
+        .mark(marker)
+    ):
+        ui.label(quote["author_name"]).classes("text-caption text-bold")
+        ui.label(text).classes("text-caption" + (" italic" if quote["deleted"] else ""))
+
+
+def _menu(message: dict[str, Any], actions: _Actions) -> None:
+    number = message["id"]
+    with (
+        ui.button(icon="more_vert")
+        .props("flat dense round size=sm color=dark")
+        .mark(f"message-menu-{number}"),
+        ui.menu(),
+    ):
+        ui.menu_item("Reply", on_click=lambda: actions.reply(message)).mark(
+            f"reply-{number}"
+        )
+        if message["can_edit"]:
+            ui.menu_item("Edit", on_click=lambda: actions.edit(message)).mark(
+                f"edit-{number}"
+            )
+        if message["can_delete"]:
+            ui.menu_item("Delete", on_click=lambda: actions.delete(message)).mark(
+                f"delete-{number}"
+            )
+
+
+def _message(message: dict[str, Any], actions: _Actions) -> None:
     """One message: your own on the right on sand, others' on the left."""
     mine = message["mine"]
-    author = message["author"]["name"] if message["author"] else "Deleted user"
     with ui.row().classes("w-full" + (" justify-end" if mine else "")):
         bubble = "bg-[#efeee9]" if mine else "bg-white border"
         with (
@@ -117,9 +182,21 @@ def _message(message: dict[str, Any]) -> None:
             .classes(f"gap-0 max-w-[80%] rounded-lg px-3 py-2 {bubble}")
             .mark(f"message-{message['id']}")
         ):
-            ui.label(f"{author} · {shown(message['created_at'])}").classes(
-                "text-caption"
-            ).style("color: #666666")
+            with ui.row().classes("w-full items-center gap-1 no-wrap"):
+                edited = " · (edited)" if message["edited"] else ""
+                ui.label(
+                    f"{author_name(message)} · {shown(message['created_at'])}{edited}"
+                ).classes("text-caption").style("color: #666666")
+                if actions.writable and not message["deleted"]:
+                    ui.space()
+                    _menu(message, actions)
+            if message["reply_to"]:
+                _quote(message["reply_to"], actions.go_to, f"quote-{message['id']}")
+            if message["deleted"]:
+                ui.label(DELETED).classes("italic").style("color: #666666").mark(
+                    "message-deleted"
+                )
+                return
             if message["body"]:
                 # Escaped by `linked`, so no sanitising needed.
                 ui.html(linked(message["body"]), sanitize=False).classes(
@@ -136,23 +213,43 @@ async def chat_view(project_id: int) -> None:
     except api.ApiError as error:
         ui.label(error.message)
         return
-    seen: set[int] = set()
-    state: dict[str, Any] = {"last": 0, "empty": None}
+    # Each shown message's element and the revision it shows.
+    rows: dict[int, ui.element] = {}
+    revisions: dict[int, int] = {}
+    # last: the newest message id (read mark); since: the newest revision
+    # fetched; oldest: the first message shown (older ones are not loaded).
+    state: dict[str, Any] = {
+        "last": 0,
+        "since": max((m["revision"] for m in first), default=0),
+        "oldest": min((m["id"] for m in first), default=None),
+        "empty": None,
+        "reply_to": None,
+    }
 
     def show(messages: list[dict[str, Any]]) -> bool:
-        """Add the messages not shown yet; whether there were any."""
-        new = [message for message in messages if message["id"] not in seen]
-        if new and state["empty"] is not None:
-            state["empty"].delete()
-            state["empty"] = None
-        with column:
-            for message in new:
-                _message(message)
-                seen.add(message["id"])
-                state["last"] = max(state["last"], message["id"])
-        if new:
+        """Add new messages and redraw changed ones; whether any were new."""
+        added = False
+        for message in messages:
+            number = message["id"]
+            if number not in rows:
+                if state["oldest"] is not None and number < state["oldest"]:
+                    continue
+                if state["empty"] is not None:
+                    state["empty"].delete()
+                    state["empty"] = None
+                with column:
+                    rows[number] = ui.element("div").classes("w-full")
+                state["last"] = max(state["last"], number)
+                added = True
+            elif revisions[number] >= message["revision"]:
+                continue
+            revisions[number] = message["revision"]
+            rows[number].clear()
+            with rows[number]:
+                _message(message, actions)
+        if added:
             ui.timer(0.1, lambda: scroll.scroll_to(percent=1.0), once=True)
-        return bool(new)
+        return added
 
     async def read() -> None:
         if state["last"]:
@@ -162,12 +259,77 @@ async def chat_view(project_id: int) -> None:
 
     async def poll() -> None:
         try:
-            new = await api.chat_messages(token(), project_id, after=state["last"])
+            changed = await api.chat_messages(token(), project_id, since=state["since"])
         except api.ApiError:
             # Shown again on the next try; a Deploy takes a minute.
             return
-        if show(new):
+        # Only what was fetched moves `since`: a message you just sent may have
+        # a newer revision than others' messages not fetched yet.
+        state["since"] = max([state["since"]] + [m["revision"] for m in changed])
+        if show(changed):
             await read()
+
+    def go_to(message_id: int) -> None:
+        if message_id not in rows:
+            ui.notify("That message is older than the ones shown here.")
+            return
+        ui.run_javascript(
+            f"document.getElementById('c{rows[message_id].id}')"
+            ".scrollIntoView({behavior: 'smooth', block: 'center'})"
+        )
+
+    def reply(message: dict[str, Any]) -> None:
+        state["reply_to"] = message
+        replying.refresh()
+        box.run_method("focus")
+
+    def stop_replying() -> None:
+        state["reply_to"] = None
+        replying.refresh()
+
+    async def edit(message: dict[str, Any]) -> None:
+        async def save() -> None:
+            try:
+                edited = await api.edit_chat_message(
+                    token(), message["id"], text.value or ""
+                )
+            except api.ApiError as problem:
+                error.show(problem.message)
+                return
+            dialog.close()
+            show([edited])
+
+        with ui.dialog() as dialog, ui.card().classes("w-full max-w-lg"):
+            ui.label("Edit message").classes("text-h6")
+            text = (
+                ui.textarea(value=message["body"])
+                .props(f"autogrow outlined maxlength={MAX_LENGTH}")
+                .classes("w-full")
+                .mark("edit-input")
+            )
+            error = ErrorMessage()
+            with ui.row():
+                ui.button("Save", on_click=save).mark("save-edit")
+                ui.button("Cancel", on_click=dialog.close).props("flat color=dark")
+        dialog.open()
+
+    async def delete(message: dict[str, Any]) -> None:
+        if not await confirm("Delete this message? Its files go too.", "Delete"):
+            return
+        try:
+            await api.delete_chat_message(token(), message["id"])
+        except api.ApiError as error:
+            ui.notify(error.message, type="negative")
+            return
+        await poll()
+
+    actions = _Actions(
+        writable=not chat["read_only"],
+        reply=reply,
+        edit=edit,
+        delete=delete,
+        go_to=go_to,
+    )
 
     # Photos and files picked for the next message: (name, bytes, media type).
     pending: list[tuple[str, bytes, str]] = []
@@ -176,8 +338,15 @@ async def chat_view(project_id: int) -> None:
         body = (box.value or "").strip()
         if not body and not pending:
             return
+        original = state["reply_to"]
         try:
-            sent = await api.send_chat_message(token(), project_id, body, pending)
+            sent = await api.send_chat_message(
+                token(),
+                project_id,
+                body,
+                pending,
+                reply_to_id=original["id"] if original else None,
+            )
         except api.ApiError as error:
             send_error.show(error.message)
             return
@@ -186,7 +355,22 @@ async def chat_view(project_id: int) -> None:
         pending.clear()
         attachments.refresh()
         uploader.set_visibility(False)
+        stop_replying()
         show([sent])
+
+    @ui.refreshable
+    def replying() -> None:
+        """The message the next one answers, with a way to stop replying."""
+        original = state["reply_to"]
+        if original is None:
+            return
+        with ui.row().classes("w-full items-center no-wrap").mark("chat-replying"):
+            ui.icon("reply").style("color: #666666")
+            ui.label(f"Replying to {author_name(original)}: {first_line(original)}")
+            ui.space()
+            ui.button(icon="close", on_click=stop_replying).props(
+                "flat dense round color=dark"
+            ).mark("stop-replying")
 
     async def picked(event: events.MultiUploadEventArguments) -> None:
         for file in event.files:
@@ -235,6 +419,7 @@ async def chat_view(project_id: int) -> None:
     if chat["read_only"]:
         ui.label("This Project is archived: its chat is read-only.")
     else:
+        replying()
         attachments()
         with ui.row().classes("w-full items-end no-wrap"):
             ui.button(
