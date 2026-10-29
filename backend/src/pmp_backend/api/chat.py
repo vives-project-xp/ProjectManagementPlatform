@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import Annotated
 from urllib.parse import quote
 
@@ -37,6 +37,8 @@ class ChatOut(BaseModel):
     can_manage_guests: bool
     # The User is a Guest here, so they may leave.
     is_guest: bool
+    # Archived: the day its messages and files are deleted (6 months later).
+    deleted_on: date | None
 
 
 class ChatPersonOut(PersonOut):
@@ -253,6 +255,7 @@ def get_chat(project_id: int, session: SessionDep, user: CurrentUserDep) -> Chat
         read_only=read_only,
         can_manage_guests=chat.is_staff(user) and not read_only,
         is_guest=chat.is_guest(session, user, project) and not read_only,
+        deleted_on=chat.deleted_on(project),
     )
 
 

@@ -23,7 +23,7 @@ from pmp_backend.database import is_reachable, make_engine
 from pmp_backend.errors import Conflict, Forbidden, NotFound, Refused, Unavailable
 from pmp_backend.services import daily_email, mail
 from pmp_backend.services.auth import LoginGuard
-from pmp_backend.services.chat import TypingBoard
+from pmp_backend.services.chat import TypingBoard, clean_up_forever
 from pmp_backend.services.github import HttpGitHub
 from pmp_backend.services.seeding import seed_starting_accounts
 from pmp_backend.services.trello import HttpTrello
@@ -45,11 +45,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             sender = asyncio.create_task(
                 daily_email.run_forever(make_session, app.state.mailer, settings)
             )
+        # Archived Projects' Chats are deleted 6 months after archiving (#98).
+        cleaner = asyncio.create_task(
+            clean_up_forever(make_session, settings.chat_files_dir)
+        )
         yield
-        if sender is not None:
-            sender.cancel()
-            with suppress(asyncio.CancelledError):
-                await sender
+        for task in (sender, cleaner):
+            if task is not None:
+                task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await task
         engine.dispose()
 
     app = FastAPI(title="VIVES Project Management Platform API", lifespan=lifespan)

@@ -7,6 +7,7 @@ import time
 from collections.abc import Awaitable, Callable
 from contextlib import suppress
 from dataclasses import dataclass
+from datetime import date
 from typing import Any
 
 from nicegui import app, events, ui
@@ -616,7 +617,11 @@ async def chat_view(project_id: int) -> None:
     )
     await read()
     if chat["read_only"]:
-        ui.label("This Project is archived: its chat is read-only.")
+        with ui.column().classes("gap-0").mark("chat-archived"):
+            ui.label("This Project is archived: its chat is read-only.")
+            if chat["deleted_on"]:
+                day = date.fromisoformat(chat["deleted_on"]).strftime("%d/%m/%Y")
+                ui.label(f"This chat will be deleted on {day}.").classes("text-bold")
     else:
         replying()
         attachments()

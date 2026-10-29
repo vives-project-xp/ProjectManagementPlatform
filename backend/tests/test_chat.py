@@ -83,6 +83,7 @@ def test_the_team_and_staff_talk_in_the_project_chat(client: TestClient):
         "read_only": False,
         "can_manage_guests": False,
         "is_guest": False,
+        "deleted_on": None,
     }
 
 

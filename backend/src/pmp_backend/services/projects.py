@@ -166,6 +166,7 @@ def archive_project(session: Session, project_id: int) -> Project:
     for member in members:
         member.project = None
     project.status = ProjectStatus.ARCHIVED.value
+    project.archived_at = func.now()
     # Archived Projects are never offered in a Top 3 (spec #37).
     project.open_for_choice = False
     session.commit()
@@ -214,6 +215,7 @@ def restore_project(session: Session, project_id: int) -> Project:
     if project.status != ProjectStatus.ARCHIVED.value:
         raise ProjectConflictError(f"{project.title} is not archived.")
     project.status = ProjectStatus.ACTIVE.value
+    project.archived_at = None
     session.commit()
     return project
 
