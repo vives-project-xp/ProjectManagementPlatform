@@ -16,6 +16,18 @@ Numbers like #24 are GitHub issues or pull requests on [vives-project-xp/Project
 
 Newest first. Each request has the same four parts: **Before**, **Asked**, **Changed**, **Where**.
 
+### R14. Login page centered (2026-10-29, #108, PR #109)
+
+**Before.** The login page's title, subtitle and **Log in** card stood against the left edge of the page, with empty space on the right.
+
+**Asked.** *"verander de loginpagina ook aub, het staat links en niet in het midden, niet netjes"*.
+
+**Changed.**
+- The title, the subtitle and the **Log in** card (and the **Test login** card while it is on) are centered on the page, with some room above them.
+- The **Log in** button fills the width of the card.
+
+**Where.** `frontend/src/pmp_frontend/pages.py` (login page).
+
 ### R13. Tables fit the screen (2026-10-22, #89, PR #90)
 
 **Before.** Page content was at most 896 px wide, and table cells never wrapped. The **Users** table (Name, Email, GitHub, Role, Programme, Year, Status) was wider than that, so on a laptop you had to **scroll to the right** to see Year and Status.
@@ -245,6 +257,7 @@ Newest first. "Live" means deployed to the VIVES VM by the Deploy workflow. "Mig
 | New | **Chat reactions and @mentions:** 👍 ❤️ 😂 😮 😢 🎉 on any message (count, names on hover, click to take yours back); typing @ suggests the chat people and @team; a mentioned person sees the message highlighted and a red @ marker on the Chat item and the Chats screen until read; staff who only read along can't be mentioned; live in open chats; links in messages are now underlined; migration `0018` | #96 | #105 |
 | New | **Chat: "is typing…", "Seen by" and search:** "Anna is typing…" for 5 s after the last keystroke (kept in the backend's memory); "Seen by N" on your own messages with the names on click (chat people only), updating live; search a chat's text and file names with From and Files only, a result scrolls to its message; open chats now poll `GET .../chat/updates` | #97 | #106 |
 | New | **Chat lifecycle:** an Archived Project's chat is read-only and only Teachers and the Superuser read it, with "This chat will be deleted on <date>"; a daily background job deletes the messages and files 6 months after archiving; restoring before then keeps the history; deleting a User keeps their messages as "Deleted user"; migration `0019` (`projects.archived_at`, set to the migration day for Projects already archived). **Spec #91 complete.** | #98 | #107 |
+| Changed | Login page centered, full-width Log in button (R14) | #108 | #109 |
 
 ### 2026-10-22: Project chat (spec #91)
 
