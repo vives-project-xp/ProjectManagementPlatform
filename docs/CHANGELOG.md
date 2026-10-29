@@ -235,6 +235,12 @@ After the MVP went live, the team tried it and listed what bothered them. The li
 
 Newest first. "Live" means deployed to the VIVES VM by the Deploy workflow. "Migration" is the Alembic database version after that change.
 
+### 2026-10-29: Project chat, continued (spec #91)
+
+| | What | Issue | PR |
+|---|---|---|---|
+| New | **Chat photos and files:** up to 5 per message, 10 MB each, programs refused; photos as thumbnails that open full size, other files as downloads with their size; a message may be files only; volume `chat-files`, in the nightly backup and the restore test; migration `0016` | #94 | #102 |
+
 ### 2026-10-22: Project chat (spec #91)
 
 Grilling Q1–Q22 with the team, spec #91 and tickets #92–#98. Built one ticket at a time.

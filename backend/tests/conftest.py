@@ -46,6 +46,7 @@ def settings(logins_file: Path, tmp_path: Path) -> Settings:
         jwt_secret=TEST_JWT_SECRET,
         logins_file=logins_file,
         photos_dir=tmp_path / "photos",
+        chat_files_dir=tmp_path / "chat-files",
         github_org="TestOrg",
         github_token="test-token",
         trello_api_key="test-key",

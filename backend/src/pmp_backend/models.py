@@ -337,6 +337,25 @@ class ChatMessage(Base):
     )
 
     author: Mapped[User | None] = relationship(lazy="joined")
+    files: Mapped[list["ChatFile"]] = relationship(
+        lazy="selectin", order_by="ChatFile.id"
+    )
+
+
+class ChatFile(Base):
+    """A photo or file attached to a Chat message. Its bytes live in the chat
+    files folder, at <project id>/<file id>; the row keeps the uploaded name."""
+
+    __tablename__ = "chat_files"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    message_id: Mapped[int] = mapped_column(
+        ForeignKey("chat_messages.id", ondelete="CASCADE"), index=True
+    )
+    name: Mapped[str] = mapped_column(String(255))
+    size: Mapped[int]
+    # An image/... type for accepted photos; otherwise application/octet-stream.
+    media_type: Mapped[str] = mapped_column(String(100))
 
 
 class ChatRead(Base):

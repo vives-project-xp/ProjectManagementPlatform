@@ -20,6 +20,8 @@ class Settings(DatabaseSettings):
     logins_file: Path | None = None
     # Project photos, one file per Project; a Docker volume in production.
     photos_dir: Path = Path("/data/photos")
+    # Photos and files attached to Chat messages; a Docker volume in production.
+    chat_files_dir: Path = Path("/data/chat-files")
     # Test login: log in as any active User without a password. For the team's
     # testing only; off unless DEV_LOGIN=true.
     dev_login: bool = False

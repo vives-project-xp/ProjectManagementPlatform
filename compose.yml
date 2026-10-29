@@ -24,6 +24,7 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       LOGINS_FILE: /run/secrets/logins.txt
       PHOTOS_DIR: /data/photos
+      CHAT_FILES_DIR: /data/chat-files
       # Test login without a password (api/dev_login.py); set DEV_LOGIN=true in
       # .env only while the team is testing.
       DEV_LOGIN: ${DEV_LOGIN:-false}
@@ -46,6 +47,8 @@ services:
     volumes:
       # Project photos, one file per Project (outside the database).
       - photos:/data/photos
+      # Photos and files attached to Chat messages, one folder per Project.
+      - chat-files:/data/chat-files
       # Starting accounts; the file stays outside the repository on the VM. If it
       # is missing, the backend logs a warning and starts without them.
       - ${LOGINS_PATH:-./logins.txt}:/run/secrets/logins.txt:ro
@@ -68,6 +71,7 @@ services:
       # On the VM, outside the runner's checkout (which is wiped on every deploy).
       - ${BACKUP_PATH:-/opt/pmp/backups}:/backups
       - photos:/photos:ro
+      - chat-files:/chat-files:ro
     depends_on:
       db:
         condition: service_healthy
@@ -115,5 +119,6 @@ volumes:
   db-data:
   frontend-storage:
   photos:
+  chat-files:
   caddy-data:
   caddy-config:
