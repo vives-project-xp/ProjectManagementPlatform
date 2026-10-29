@@ -3,6 +3,7 @@ and the Superuser, and one Chat's page, kept up to date by polling (ADR 0008).""
 
 import html
 import re
+import time
 from collections.abc import Awaitable, Callable
 from contextlib import suppress
 from dataclasses import dataclass
@@ -32,6 +33,8 @@ MAX_FILE_BYTES = 10 * 1024 * 1024
 # The longest first line a quote shows (as the backend's).
 QUOTE_LENGTH = 100
 DELETED = "This message was deleted."
+# How often the backend hears "is typing" while someone keeps typing.
+TYPING_EVERY = 2.5
 # A web link, without trailing punctuation such as the full stop ending a sentence.
 URL = re.compile(r"https?://[^\s<>\"']*[^\s<>\"'.,;:!?)\]]")
 
@@ -291,6 +294,34 @@ def _message(message: dict[str, Any], actions: _Actions) -> None:
                 ).mark("message-body")
             _files(message["files"])
             _reactions(message, actions)
+            if message["seen_by"] is not None:
+                _seen_by(message)
+
+
+def _seen_by(message: dict[str, Any]) -> None:
+    """On your own message: how many of the Chat people read it; a click shows
+    who."""
+    names = message["seen_by"]
+    with ui.row().classes("w-full justify-end"):
+        label = f"Seen by {len(names)}" if names else "Not seen yet"
+        with (
+            ui.button(label, icon="done_all" if names else "done")
+            .props("flat dense no-caps size=sm color=dark")
+            .mark(f"seen-by-{message['id']}")
+        ):
+            if names:
+                with ui.menu():
+                    for name in names:
+                        ui.menu_item(name).mark(f"seen-name-{message['id']}")
+
+
+def typing_line(names: list[str]) -> str:
+    """ "Anna is typing…", "Anna and Bram are typing…", "Anna, Bram and Cas…"."""
+    if not names:
+        return ""
+    if len(names) == 1:
+        return f"{names[0]} is typing…"
+    return f"{', '.join(names[:-1])} and {names[-1]} are typing…"
 
 
 async def chat_view(project_id: int) -> None:
@@ -302,9 +333,10 @@ async def chat_view(project_id: int) -> None:
     except api.ApiError as error:
         ui.label(error.message)
         return
-    # Each shown message's element and the revision it shows.
+    # Each shown message's element, the revision it shows, and its data.
     rows: dict[int, ui.element] = {}
     revisions: dict[int, int] = {}
+    messages_shown: dict[int, dict[str, Any]] = {}
     # last: the newest message id (read mark); since: the newest revision
     # fetched; oldest: the first message shown (older ones are not loaded).
     state: dict[str, Any] = {
@@ -315,6 +347,8 @@ async def chat_view(project_id: int) -> None:
         "reply_to": None,
         # The text being typed, for the @ suggestions.
         "draft": "",
+        # When the backend last heard that the User is typing.
+        "typed_at": 0.0,
     }
 
     def show(messages: list[dict[str, Any]]) -> bool:
@@ -335,6 +369,7 @@ async def chat_view(project_id: int) -> None:
             elif revisions[number] >= message["revision"]:
                 continue
             revisions[number] = message["revision"]
+            messages_shown[number] = message
             rows[number].clear()
             with rows[number]:
                 _message(message, actions)
@@ -350,15 +385,32 @@ async def chat_view(project_id: int) -> None:
 
     async def poll() -> None:
         try:
-            changed = await api.chat_messages(token(), project_id, since=state["since"])
+            found = await api.chat_updates(token(), project_id, state["since"])
         except api.ApiError:
             # Shown again on the next try; a Deploy takes a minute.
             return
+        changed = found["messages"]
         # Only what was fetched moves `since`: a message you just sent may have
         # a newer revision than others' messages not fetched yet.
         state["since"] = max([state["since"]] + [m["revision"] for m in changed])
-        if show(changed):
+        typing_label.text = typing_line(found["typing"])
+        added = show(changed)
+        update_seen(found["reads"])
+        if added:
             await read()
+
+    def update_seen(reads: list[dict[str, Any]]) -> None:
+        """Redraw your own messages whose "Seen by" changed."""
+        for number, message in list(messages_shown.items()):
+            if message["seen_by"] is None:
+                continue
+            names = [r["name"] for r in reads if r["last_read_id"] >= number]
+            if names != message["seen_by"]:
+                message = message | {"seen_by": names}
+                messages_shown[number] = message
+                rows[number].clear()
+                with rows[number]:
+                    _message(message, actions)
 
     def go_to(message_id: int) -> None:
         if message_id not in rows:
@@ -452,9 +504,15 @@ async def chat_view(project_id: int) -> None:
                     "flat dense no-caps color=dark"
                 ).mark("mention-option")
 
-    def typed() -> None:
+    async def typed() -> None:
         state["draft"] = box.value or ""
         suggestions.refresh()
+        # Tell the others, at most every few seconds ("is typing…" lasts 5 s).
+        now = time.monotonic()
+        if state["draft"].strip() and now - state["typed_at"] > TYPING_EVERY:
+            state["typed_at"] = now
+            with suppress(api.ApiError):
+                await api.chat_typing(token(), project_id)
 
     def mention(name: str) -> None:
         """Put "@name " in place of the "@…" being typed."""
@@ -541,6 +599,7 @@ async def chat_view(project_id: int) -> None:
                 "Leave chat", icon="logout", on_click=lambda: _leave(project_id)
             ).props("outline color=dark").mark("leave-chat")
     await _people(project_id, chat)
+    _search(project_id, people, first, go_to)
     with ui.card().classes("w-full p-0"):
         scroll = ui.scroll_area().classes("w-full h-[60vh]").mark("chat-messages")
         with scroll:
@@ -549,6 +608,12 @@ async def chat_view(project_id: int) -> None:
             with column:
                 state["empty"] = ui.label("No messages yet.").classes("text-caption")
         show(first)
+    typing_label = (
+        ui.label()
+        .classes("text-caption italic")
+        .style("color: #666666; min-height: 1.25rem")
+        .mark("chat-typing")
+    )
     await read()
     if chat["read_only"]:
         ui.label("This Project is archived: its chat is read-only.")
@@ -593,6 +658,77 @@ async def chat_view(project_id: int) -> None:
         box.on("keydown.enter.exact.prevent", send)
         send_error = ErrorMessage()
     ui.timer(POLL_SECONDS, poll)
+
+
+def _search(
+    project_id: int,
+    people: list[dict[str, Any]],
+    first: list[dict[str, Any]],
+    go_to: Callable[[int], None],
+) -> None:
+    """Search this Chat's text and file names, by person and Files only; a
+    result scrolls to its message."""
+    # Everyone who can be picked under From: the Chat people and the authors
+    # of the messages shown (staff who wrote along).
+    authors = {person["id"]: person["name"] for person in people}
+    for message in first:
+        if message["author"]:
+            authors.setdefault(message["author"]["id"], message["author"]["name"])
+
+    async def run() -> None:
+        try:
+            found = await api.search_chat(
+                token(),
+                project_id,
+                text.value or "",
+                author_id=author.value,
+                files_only=files_only.value,
+            )
+        except api.ApiError as error:
+            problem.show(error.message)
+            return
+        problem.hide()
+        results.clear()
+        with results:
+            if not found:
+                ui.label("Nothing found.").classes("text-caption")
+            for message in found:
+                with (
+                    ui.row()
+                    .classes("w-full items-center no-wrap cursor-pointer gap-2")
+                    .on("click", lambda m=message: go_to(m["id"]))
+                    .mark(f"search-result-{message['id']}")
+                ):
+                    ui.label(
+                        f"{author_name(message)} · {shown(message['created_at'])}"
+                    ).classes("text-caption shrink-0").style("color: #666666")
+                    ui.label(first_line(message)).classes("ellipsis")
+
+    with (
+        ui.expansion("Search", icon="search")
+        .classes("w-full bg-white rounded-lg")
+        .mark("chat-search")
+    ):
+        with ui.row().classes("w-full items-center"):
+            text = (
+                ui.input(placeholder="Text or file name")
+                .props("dense outlined clearable")
+                .classes("grow")
+                .mark("search-text")
+            )
+            author = (
+                ui.select({None: "Anyone"} | authors, value=None, label="From")
+                .props("dense outlined")
+                .classes("w-48")
+                .mark("search-from")
+            )
+            files_only = ui.checkbox("Files only").mark("search-files-only")
+            ui.button("Search", icon="search", on_click=run).props(
+                "outline color=dark"
+            ).mark("search-run")
+        text.on("keydown.enter", run)
+        problem = ErrorMessage()
+        results = ui.column().classes("w-full gap-1").mark("search-results")
 
 
 async def _leave(project_id: int) -> None:

@@ -132,6 +132,10 @@ _Avoid_: Tag, ping, notification
 One of six emoji (👍 ❤️ 😂 😮 😢 🎉) a User adds to a Chat message, shown with a count and, on hover, the names; several per person, and clicking your own takes it back.
 _Avoid_: Like, emoji vote
 
+**Seen by**:
+On a User's own Chat message, how many of the Chat people have read up to it, with their names on click. Teachers and the Superuser who only read along don't count.
+_Avoid_: Read receipts, viewed by
+
 **Deleted message**:
 A Chat message removed by its author, or by a Teacher or the Superuser (moderation): its text and files are gone, but it stays in the Chat as "This message was deleted.", and so do quotes of it. Authors can also edit their own messages, shown "(edited)".
 _Avoid_: Removed message, hidden message

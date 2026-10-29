@@ -7,7 +7,8 @@ come from how far each User read a Chat (`ChatRead`).
 
 import re
 import shutil
-from collections.abc import Sequence
+import time
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path, PurePath
 
@@ -79,6 +80,10 @@ IMAGE_TYPES = {
     ".webp": ("image/webp", b"RIFF"),
 }
 OTHER_FILE = "application/octet-stream"
+# "Is typing…" lasts this long after the last keystroke.
+TYPING_SECONDS = 5.0
+# The most search results shown, newest first.
+SEARCH_LIMIT = 50
 
 
 @dataclass(frozen=True)
@@ -166,6 +171,102 @@ def messages(
         )
     newest = session.scalars(query.order_by(ChatMessage.id.desc()).limit(PAGE))
     return list(reversed(list(newest)))
+
+
+class TypingBoard:
+    """Who is typing in which Chat. Kept in memory (one backend process, like
+    the LoginGuard); an entry is forgotten TYPING_SECONDS after the last
+    keystroke, or when the person sends their message."""
+
+    def __init__(self, clock: Callable[[], float] = time.monotonic) -> None:
+        self._clock = clock
+        # Per Project: user id -> (first name, when they last typed).
+        self._typing: dict[int, dict[int, tuple[str, float]]] = {}
+
+    def typed(self, project_id: int, user: User) -> None:
+        self._typing.setdefault(project_id, {})[user.id] = (
+            user.first_name,
+            self._clock(),
+        )
+
+    def stopped(self, project_id: int, user_id: int) -> None:
+        self._typing.get(project_id, {}).pop(user_id, None)
+
+    def names(self, project_id: int, viewer: User) -> list[str]:
+        """The first names of those typing now, except the viewer, by name."""
+        since = self._clock() - TYPING_SECONDS
+        current = {
+            user_id: entry
+            for user_id, entry in self._typing.get(project_id, {}).items()
+            if entry[1] > since
+        }
+        if current:
+            self._typing[project_id] = current
+        else:
+            self._typing.pop(project_id, None)
+        return sorted(
+            name for user_id, (name, _) in current.items() if user_id != viewer.id
+        )
+
+
+def typing(session: Session, board: TypingBoard, user: User, project_id: int) -> None:
+    """The User is typing; only the Chat people show as typing."""
+    project = writable_project(session, user, project_id)
+    if is_chat_person(session, user, project):
+        board.typed(project.id, user)
+
+
+def read_marks(session: Session, user: User, project_id: int) -> list[tuple[User, int]]:
+    """How far each of the Chat people (not the User, not staff who only read
+    along) has read the Chat: drives "Seen by"."""
+    project = readable_project(session, user, project_id)
+    people = {person.user.id: person.user for person in _chat_people(session, project)}
+    people.pop(user.id, None)
+    marks = dict(
+        session.execute(
+            select(ChatRead.user_id, ChatRead.last_read_id).where(
+                ChatRead.project_id == project.id, ChatRead.user_id.in_(people)
+            )
+        ).all()
+    )
+    return [(person, marks.get(person.id, 0)) for person in people.values()]
+
+
+def search(
+    session: Session,
+    user: User,
+    project_id: int,
+    text: str = "",
+    author_id: int | None = None,
+    files_only: bool = False,
+) -> list[ChatMessage]:
+    """Messages whose text or file names contain `text` (any case), optionally
+    by one person and only those with files; newest first, at most
+    SEARCH_LIMIT. Deleted messages are never found."""
+    readable_project(session, user, project_id)
+    text = text.strip()
+    if not text and author_id is None and not files_only:
+        raise ChatError("Type something to search for.")
+    query = select(ChatMessage).where(
+        ChatMessage.project_id == project_id, ChatMessage.deleted_at.is_(None)
+    )
+    if text:
+        pattern = "%" + re.sub(r"([\\%_])", r"\\\1", text) + "%"
+        in_files = (
+            select(ChatFile.id)
+            .where(ChatFile.message_id == ChatMessage.id, ChatFile.name.ilike(pattern))
+            .exists()
+        )
+        query = query.where(or_(ChatMessage.body.ilike(pattern), in_files))
+    if author_id is not None:
+        query = query.where(ChatMessage.author_id == author_id)
+    if files_only:
+        query = query.where(
+            select(ChatFile.id).where(ChatFile.message_id == ChatMessage.id).exists()
+        )
+    return list(
+        session.scalars(query.order_by(ChatMessage.id.desc()).limit(SEARCH_LIMIT))
+    )
 
 
 def _message_in(session: Session, user: User, message_id: int) -> ChatMessage:

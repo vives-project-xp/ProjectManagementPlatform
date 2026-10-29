@@ -243,6 +243,7 @@ Newest first. "Live" means deployed to the VIVES VM by the Deploy workflow. "Mig
 | New | Weekly scrum notes of the team in `Scrum/scrum.md` (newest week on top) | – | #103 |
 | New | **Chat edit, delete and reply:** edit your own messages ("(edited)"), delete them ("This message was deleted.", files go too); Teachers and the Superuser delete any message; reply with a quote that scrolls to the original; edits and deletions appear live (open chats poll `since` a revision); migration `0017` | #95 | #104 |
 | New | **Chat reactions and @mentions:** 👍 ❤️ 😂 😮 😢 🎉 on any message (count, names on hover, click to take yours back); typing @ suggests the chat people and @team; a mentioned person sees the message highlighted and a red @ marker on the Chat item and the Chats screen until read; staff who only read along can't be mentioned; live in open chats; links in messages are now underlined; migration `0018` | #96 | #105 |
+| New | **Chat: "is typing…", "Seen by" and search:** "Anna is typing…" for 5 s after the last keystroke (kept in the backend's memory); "Seen by N" on your own messages with the names on click (chat people only), updating live; search a chat's text and file names with From and Files only, a result scrolls to its message; open chats now poll `GET .../chat/updates` | #97 | #106 |
 
 ### 2026-10-22: Project chat (spec #91)
 

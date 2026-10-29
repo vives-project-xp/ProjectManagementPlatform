@@ -49,8 +49,19 @@ def navigation_targets(user: User) -> set[str]:
     return {link.props.get("href") for link in found(user, "navigation")}
 
 
+def message_id(element) -> int:
+    """The id of the message an element is part of (from its "message-N" marker);
+    a redrawn message keeps its place but gets new elements."""
+    while element is not None:
+        for marker in element._markers:
+            if marker.startswith("message-") and marker[8:].isdigit():
+                return int(marker[8:])
+        element = element.parent_slot.parent if element.parent_slot else None
+    return 0
+
+
 def bodies(user: User) -> list[str]:
-    shown = sorted(found(user, "message-body"), key=lambda element: element.id)
+    shown = sorted(found(user, "message-body"), key=message_id)
     return [element.content for element in shown]
 
 
