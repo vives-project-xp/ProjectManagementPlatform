@@ -15,7 +15,15 @@ from pmp_backend.api.deps import (
 from pmp_backend.api.schemas import PersonOut, StudentOut
 from pmp_backend.domain import ProjectStatus
 from pmp_backend.models import Project, User
-from pmp_backend.services import boards, memberships, photos, projects, repos, top3
+from pmp_backend.services import (
+    boards,
+    chat,
+    memberships,
+    photos,
+    projects,
+    repos,
+    top3,
+)
 from pmp_backend.services.projects import ProjectFields
 
 router = APIRouter(prefix="/api", tags=["projects"])
@@ -249,6 +257,7 @@ def delete_project(
     user: TeacherOrSuperuserDep,
 ) -> Response:
     photos.delete_project(session, settings.photos_dir, project_id)
+    chat.discard_files(settings.chat_files_dir, project_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

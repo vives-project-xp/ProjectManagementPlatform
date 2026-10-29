@@ -83,6 +83,7 @@ async def backend_in_process(
             jwt_secret="test-secret-that-is-long-enough-for-hs256-signing",
             logins_file=logins_file,
             photos_dir=tmp_path / "photos",
+            chat_files_dir=tmp_path / "chat-files",
             github_org="TestOrg",
             github_token="test-token",
             trello_api_key="test-key",

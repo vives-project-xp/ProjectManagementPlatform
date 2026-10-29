@@ -1,7 +1,7 @@
 #!/bin/sh
-# Backups of the production database and the Project photos (ADR 0005,
-# docs/backups.md). Runs in the `backup` service of compose.yml, which sets
-# PGHOST/PGUSER/PGPASSWORD/PGDATABASE and mounts the photos read-only.
+# Backups of the production database, the Project photos and the Chat files
+# (ADR 0005, docs/backups.md). Runs in the `backup` service of compose.yml, which
+# sets PGHOST/PGUSER/PGPASSWORD/PGDATABASE and mounts both folders read-only.
 #
 #   backup.sh               every night at BACKUP_HOUR_UTC: back up, then delete
 #                           old backups
@@ -10,11 +10,13 @@
 #                           database and compared table by table with the live
 #                           database as it was during the dump (backed up again,
 #                           up to 3 times, when it changed meanwhile); the photo
-#                           archive is compared file count with the photos folder
+#                           archive is compared file count with the photos folder,
+#                           the Chat files archive with the restored chat_files rows
 set -eu
 
 BACKUP_DIR=/backups
 PHOTOS_DIR=/photos
+CHAT_FILES_DIR=/chat-files
 KEEP_DAYS="${KEEP_DAYS:-14}"
 BACKUP_HOUR_UTC="${BACKUP_HOUR_UTC:-01}"
 SCRATCH_DB=pmp_restore_test
@@ -30,6 +32,7 @@ backup() {
   stamp="$(date -u +%Y-%m-%d_%H%M%S)"
   file="$BACKUP_DIR/pmp-$stamp.dump"
   photos="$BACKUP_DIR/photos-$stamp.tar.gz"
+  chat_files="$BACKUP_DIR/chat-files-$stamp.tar.gz"
   # Written under another name first, so a failed backup never looks like one.
   if ! pg_dump --format=custom --file="$file.partial"; then
     rm -f "$file.partial"
@@ -45,9 +48,16 @@ backup() {
   fi
   mv "$photos.partial" "$photos"
   log "photo backup written: $photos"
+  if ! tar -czf "$chat_files.partial" -C "$CHAT_FILES_DIR" .; then
+    rm -f "$chat_files.partial"
+    log "chat files backup FAILED" >&2
+    return 1
+  fi
+  mv "$chat_files.partial" "$chat_files"
+  log "chat files backup written: $chat_files"
   # -mtime +N matches files at least N+1 days old, so KEEP_DAYS days remain.
-  find "$BACKUP_DIR" \( -name 'pmp-*.dump' -o -name 'photos-*.tar.gz' \) \
-    -mtime +"$((KEEP_DAYS - 1))" -print -delete
+  find "$BACKUP_DIR" \( -name 'pmp-*.dump' -o -name 'photos-*.tar.gz' \
+    -o -name 'chat-files-*.tar.gz' \) -mtime +"$((KEEP_DAYS - 1))" -print -delete
 }
 
 newest_backup_matching() {
@@ -59,7 +69,8 @@ photo_count() {
   find "$PHOTOS_DIR" -type f | wc -l
 }
 
-archived_photo_count() {
+# The number of files in an archive (photos or Chat files).
+archived_file_count() {
   tar -tzf "$1" | grep -v '/$' | wc -l
 }
 
@@ -108,13 +119,25 @@ restore_test() {
 
   photos="$(newest_backup_matching 'photos-*.tar.gz')"
   live="$(photo_count)"
-  archived="$(archived_photo_count "$photos")"
+  archived="$(archived_file_count "$photos")"
   echo "photos $archived"
   if [ "$live" != "$archived" ]; then
     log "photo restore test FAILED: $photos holds $archived files, not $live" >&2
     exit 1
   fi
   log "photo restore test passed: $photos"
+
+  # Every chat_files row has one file, so the archive made with the dump holds
+  # as many files as the restored table has rows.
+  chat_files="$(newest_backup_matching 'chat-files-*.tar.gz')"
+  rows="$(echo "$restored" | awk '$1 == "chat_files" { print $2 }')"
+  archived="$(archived_file_count "$chat_files")"
+  echo "chat files $archived"
+  if [ "${rows:-0}" != "$archived" ]; then
+    log "chat files restore test FAILED: $chat_files holds $archived files, not $rows" >&2
+    exit 1
+  fi
+  log "chat files restore test passed: $chat_files"
 }
 
 seconds_until_next_run() {

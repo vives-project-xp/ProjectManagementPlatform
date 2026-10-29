@@ -1,10 +1,10 @@
 # Backups
 
-The `backup` service in `compose.yml` (ADR 0005) dumps the production database with `pg_dump --format=custom` and archives the Project photos (the `photos` volume, mounted read-only) with `tar`:
+The `backup` service in `compose.yml` (ADR 0005) dumps the production database with `pg_dump --format=custom` and archives the Project photos and the Chat photos and files (the `photos` and `chat-files` volumes, mounted read-only) with `tar`:
 
 - **When:** every night at 01:00 UTC, and once after every deploy (the Deploy workflow's restore test).
-- **Where:** `/opt/pmp/backups/pmp-YYYY-MM-DD_HHMMSS.dump` and `/opt/pmp/backups/photos-YYYY-MM-DD_HHMMSS.tar.gz` on the VM (same timestamp), readable by root only.
-- **How long:** 14 days; older dumps and photo archives are deleted after each backup.
+- **Where:** `/opt/pmp/backups/pmp-YYYY-MM-DD_HHMMSS.dump`, `/opt/pmp/backups/photos-YYYY-MM-DD_HHMMSS.tar.gz` and `/opt/pmp/backups/chat-files-YYYY-MM-DD_HHMMSS.tar.gz` on the VM (same timestamp), readable by root only.
+- **How long:** 14 days; older dumps and archives are deleted after each backup.
 
 The commands below run on the VM as root, or as `github-runner` (in the `docker` group). The `backup` container has the database connection set, so `pg_dump`, `pg_restore`, `psql`, `createdb` and `dropdb` need no arguments for it.
 
@@ -23,7 +23,7 @@ docker exec pmp-backup-1 sh /backup.sh once
 
 ## Test a restore
 
-Makes a backup, restores it into the scratch database `pmp_restore_test`, compares every table's row count with the live database as it was during the backup, and drops the scratch database again. The site keeps writing (Chat, logins), so the live counts are taken just before and just after the dump; when they differ, the backup is made again (at most 3 times). It also checks that the new photo archive can be read and holds as many files as the photos folder. The Deploy workflow runs this after every deploy.
+Makes a backup, restores it into the scratch database `pmp_restore_test`, compares every table's row count with the live database as it was during the backup, and drops the scratch database again. The site keeps writing (Chat, logins), so the live counts are taken just before and just after the dump; when they differ, the backup is made again (at most 3 times). It also checks that the new photo archive can be read and holds as many files as the photos folder, and that the new Chat files archive holds one file per row of the restored `chat_files` table. The Deploy workflow runs this after every deploy.
 
 ```sh
 docker exec pmp-backup-1 sh /backup.sh restore-test
@@ -58,5 +58,15 @@ Restore the photo archive with the same timestamp as the dump, so the photos mat
 docker stop pmp-backend-1
 docker run --rm -v pmp_photos:/photos -v /opt/pmp/backups:/backups:ro postgres:16 \
   sh -c 'find /photos -mindepth 1 -delete && tar -xzf /backups/photos-2026-10-01_010000.tar.gz -C /photos'
+docker start pmp-backend-1
+```
+
+## Restore the Chat files
+
+Restore the Chat files archive with the same timestamp as the dump, so every `chat_files` row has its file (one folder per Project, one file per row id). As for the photos, this uses a short-lived container with the volume mounted read-write (replace the file name):
+
+```sh
+docker stop pmp-backend-1
+docker run --rm -v pmp_chat-files:/chat-files -v /opt/pmp/backups:/backups:ro postgres:16   sh -c 'find /chat-files -mindepth 1 -delete && tar -xzf /backups/chat-files-2026-10-01_010000.tar.gz -C /chat-files'
 docker start pmp-backend-1
 ```

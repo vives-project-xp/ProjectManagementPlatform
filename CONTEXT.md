@@ -116,6 +116,10 @@ _Avoid_: Recurring meeting, standup, timetable
 A Project's one group chat (spec #91): short messages of its Chat people, shown oldest first, with new ones appearing within seconds. Every Teacher and the Superuser can also read and write in every Chat without being one of its Chat people. An Archived Project's Chat is read-only.
 _Avoid_: Forum, channel, conversation, group
 
+**Chat file**:
+A photo or other file attached to a Chat message: up to 5 per message, 10 MB each, never a program (.exe, .bat, .sh, .apk, …). Photos (JPG, PNG, WebP, GIF) show as thumbnails that open full size; other files are downloads with their name and size. Only people who can read the Chat get them; they are in the nightly backup, and deleting the Project deletes them.
+_Avoid_: Attachment, upload, media
+
 **Chat people**:
 Whom a Project's Chat is for: its Members, its Product Owner and its Guests. Only they count for the Unread badge; a Member who is removed or moved loses access to the Chat at once, and a new Member sees its whole history.
 _Avoid_: Participants, chat members

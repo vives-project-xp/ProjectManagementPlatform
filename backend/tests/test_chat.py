@@ -34,7 +34,7 @@ def logged_in_student(client: TestClient, superuser, first_name: str) -> dict:
 def send(client: TestClient, headers, project_id: int, body: str):
     return client.post(
         f"/api/projects/{project_id}/chat/messages",
-        json={"body": body},
+        data={"body": body},
         headers=headers,
     )
 

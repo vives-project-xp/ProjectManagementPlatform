@@ -6,7 +6,7 @@ import re
 from contextlib import suppress
 from typing import Any
 
-from nicegui import ui
+from nicegui import app, events, ui
 from starlette.responses import Response
 
 from pmp_frontend import api
@@ -24,6 +24,9 @@ STAFF = {"superuser", "teacher"}
 # How often an open Chat asks for new messages (ADR 0008).
 POLL_SECONDS = 2.0
 MAX_LENGTH = 4000
+# Photos and files per message, and the size of each (the backend checks again).
+MAX_FILES = 5
+MAX_FILE_BYTES = 10 * 1024 * 1024
 # A web link, without trailing punctuation such as the full stop ending a sentence.
 URL = re.compile(r"https?://[^\s<>\"']*[^\s<>\"'.,;:!?)\]]")
 
@@ -53,6 +56,56 @@ def linked(text: str) -> str:
     return "".join(parts)
 
 
+def file_size(size: int) -> str:
+    """A file size as people read it: 820 B, 14 KB, 3.2 MB."""
+    if size < 1024:
+        return f"{size} B"
+    if size < 1024 * 1024:
+        return f"{round(size / 1024)} KB"
+    return f"{size / (1024 * 1024):.1f} MB"
+
+
+def file_url(file: dict[str, Any]) -> str:
+    return f"/chat-files/{file['id']}"
+
+
+def _show_full(file: dict[str, Any]) -> None:
+    with ui.dialog() as dialog, ui.card().classes("max-w-[95vw]"):
+        ui.image(file_url(file)).props("fit=contain").classes(
+            "w-[80vw] max-w-5xl h-[75vh]"
+        ).mark("full-photo")
+        with ui.row().classes("w-full items-center"):
+            ui.link(file["name"], file_url(file), new_tab=True).classes("text-dark")
+            ui.space()
+            ui.button("Close", on_click=dialog.close).props("flat color=dark")
+    dialog.open()
+
+
+def _files(files: list[dict[str, Any]]) -> None:
+    """Photos as thumbnails that open full size; other files as downloads."""
+    photos = [file for file in files if file["is_image"]]
+    others = [file for file in files if not file["is_image"]]
+    if photos:
+        with ui.row().classes("gap-2 py-1"):
+            for photo in photos:
+                ui.image(file_url(photo)).classes(
+                    "w-40 h-28 rounded cursor-pointer"
+                ).on("click", lambda p=photo: _show_full(p)).mark(
+                    f"chat-photo-{photo['id']}"
+                )
+    for other in others:
+        with (
+            ui.row()
+            .classes("items-center gap-1 no-wrap")
+            .mark(f"chat-file-{other['id']}")
+        ):
+            ui.icon("description").style("color: #666666")
+            ui.link(other["name"], file_url(other)).classes("text-dark break-all")
+            ui.label(f"({file_size(other['size'])})").classes("text-caption").style(
+                "color: #666666"
+            )
+
+
 def _message(message: dict[str, Any]) -> None:
     """One message: your own on the right on sand, others' on the left."""
     mine = message["mine"]
@@ -67,10 +120,12 @@ def _message(message: dict[str, Any]) -> None:
             ui.label(f"{author} · {shown(message['created_at'])}").classes(
                 "text-caption"
             ).style("color: #666666")
-            # Escaped by `linked`, so no sanitising needed.
-            ui.html(linked(message["body"]), sanitize=False).classes(
-                "whitespace-pre-wrap break-words"
-            ).mark("message-body")
+            if message["body"]:
+                # Escaped by `linked`, so no sanitising needed.
+                ui.html(linked(message["body"]), sanitize=False).classes(
+                    "whitespace-pre-wrap break-words"
+                ).mark("message-body")
+            _files(message["files"])
 
 
 async def chat_view(project_id: int) -> None:
@@ -114,18 +169,51 @@ async def chat_view(project_id: int) -> None:
         if show(new):
             await read()
 
+    # Photos and files picked for the next message: (name, bytes, media type).
+    pending: list[tuple[str, bytes, str]] = []
+
     async def send() -> None:
         body = (box.value or "").strip()
-        if not body:
+        if not body and not pending:
             return
         try:
-            sent = await api.send_chat_message(token(), project_id, body)
+            sent = await api.send_chat_message(token(), project_id, body, pending)
         except api.ApiError as error:
             send_error.show(error.message)
             return
         send_error.hide()
         box.value = ""
+        pending.clear()
+        attachments.refresh()
+        uploader.set_visibility(False)
         show([sent])
+
+    async def picked(event: events.MultiUploadEventArguments) -> None:
+        for file in event.files:
+            pending.append((file.name, await file.read(), file.content_type))
+        uploader.reset()
+        if len(pending) > MAX_FILES:
+            del pending[MAX_FILES:]
+            send_error.show(f"A message can have at most {MAX_FILES} photos or files.")
+        attachments.refresh()
+
+    def unpick(index: int) -> None:
+        del pending[index]
+        attachments.refresh()
+
+    @ui.refreshable
+    def attachments() -> None:
+        """The photos and files that go with the next message."""
+        if not pending:
+            return
+        with ui.row().classes("w-full gap-1").mark("chat-attachments"):
+            for index, (name, data, _) in enumerate(pending):
+                ui.chip(
+                    f"{name} ({file_size(len(data))})",
+                    icon="attach_file",
+                    removable=True,
+                    on_value_change=lambda _, i=index: unpick(i),
+                ).props("outline color=dark")
 
     with ui.row().classes("w-full items-center"):
         ui.label(f"Chat: {chat['title']}").classes("text-h4").mark("chat-title")
@@ -147,7 +235,14 @@ async def chat_view(project_id: int) -> None:
     if chat["read_only"]:
         ui.label("This Project is archived: its chat is read-only.")
     else:
+        attachments()
         with ui.row().classes("w-full items-end no-wrap"):
+            ui.button(
+                icon="attach_file",
+                on_click=lambda: uploader.set_visibility(not uploader.visible),
+            ).props("round flat color=dark").tooltip("Add photos or files").mark(
+                "chat-attach"
+            )
             box = (
                 ui.textarea(placeholder="Write a message…")
                 .props(f"autogrow outlined dense maxlength={MAX_LENGTH}")
@@ -155,6 +250,24 @@ async def chat_view(project_id: int) -> None:
                 .mark("chat-input")
             )
             ui.button(icon="send", on_click=send).props("round").mark("chat-send")
+        uploader = (
+            ui.upload(
+                label=f"Photos or files: at most {MAX_FILES}, 10 MB each, no programs",
+                multiple=True,
+                auto_upload=True,
+                max_files=MAX_FILES,
+                max_file_size=MAX_FILE_BYTES,
+                on_multi_upload=picked,
+                # Too many or too large; the browser does not say which.
+                on_rejected=lambda: send_error.show(
+                    f"At most {MAX_FILES} photos or files of 10 MB each."
+                ),
+            )
+            .props("flat bordered")
+            .classes("w-full")
+            .mark("chat-upload")
+        )
+        uploader.set_visibility(False)
         # Enter sends; Shift+Enter starts a new line.
         box.on("keydown.enter.exact.prevent", send)
         send_error = ErrorMessage()
@@ -270,6 +383,25 @@ def _chats_table(found: list[dict[str, Any]]) -> None:
 
 
 def register() -> None:
+    @app.get("/chat-files/{file_id}")
+    async def chat_file(file_id: int) -> Response:
+        """A Chat photo or file, fetched with the User's token (like /photos)."""
+        if not token():
+            return Response(status_code=401)
+        try:
+            found = await api.chat_file(token(), file_id)
+        except api.ApiError as error:
+            return Response(status_code=error.status_code)
+        # A file never changes once sent, so the browser may keep it a while.
+        return Response(
+            found.content,
+            media_type=found.headers["content-type"],
+            headers={
+                "Content-Disposition": found.headers["content-disposition"],
+                "Cache-Control": "private, max-age=86400",
+            },
+        )
+
     @role_page("/chat", "Chat", {"student"})
     async def student_chat(user: api.CurrentUser) -> None:
         found = await api.chats(token())

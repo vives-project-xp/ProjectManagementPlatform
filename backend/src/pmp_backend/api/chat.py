@@ -1,13 +1,14 @@
 from datetime import datetime
 from typing import Annotated
+from urllib.parse import quote
 
-from fastapi import APIRouter, Response, status
-from pydantic import BaseModel, StringConstraints
+from fastapi import APIRouter, File, Form, Response, UploadFile, status
+from pydantic import BaseModel
 
-from pmp_backend.api.deps import CurrentUserDep, SessionDep
+from pmp_backend.api.deps import CurrentUserDep, SessionDep, SettingsDep
 from pmp_backend.api.schemas import PersonOut
 from pmp_backend.domain import ProjectStatus
-from pmp_backend.models import ChatMessage, User
+from pmp_backend.models import ChatFile, ChatMessage, User
 from pmp_backend.services import chat
 
 router = APIRouter(prefix="/api", tags=["chat"])
@@ -33,20 +34,31 @@ class GuestIn(BaseModel):
     user_id: int
 
 
-class MessageIn(BaseModel):
-    body: Annotated[
-        str,
-        StringConstraints(
-            strip_whitespace=True, min_length=1, max_length=chat.MAX_LENGTH
-        ),
-    ]
+class FileOut(BaseModel):
+    id: int
+    name: str
+    # In bytes.
+    size: int
+    # A photo, shown as a thumbnail; other files are downloads.
+    is_image: bool
+
+    @classmethod
+    def of(cls, file: ChatFile) -> "FileOut":
+        return cls(
+            id=file.id,
+            name=file.name,
+            size=file.size,
+            is_image=file.media_type != chat.OTHER_FILE,
+        )
 
 
 class MessageOut(BaseModel):
     id: int
     # None: a Deleted User.
     author: PersonOut | None
+    # Empty when the message is only photos or files.
     body: str
+    files: list[FileOut]
     created_at: datetime
     mine: bool
 
@@ -57,6 +69,7 @@ class MessageOut(BaseModel):
             id=message.id,
             author=PersonOut.of(author) if author else None,
             body=message.body,
+            files=[FileOut.of(file) for file in message.files],
             created_at=message.created_at,
             mine=message.author_id == user.id,
         )
@@ -149,9 +162,47 @@ def list_messages(
     "/projects/{project_id}/chat/messages", status_code=status.HTTP_201_CREATED
 )
 def send_message(
-    project_id: int, body: MessageIn, session: SessionDep, user: CurrentUserDep
+    project_id: int,
+    session: SessionDep,
+    settings: SettingsDep,
+    user: CurrentUserDep,
+    body: Annotated[str, Form()] = "",
+    files: Annotated[list[UploadFile], File()] = [],  # noqa: B006
 ) -> MessageOut:
-    return MessageOut.of(chat.send(session, user, project_id, body.body), user)
+    """A form with the text in `body` and up to 5 photos or files in `files`."""
+    if len(files) > chat.MAX_FILES:
+        # Refused before reading any of them.
+        uploads = [chat.Upload(file.filename or "file", b"") for file in files]
+    else:
+        # One byte more than allowed is enough to know a file is too large.
+        uploads = [
+            chat.Upload(
+                file.filename or "file", file.file.read(chat.MAX_FILE_BYTES + 1)
+            )
+            for file in files
+        ]
+    message = chat.send(
+        session, user, project_id, body, uploads, settings.chat_files_dir
+    )
+    return MessageOut.of(message, user)
+
+
+@router.get("/chat-files/{file_id}")
+def get_file(
+    file_id: int, session: SessionDep, settings: SettingsDep, user: CurrentUserDep
+) -> Response:
+    """A photo (shown in the page) or another file (always downloaded, so the
+    browser never runs what someone uploaded)."""
+    found, data = chat.read_file(session, settings.chat_files_dir, user, file_id)
+    shown = "inline" if found.media_type != chat.OTHER_FILE else "attachment"
+    return Response(
+        content=data,
+        media_type=found.media_type,
+        headers={
+            "Content-Disposition": f"{shown}; filename*=UTF-8''{quote(found.name)}",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 @router.post("/projects/{project_id}/chat/read", status_code=status.HTTP_204_NO_CONTENT)

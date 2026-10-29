@@ -14,6 +14,8 @@ _transport: httpx.AsyncBaseTransport | None = None
 # Trello several times per Project, so they get much longer (#87).
 TIMEOUT = 5
 BULK_TIMEOUT = 300
+# Sending up to 5 files of 10 MB.
+UPLOAD_TIMEOUT = 60
 
 
 def use_transport(transport: httpx.AsyncBaseTransport | None) -> None:
@@ -679,13 +681,26 @@ async def chat_messages(
     )
 
 
-async def send_chat_message(token: str, project_id: int, body: str) -> dict[str, Any]:
+async def send_chat_message(
+    token: str,
+    project_id: int,
+    body: str,
+    files: list[tuple[str, bytes, str]] | None = None,
+) -> dict[str, Any]:
+    """`files`: up to 5 (name, bytes, media type)."""
     return await _request(
         "POST",
         f"/api/projects/{project_id}/chat/messages",
         token=token,
-        json={"body": body},
+        data={"body": body},
+        files=[("files", file) for file in files or []],
+        timeout=UPLOAD_TIMEOUT,
     )
+
+
+async def chat_file(token: str, file_id: int) -> httpx.Response:
+    """A Chat photo or file: the backend's answer, with its headers."""
+    return await _response("GET", f"/api/chat-files/{file_id}", token=token)
 
 
 async def mark_chat_read(token: str, project_id: int, message_id: int) -> None:

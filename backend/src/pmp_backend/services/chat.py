@@ -5,7 +5,10 @@ Teacher and the Superuser can also read and write in every Chat. Unread counts
 come from how far each User read a Chat (`ChatRead`).
 """
 
+import shutil
+from collections.abc import Sequence
 from dataclasses import dataclass
+from pathlib import Path, PurePath
 
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.dialects.postgresql import insert
@@ -13,13 +16,71 @@ from sqlalchemy.orm import Session
 
 from pmp_backend.domain import ProjectStatus, Role
 from pmp_backend.errors import Conflict, Forbidden, NotFound, Refused
-from pmp_backend.models import ChatGuest, ChatMessage, ChatRead, Project, User
+from pmp_backend.models import (
+    ChatFile,
+    ChatGuest,
+    ChatMessage,
+    ChatRead,
+    Project,
+    User,
+)
 from pmp_backend.services.projects import get_project
 from pmp_backend.services.users import get_user
 
 MAX_LENGTH = 4000
 # The newest messages a Chat opens with; older ones come later (search, #97).
 PAGE = 200
+# Photos and files per message, and the size of each.
+MAX_FILES = 5
+MAX_FILE_BYTES = 10 * 1024 * 1024
+# Programs and scripts that run when opened: never accepted.
+REFUSED_EXTENSIONS = frozenset(
+    [
+        ".apk",
+        ".app",
+        ".bat",
+        ".cmd",
+        ".com",
+        ".cpl",
+        ".deb",
+        ".dll",
+        ".dmg",
+        ".exe",
+        ".hta",
+        ".jar",
+        ".lnk",
+        ".msc",
+        ".msi",
+        ".pif",
+        ".ps1",
+        ".reg",
+        ".rpm",
+        ".scr",
+        ".sh",
+        ".vbe",
+        ".vbs",
+        ".wsf",
+        ".wsh",
+    ]
+)
+# Windows programs (MZ) and Linux ones (ELF), whatever their name.
+PROGRAM_SIGNATURES = (b"MZ", b"\x7fELF")
+# The first bytes of each photo format shown as a thumbnail, by extension.
+IMAGE_TYPES = {
+    ".jpg": ("image/jpeg", b"\xff\xd8\xff"),
+    ".jpeg": ("image/jpeg", b"\xff\xd8\xff"),
+    ".png": ("image/png", b"\x89PNG\r\n\x1a\n"),
+    ".gif": ("image/gif", b"GIF8"),
+    ".webp": ("image/webp", b"RIFF"),
+}
+OTHER_FILE = "application/octet-stream"
+
+
+@dataclass(frozen=True)
+class Upload:
+    name: str
+    # May hold one byte more than allowed, so that a too large file is recognised.
+    data: bytes
 
 
 class ChatError(Refused):
@@ -102,19 +163,35 @@ def messages(
     return list(reversed(list(newest)))
 
 
-def send(session: Session, user: User, project_id: int, body: str) -> ChatMessage:
+def send(
+    session: Session,
+    user: User,
+    project_id: int,
+    body: str,
+    uploads: Sequence[Upload] = (),
+    files_dir: Path | None = None,
+) -> ChatMessage:
+    """Post a message: text, photos and files, or both. `files_dir` is needed
+    when there are `uploads`."""
     project = writable_project(session, user, project_id)
     body = body.strip()
-    if not body:
-        raise ChatError("Write a message first.")
+    if not body and not uploads:
+        raise ChatError("Write a message or attach a file first.")
     if len(body) > MAX_LENGTH:
         raise ChatError(f"A message can be at most {MAX_LENGTH} characters.")
+    _check_uploads(uploads)
     message = ChatMessage(project_id=project.id, author_id=user.id, body=body)
     session.add(message)
     session.flush()
+    written = _attach(session, files_dir, message, uploads) if uploads else []
     # Your own message is never Unread for you.
     _read_up_to(session, user, project.id, message.id)
-    session.commit()
+    try:
+        session.commit()
+    except Exception:
+        for path in written:
+            path.unlink(missing_ok=True)
+        raise
     return message
 
 
@@ -292,3 +369,104 @@ def remove_guest(session: Session, actor: User, project_id: int, user_id: int) -
         raise ChatNotFoundError("This person is not a Guest in this chat.")
     session.delete(guest)
     session.commit()
+
+
+# Photos and files.
+
+
+def _clean_name(name: str) -> str:
+    """The uploaded name without any folder part, at most 255 characters."""
+    base = PurePath(name.replace("\\", "/")).name.strip() or "file"
+    stem, dot, extension = base.rpartition(".")
+    if len(base) <= 255:
+        return base
+    if dot and len(extension) < 20:
+        return stem[: 254 - len(extension)] + "." + extension
+    return base[:255]
+
+
+def _extension(name: str) -> str:
+    return PurePath(name).suffix.lower()
+
+
+def _check_uploads(uploads: Sequence[Upload]) -> None:
+    if len(uploads) > MAX_FILES:
+        raise ChatError(f"A message can have at most {MAX_FILES} photos or files.")
+    for upload in uploads:
+        name = _clean_name(upload.name)
+        if len(upload.data) > MAX_FILE_BYTES:
+            raise ChatError(f"{name} is larger than 10 MB.")
+        if not upload.data:
+            raise ChatError(f"{name} is empty.")
+        if _extension(name) in REFUSED_EXTENSIONS or upload.data.startswith(
+            PROGRAM_SIGNATURES
+        ):
+            raise ChatError(f"{name} is a program, and programs can't be sent.")
+
+
+def _media_type(name: str, data: bytes) -> str:
+    """An image type only when the bytes really are that photo format."""
+    kind, start = IMAGE_TYPES.get(_extension(name), (OTHER_FILE, None))
+    if start is None or not data.startswith(start):
+        return OTHER_FILE
+    if kind == "image/webp" and data[8:12] != b"WEBP":
+        return OTHER_FILE
+    return kind
+
+
+def _file_path(files_dir: Path, project_id: int, file_id: int) -> Path:
+    # Never the uploaded name, so nothing outside the folder can be written.
+    return files_dir / str(project_id) / str(file_id)
+
+
+def _attach(
+    session: Session, files_dir: Path | None, message: ChatMessage, uploads
+) -> list[Path]:
+    """Add the uploads to the message and write them; the paths written."""
+    assert files_dir is not None, "files_dir is needed for uploads"
+    rows = []
+    for upload in uploads:
+        name = _clean_name(upload.name)
+        row = ChatFile(
+            name=name,
+            size=len(upload.data),
+            media_type=_media_type(name, upload.data),
+        )
+        message.files.append(row)
+        rows.append((row, upload.data))
+    session.flush()
+    written: list[Path] = []
+    try:
+        for row, data in rows:
+            path = _file_path(files_dir, message.project_id, row.id)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            # Written under another name first, so a failed write leaves no file.
+            partial = path.with_name(f"{row.id}.partial")
+            partial.write_bytes(data)
+            partial.replace(path)
+            written.append(path)
+    except OSError:
+        for path in written:
+            path.unlink(missing_ok=True)
+        raise
+    return written
+
+
+def read_file(
+    session: Session, files_dir: Path, user: User, file_id: int
+) -> tuple[ChatFile, bytes]:
+    """A file and its bytes, for whoever can read its Chat."""
+    found = session.get(ChatFile, file_id)
+    message = session.get(ChatMessage, found.message_id) if found else None
+    if found is None or message is None:
+        raise ChatNotFoundError("This file doesn't exist (any more).")
+    readable_project(session, user, message.project_id)
+    path = _file_path(files_dir, message.project_id, found.id)
+    if not path.is_file():
+        raise ChatNotFoundError("This file doesn't exist (any more).")
+    return found, path.read_bytes()
+
+
+def discard_files(files_dir: Path, project_id: int) -> None:
+    """Delete the Chat files of a deleted Project."""
+    shutil.rmtree(files_dir / str(project_id), ignore_errors=True)
