@@ -710,6 +710,21 @@ async def edit_chat_message(token: str, message_id: int, body: str) -> dict[str,
     )
 
 
+async def add_chat_reaction(token: str, message_id: int, emoji: str) -> dict[str, Any]:
+    """One of 👍 ❤️ 😂 😮 😢 🎉; returns the message with its reactions."""
+    return await _request(
+        "PUT", f"/api/chat/messages/{message_id}/reactions/{emoji}", token=token
+    )
+
+
+async def remove_chat_reaction(
+    token: str, message_id: int, emoji: str
+) -> dict[str, Any]:
+    return await _request(
+        "DELETE", f"/api/chat/messages/{message_id}/reactions/{emoji}", token=token
+    )
+
+
 async def delete_chat_message(token: str, message_id: int) -> None:
     await _request("DELETE", f"/api/chat/messages/{message_id}", token=token)
 

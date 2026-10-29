@@ -95,7 +95,11 @@ def test_other_students_have_no_access(client: TestClient):
     response = client.get(f"/api/projects/{drone}/chat/messages", headers=outsider)
     assert response.status_code == 403
     assert response.json()["detail"] == "You don't have access to this chat."
-    assert unread(client, outsider) == {"count": 0, "has_chat": False}
+    assert unread(client, outsider) == {
+        "count": 0,
+        "has_chat": False,
+        "mentioned": False,
+    }
 
 
 def test_a_removed_member_loses_access_and_a_new_one_sees_the_history(
@@ -127,13 +131,19 @@ def test_unread_counts_follow_reading(client: TestClient):
     last = send(client, student, drone, "Two").json()["id"]
 
     # The sender has nothing Unread; the Product Owner has both messages.
-    assert unread(client, student) == {"count": 0, "has_chat": True}
-    assert unread(client, teacher) == {"count": 2, "has_chat": True}
+    assert unread(client, student) == {"count": 0, "has_chat": True, "mentioned": False}
+    assert unread(client, teacher) == {"count": 2, "has_chat": True, "mentioned": False}
     # The Superuser isn't one of the Chat people: listed, not in the badge.
     assert unread(client, superuser)["count"] == 0
     listed = client.get("/api/chats", headers=superuser).json()
     assert listed == [
-        {"project_id": drone, "title": "Drone", "unread": 2, "mine": False}
+        {
+            "project_id": drone,
+            "title": "Drone",
+            "unread": 2,
+            "mine": False,
+            "mentioned": False,
+        }
     ]
 
     read = client.post(

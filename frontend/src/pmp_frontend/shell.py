@@ -104,7 +104,12 @@ def _unread_badge(link: ui.link, *, hide_without_chat: bool) -> None:
     seconds; hidden while there are none."""
     with link:
         badge = ui.badge(color="primary").props("rounded").mark("chat-badge")
+        # Red @ while an Unread message mentions the User.
+        mentioned = (
+            ui.badge("@", color="primary").props("rounded outline").mark("chat-mention")
+        )
     badge.set_visibility(False)
+    mentioned.set_visibility(False)
     if hide_without_chat:
         link.set_visibility(False)
 
@@ -115,6 +120,7 @@ def _unread_badge(link: ui.link, *, hide_without_chat: bool) -> None:
             return
         badge.text = str(unread["count"])
         badge.set_visibility(unread["count"] > 0)
+        mentioned.set_visibility(unread["mentioned"])
         if hide_without_chat:
             link.set_visibility(unread["has_chat"])
 
