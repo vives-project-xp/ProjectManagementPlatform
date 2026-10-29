@@ -120,6 +120,14 @@ _Avoid_: Forum, channel, conversation, group
 A photo or other file attached to a Chat message: up to 5 per message, 10 MB each, never a program (.exe, .bat, .sh, .apk, …). Photos (JPG, PNG, WebP, GIF) show as thumbnails that open full size; other files are downloads with their name and size. Only people who can read the Chat get them; they are in the nightly backup, and deleting the Project deletes them.
 _Avoid_: Attachment, upload, media
 
+**Reply**:
+A Chat message that answers another one in the same Chat; it shows a quote of the original (its author and first line) that scrolls to it when clicked.
+_Avoid_: Thread, quote-reply
+
+**Deleted message**:
+A Chat message removed by its author, or by a Teacher or the Superuser (moderation): its text and files are gone, but it stays in the Chat as "This message was deleted.", and so do quotes of it. Authors can also edit their own messages, shown "(edited)".
+_Avoid_: Removed message, hidden message
+
 **Chat people**:
 Whom a Project's Chat is for: its Members, its Product Owner and its Guests. Only they count for the Unread badge; a Member who is removed or moved loses access to the Chat at once, and a new Member sees its whole history.
 _Avoid_: Participants, chat members

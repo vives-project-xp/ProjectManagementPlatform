@@ -39,8 +39,8 @@ def send(client: TestClient, headers, project_id: int, body: str):
     )
 
 
-def bodies(client: TestClient, headers, project_id: int, after=None) -> list[str]:
-    params = {} if after is None else {"after": after}
+def bodies(client: TestClient, headers, project_id: int, since=None) -> list[str]:
+    params = {} if since is None else {"since": since}
     response = client.get(
         f"/api/projects/{project_id}/chat/messages", params=params, headers=headers
     )
@@ -72,7 +72,7 @@ def test_the_team_and_staff_talk_in_the_project_chat(client: TestClient):
         "I do. See https://vives.be",
         "Good luck!",
     ]
-    assert bodies(client, teacher, drone, after=first.json()["id"]) == [
+    assert bodies(client, teacher, drone, since=first.json()["revision"]) == [
         "I do. See https://vives.be",
         "Good luck!",
     ]

@@ -13,6 +13,9 @@ from pmp_backend.services import chat
 
 router = APIRouter(prefix="/api", tags=["chat"])
 
+# The longest first line a quote shows.
+QUOTE_LENGTH = 100
+
 
 class ChatOut(BaseModel):
     project_id: int
@@ -52,27 +55,77 @@ class FileOut(BaseModel):
         )
 
 
+def _author_name(message: ChatMessage) -> str:
+    return message.author.full_name if message.author else "Deleted user"
+
+
+class QuoteOut(BaseModel):
+    """The message a reply answers: its author and first line."""
+
+    id: int
+    author_name: str
+    # Empty when it was deleted.
+    first_line: str
+    deleted: bool
+
+    @classmethod
+    def of(cls, message: ChatMessage) -> "QuoteOut":
+        lines = message.body.splitlines()
+        first = lines[0] if lines else ""
+        if not first and message.files:
+            first = message.files[0].name
+        if len(first) > QUOTE_LENGTH:
+            first = first[: QUOTE_LENGTH - 1].rstrip() + "…"
+        return cls(
+            id=message.id,
+            author_name=_author_name(message),
+            first_line=first,
+            deleted=message.deleted_at is not None,
+        )
+
+
 class MessageOut(BaseModel):
     id: int
     # None: a Deleted User.
     author: PersonOut | None
-    # Empty when the message is only photos or files.
+    # Empty when the message is only photos or files, or was deleted.
     body: str
     files: list[FileOut]
     created_at: datetime
     mine: bool
+    # Grows with every change; ask for messages `since` the highest one seen.
+    revision: int
+    edited: bool
+    deleted: bool
+    # The message this one replies to; None when it isn't a reply.
+    reply_to: QuoteOut | None
+    # What the User may do with it (Archived Chats aside: they are read-only).
+    can_edit: bool
+    can_delete: bool
 
     @classmethod
     def of(cls, message: ChatMessage, user: User) -> "MessageOut":
         author = message.author
+        mine = message.author_id == user.id
+        deleted = message.deleted_at is not None
         return cls(
             id=message.id,
             author=PersonOut.of(author) if author else None,
             body=message.body,
             files=[FileOut.of(file) for file in message.files],
             created_at=message.created_at,
-            mine=message.author_id == user.id,
+            mine=mine,
+            revision=message.revision,
+            edited=message.edited_at is not None,
+            deleted=deleted,
+            reply_to=QuoteOut.of(message.reply_to) if message.reply_to else None,
+            can_edit=mine and not deleted,
+            can_delete=(mine or chat.is_staff(user)) and not deleted,
         )
+
+
+class EditIn(BaseModel):
+    body: str
 
 
 class ReadIn(BaseModel):
@@ -151,10 +204,11 @@ def list_messages(
     project_id: int,
     session: SessionDep,
     user: CurrentUserDep,
-    after: int | None = None,
+    since: int | None = None,
 ) -> list[MessageOut]:
-    """Oldest first: every message after `after`, or the newest ones."""
-    found = chat.messages(session, user, project_id, after)
+    """The newest messages, oldest first; with `since` (a revision): every
+    message sent, edited or deleted after it, in the order they changed."""
+    found = chat.messages(session, user, project_id, since)
     return [MessageOut.of(message, user) for message in found]
 
 
@@ -168,8 +222,10 @@ def send_message(
     user: CurrentUserDep,
     body: Annotated[str, Form()] = "",
     files: Annotated[list[UploadFile], File()] = [],  # noqa: B006
+    reply_to_id: Annotated[int | None, Form()] = None,
 ) -> MessageOut:
-    """A form with the text in `body` and up to 5 photos or files in `files`."""
+    """A form with the text in `body`, up to 5 photos or files in `files`, and
+    optionally the message it replies to in `reply_to_id`."""
     if len(files) > chat.MAX_FILES:
         # Refused before reading any of them.
         uploads = [chat.Upload(file.filename or "file", b"") for file in files]
@@ -182,9 +238,32 @@ def send_message(
             for file in files
         ]
     message = chat.send(
-        session, user, project_id, body, uploads, settings.chat_files_dir
+        session,
+        user,
+        project_id,
+        body,
+        uploads,
+        settings.chat_files_dir,
+        reply_to_id=reply_to_id,
     )
     return MessageOut.of(message, user)
+
+
+@router.put("/chat/messages/{message_id}")
+def edit_message(
+    message_id: int, body: EditIn, session: SessionDep, user: CurrentUserDep
+) -> MessageOut:
+    """Your own messages only."""
+    return MessageOut.of(chat.edit(session, user, message_id, body.body), user)
+
+
+@router.delete("/chat/messages/{message_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_message(
+    message_id: int, session: SessionDep, settings: SettingsDep, user: CurrentUserDep
+) -> Response:
+    """Your own messages; Teachers and the Superuser delete any message."""
+    chat.delete(session, settings.chat_files_dir, user, message_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/chat-files/{file_id}")

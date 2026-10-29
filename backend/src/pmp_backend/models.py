@@ -7,6 +7,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
+    Sequence,
     SmallInteger,
     String,
     Text,
@@ -315,13 +316,20 @@ class DailyEmailSent(Base):
     day: Mapped[date] = mapped_column(Date, primary_key=True)
 
 
+# Numbers every change to a Chat message (sent, edited, deleted), so an open
+# Chat can ask for everything that changed since the last number it saw.
+chat_revision = Sequence("chat_revision")
+
+
 class ChatMessage(Base):
     """A message in a Project's Chat (spec #91). A Deleted User leaves
-    `author_id` null: shown as "Deleted user"."""
+    `author_id` null: shown as "Deleted user". A deleted message keeps its row
+    (without text or files), so replies can say the original was deleted."""
 
     __tablename__ = "chat_messages"
     __table_args__ = (
         CheckConstraint("char_length(body) <= 4000", name="ck_chat_messages_length"),
+        Index("ix_chat_messages_project_revision", "project_id", "revision"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -332,13 +340,24 @@ class ChatMessage(Base):
         ForeignKey("users.id", ondelete="SET NULL")
     )
     body: Mapped[str] = mapped_column(Text)
+    reply_to_id: Mapped[int | None] = mapped_column(
+        ForeignKey("chat_messages.id", ondelete="SET NULL")
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+    edited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revision: Mapped[int] = mapped_column(
+        BigInteger, chat_revision, server_default=chat_revision.next_value()
+    )
 
     author: Mapped[User | None] = relationship(lazy="joined")
+    reply_to: Mapped["ChatMessage | None"] = relationship(
+        remote_side="ChatMessage.id", lazy="joined", join_depth=1
+    )
     files: Mapped[list["ChatFile"]] = relationship(
-        lazy="selectin", order_by="ChatFile.id"
+        lazy="selectin", order_by="ChatFile.id", cascade="all, delete-orphan"
     )
 
 
