@@ -240,6 +240,7 @@ Newest first. "Live" means deployed to the VIVES VM by the Deploy workflow. "Mig
 | | What | Issue | PR |
 |---|---|---|---|
 | New | **Chat photos and files:** up to 5 per message, 10 MB each, programs refused; photos as thumbnails that open full size, other files as downloads with their size; a message may be files only; volume `chat-files`, in the nightly backup and the restore test; migration `0016` | #94 | #102 |
+| New | Weekly scrum notes of the team in `Scrum/scrum.md` (newest week on top) | – | #103 |
 
 ### 2026-10-22: Project chat (spec #91)
 
