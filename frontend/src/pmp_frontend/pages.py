@@ -83,9 +83,11 @@ def register_pages() -> None:
 
         dev_users = await api.dev_login_users()
 
-        with frame("Log in"):
-            ui.label("Project Management Platform").classes("text-h4")
-            ui.label("VIVES Project Experience").classes("text-subtitle1")
+        # Everything centered on the page (#108).
+        with frame("Log in"), ui.column().classes("w-full items-center gap-6 pt-8"):
+            with ui.column().classes("items-center gap-1 text-center"):
+                ui.label("Project Management Platform").classes("text-h4")
+                ui.label("VIVES Project Experience").classes("text-subtitle1")
             with ui.card().classes("w-full max-w-md"):
                 ui.label("Log in").classes("text-h6")
                 if expired:
@@ -103,7 +105,7 @@ def register_pages() -> None:
                     .on("keydown.enter", submit)
                 )
                 error_message = ErrorMessage()
-                ui.button("Log in", on_click=submit).mark("log-in")
+                ui.button("Log in", on_click=submit).classes("w-full").mark("log-in")
             if dev_users:
                 with ui.card().classes("w-full max-w-md"):
                     ui.label("Test login").classes("text-h6")
