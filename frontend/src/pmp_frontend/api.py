@@ -704,6 +704,37 @@ async def send_chat_message(
     )
 
 
+async def chat_updates(token: str, project_id: int, since: int) -> dict[str, Any]:
+    """What changed since revision `since`: messages, typing (first names) and
+    reads (name, last_read_id of the other Chat people)."""
+    return await _request(
+        "GET", f"/api/projects/{project_id}/chat/updates?since={since}", token=token
+    )
+
+
+async def chat_typing(token: str, project_id: int) -> None:
+    await _request("POST", f"/api/projects/{project_id}/chat/typing", token=token)
+
+
+async def search_chat(
+    token: str,
+    project_id: int,
+    text: str,
+    *,
+    author_id: int | None = None,
+    files_only: bool = False,
+) -> list[dict[str, Any]]:
+    """Messages whose text or file names contain `text`, newest first."""
+    params: dict[str, Any] = {"q": text, "files_only": str(files_only).lower()}
+    if author_id is not None:
+        params["from"] = author_id
+    return await _request(
+        "GET",
+        f"/api/projects/{project_id}/chat/search?{urlencode(params)}",
+        token=token,
+    )
+
+
 async def edit_chat_message(token: str, message_id: int, body: str) -> dict[str, Any]:
     return await _request(
         "PUT", f"/api/chat/messages/{message_id}", token=token, json={"body": body}

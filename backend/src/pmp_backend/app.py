@@ -23,6 +23,7 @@ from pmp_backend.database import is_reachable, make_engine
 from pmp_backend.errors import Conflict, Forbidden, NotFound, Refused, Unavailable
 from pmp_backend.services import daily_email, mail
 from pmp_backend.services.auth import LoginGuard
+from pmp_backend.services.chat import TypingBoard
 from pmp_backend.services.github import HttpGitHub
 from pmp_backend.services.seeding import seed_starting_accounts
 from pmp_backend.services.trello import HttpTrello
@@ -55,6 +56,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = settings
     app.state.sessionmaker = make_session
     app.state.login_guard = LoginGuard()
+    # "Is typing…" in the Chats (in memory, like the LoginGuard).
+    app.state.chat_typing = TypingBoard()
     # Tests replace it with testing.FakeGitHub.
     app.state.github = HttpGitHub(settings)
     # Tests replace it with testing.FakeTrello.

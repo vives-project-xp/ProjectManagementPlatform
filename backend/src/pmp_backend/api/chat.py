@@ -2,8 +2,19 @@ from datetime import datetime
 from typing import Annotated
 from urllib.parse import quote
 
-from fastapi import APIRouter, File, Form, Response, UploadFile, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    Query,
+    Request,
+    Response,
+    UploadFile,
+    status,
+)
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
 from pmp_backend.api.deps import CurrentUserDep, SessionDep, SettingsDep
 from pmp_backend.api.schemas import PersonOut
@@ -128,15 +139,29 @@ class MessageOut(BaseModel):
     reactions: list[ReactionOut]
     # It mentions the User (@name or @team): shown highlighted.
     mentions_me: bool
+    # On the User's own messages: the Chat people who have read it (staff who
+    # only read along don't count). None on others' and deleted messages.
+    seen_by: list[str] | None
     # What the User may do with it (Archived Chats aside: they are read-only).
     can_edit: bool
     can_delete: bool
 
     @classmethod
-    def of(cls, message: ChatMessage, user: User) -> "MessageOut":
+    def of(
+        cls,
+        message: ChatMessage,
+        user: User,
+        marks: list[tuple[User, int]] | None = None,
+    ) -> "MessageOut":
+        """`marks`: chat.read_marks of the message's Chat, for `seen_by`."""
         author = message.author
         mine = message.author_id == user.id
         deleted = message.deleted_at is not None
+        seen_by = None
+        if mine and not deleted:
+            seen_by = [
+                person.full_name for person, last in marks or [] if last >= message.id
+            ]
         return cls(
             id=message.id,
             author=PersonOut.of(author) if author else None,
@@ -150,6 +175,7 @@ class MessageOut(BaseModel):
             reply_to=QuoteOut.of(message.reply_to) if message.reply_to else None,
             reactions=_reactions(message, user),
             mentions_me=any(m.user_id == user.id for m in message.mentions),
+            seen_by=seen_by,
             can_edit=mine and not deleted,
             can_delete=(mine or chat.is_staff(user)) and not deleted,
         )
@@ -157,6 +183,43 @@ class MessageOut(BaseModel):
 
 class EditIn(BaseModel):
     body: str
+
+
+class ReadMarkOut(BaseModel):
+    """How far one of the Chat people has read: the last message id they saw."""
+
+    name: str
+    last_read_id: int
+
+
+class UpdatesOut(BaseModel):
+    """What an open Chat asks for every ~2 seconds (ADR 0008)."""
+
+    # Sent, edited or deleted since the revision asked for.
+    messages: list["MessageOut"]
+    # First names of the others typing now: "Anna is typing…".
+    typing: list[str]
+    # The other Chat people's read marks, to keep "Seen by" up to date.
+    reads: list[ReadMarkOut]
+
+
+def _out(
+    session: Session, user: User, project_id: int, messages: list[ChatMessage]
+) -> list[MessageOut]:
+    """The messages of one Chat, with "Seen by" on the User's own."""
+    marks = chat.read_marks(session, user, project_id)
+    return [MessageOut.of(message, user, marks) for message in messages]
+
+
+def _one(session: Session, user: User, message: ChatMessage) -> MessageOut:
+    return _out(session, user, message.project_id, [message])[0]
+
+
+def get_typing(request: Request) -> chat.TypingBoard:
+    return request.app.state.chat_typing
+
+
+TypingDep = Annotated[chat.TypingBoard, Depends(get_typing)]
 
 
 class ReadIn(BaseModel):
@@ -244,7 +307,55 @@ def list_messages(
     """The newest messages, oldest first; with `since` (a revision): every
     message sent, edited or deleted after it, in the order they changed."""
     found = chat.messages(session, user, project_id, since)
-    return [MessageOut.of(message, user) for message in found]
+    return _out(session, user, project_id, found)
+
+
+@router.get("/projects/{project_id}/chat/updates")
+def updates(
+    project_id: int,
+    since: int,
+    session: SessionDep,
+    user: CurrentUserDep,
+    board: TypingDep,
+) -> UpdatesOut:
+    """Messages changed since revision `since`, who is typing and how far the
+    others have read."""
+    found = chat.messages(session, user, project_id, since)
+    marks = chat.read_marks(session, user, project_id)
+    return UpdatesOut(
+        messages=[MessageOut.of(message, user, marks) for message in found],
+        typing=board.names(project_id, user),
+        reads=[
+            ReadMarkOut(name=person.full_name, last_read_id=last)
+            for person, last in marks
+        ],
+    )
+
+
+@router.post(
+    "/projects/{project_id}/chat/typing", status_code=status.HTTP_204_NO_CONTENT
+)
+def typing(
+    project_id: int, session: SessionDep, user: CurrentUserDep, board: TypingDep
+) -> Response:
+    """Send while typing (every few seconds); shown to the others for 5 s."""
+    chat.typing(session, board, user, project_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/projects/{project_id}/chat/search")
+def search(
+    project_id: int,
+    session: SessionDep,
+    user: CurrentUserDep,
+    q: str = "",
+    from_: Annotated[int | None, Query(alias="from")] = None,
+    files_only: bool = False,
+) -> list[MessageOut]:
+    """Text and file names containing `q`, by person `from` (a user id), only
+    messages with files; newest first, at most 50."""
+    found = chat.search(session, user, project_id, q, from_, files_only)
+    return _out(session, user, project_id, found)
 
 
 @router.post(
@@ -258,6 +369,8 @@ def send_message(
     body: Annotated[str, Form()] = "",
     files: Annotated[list[UploadFile], File()] = [],  # noqa: B006
     reply_to_id: Annotated[int | None, Form()] = None,
+    *,
+    board: TypingDep,
 ) -> MessageOut:
     """A form with the text in `body`, up to 5 photos or files in `files`, and
     optionally the message it replies to in `reply_to_id`."""
@@ -281,7 +394,8 @@ def send_message(
         settings.chat_files_dir,
         reply_to_id=reply_to_id,
     )
-    return MessageOut.of(message, user)
+    board.stopped(project_id, user.id)
+    return _one(session, user, message)
 
 
 @router.put("/chat/messages/{message_id}")
@@ -289,7 +403,7 @@ def edit_message(
     message_id: int, body: EditIn, session: SessionDep, user: CurrentUserDep
 ) -> MessageOut:
     """Your own messages only."""
-    return MessageOut.of(chat.edit(session, user, message_id, body.body), user)
+    return _one(session, user, chat.edit(session, user, message_id, body.body))
 
 
 @router.put("/chat/messages/{message_id}/reactions/{emoji}")
@@ -298,7 +412,7 @@ def add_reaction(
 ) -> MessageOut:
     """One of 👍 ❤️ 😂 😮 😢 🎉; adding it again changes nothing."""
     message = chat.react(session, user, message_id, emoji, on=True)
-    return MessageOut.of(message, user)
+    return _one(session, user, message)
 
 
 @router.delete("/chat/messages/{message_id}/reactions/{emoji}")
@@ -306,7 +420,7 @@ def remove_reaction(
     message_id: int, emoji: str, session: SessionDep, user: CurrentUserDep
 ) -> MessageOut:
     message = chat.react(session, user, message_id, emoji, on=False)
-    return MessageOut.of(message, user)
+    return _one(session, user, message)
 
 
 @router.delete("/chat/messages/{message_id}", status_code=status.HTTP_204_NO_CONTENT)
