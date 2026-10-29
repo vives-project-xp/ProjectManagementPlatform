@@ -124,6 +124,14 @@ _Avoid_: Attachment, upload, media
 A Chat message that answers another one in the same Chat; it shows a quote of the original (its author and first line) that scrolls to it when clicked.
 _Avoid_: Thread, quote-reply
 
+**Mention**:
+"@First Last" of one of a Chat's Chat people, or "@team" for all its Members, in a Chat message (typing @ suggests them). The mentioned person sees the message highlighted, and the Chat gets a red @ marker (navigation and Chats screen) until they have read past it. Teachers and the Superuser who only read along can't be mentioned; there are no emails.
+_Avoid_: Tag, ping, notification
+
+**Reaction**:
+One of six emoji (👍 ❤️ 😂 😮 😢 🎉) a User adds to a Chat message, shown with a count and, on hover, the names; several per person, and clicking your own takes it back.
+_Avoid_: Like, emoji vote
+
 **Deleted message**:
 A Chat message removed by its author, or by a Teacher or the Superuser (moderation): its text and files are gone, but it stays in the Chat as "This message was deleted.", and so do quotes of it. Authors can also edit their own messages, shown "(edited)".
 _Avoid_: Removed message, hidden message

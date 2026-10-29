@@ -42,6 +42,8 @@ _HEAD_HTML = f"""
      between words; columns with BREAK_ANYWHERE (email addresses) anywhere. */
   .q-table td {{ white-space: normal; }}
   .q-table td.break-anywhere {{ overflow-wrap: anywhere; }}
+  /* Links in Chat messages look like links (text colour, underlined). */
+  .chat-text a {{ color: inherit; text-decoration: underline; }}
 </style>
 """
 

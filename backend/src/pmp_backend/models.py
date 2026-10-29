@@ -359,6 +359,14 @@ class ChatMessage(Base):
     files: Mapped[list["ChatFile"]] = relationship(
         lazy="selectin", order_by="ChatFile.id", cascade="all, delete-orphan"
     )
+    reactions: Mapped[list["ChatReaction"]] = relationship(
+        lazy="selectin",
+        order_by="ChatReaction.created_at",
+        cascade="all, delete-orphan",
+    )
+    mentions: Mapped[list["ChatMention"]] = relationship(
+        lazy="selectin", cascade="all, delete-orphan"
+    )
 
 
 class ChatFile(Base):
@@ -375,6 +383,49 @@ class ChatFile(Base):
     size: Mapped[int]
     # An image/... type for accepted photos; otherwise application/octet-stream.
     media_type: Mapped[str] = mapped_column(String(100))
+
+
+# The six emoji a Chat message can get as a reaction, in the order shown.
+CHAT_REACTIONS = ("👍", "❤️", "😂", "😮", "😢", "🎉")
+
+
+class ChatReaction(Base):
+    """One User's emoji reaction to a Chat message; several per User allowed."""
+
+    __tablename__ = "chat_reactions"
+    __table_args__ = (
+        CheckConstraint(
+            "emoji IN (" + ", ".join(f"'{e}'" for e in CHAT_REACTIONS) + ")",
+            name="ck_chat_reactions_emoji",
+        ),
+    )
+
+    message_id: Mapped[int] = mapped_column(
+        ForeignKey("chat_messages.id", ondelete="CASCADE"), primary_key=True
+    )
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    emoji: Mapped[str] = mapped_column(String(8), primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    user: Mapped[User] = relationship(lazy="joined")
+
+
+class ChatMention(Base):
+    """A Chat person mentioned in a message (@name, or @team for every Member
+    at the time it was sent or edited)."""
+
+    __tablename__ = "chat_mentions"
+
+    message_id: Mapped[int] = mapped_column(
+        ForeignKey("chat_messages.id", ondelete="CASCADE"), primary_key=True
+    )
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True, index=True
+    )
 
 
 class ChatRead(Base):

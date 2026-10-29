@@ -42,14 +42,14 @@ def test_staff_add_a_guest_who_then_reads_writes_and_leaves(client: TestClient):
     chat = client.get(f"/api/projects/{drone}/chat", headers=lotte).json()
     assert chat["is_guest"] is True and chat["can_manage_guests"] is False
     # A Guest sees the whole history and counts the chat as theirs.
-    assert unread(client, lotte) == {"count": 1, "has_chat": True}
+    assert unread(client, lotte) == {"count": 1, "has_chat": True, "mentioned": False}
     assert send(client, lotte, drone, "Hi, I'm helping out").status_code == 201
 
     left = client.delete(f"{guests_url(drone)}/{lotte_id}", headers=lotte)
 
     assert left.status_code == 204
     assert send(client, lotte, drone, "Still here?").status_code == 403
-    assert unread(client, lotte) == {"count": 0, "has_chat": False}
+    assert unread(client, lotte) == {"count": 0, "has_chat": False, "mentioned": False}
 
 
 def test_members_cannot_add_or_remove_guests(client: TestClient):

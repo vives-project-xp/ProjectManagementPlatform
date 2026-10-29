@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from pmp_backend.api.deps import CurrentUserDep, SessionDep, SettingsDep
 from pmp_backend.api.schemas import PersonOut
 from pmp_backend.domain import ProjectStatus
-from pmp_backend.models import ChatFile, ChatMessage, User
+from pmp_backend.models import CHAT_REACTIONS, ChatFile, ChatMessage, User
 from pmp_backend.services import chat
 
 router = APIRouter(prefix="/api", tags=["chat"])
@@ -84,6 +84,32 @@ class QuoteOut(BaseModel):
         )
 
 
+class ReactionOut(BaseModel):
+    emoji: str
+    count: int
+    # Who reacted, shown on hover.
+    names: list[str]
+    # The User reacted with it; clicking takes it back.
+    mine: bool
+
+
+def _reactions(message: ChatMessage, user: User) -> list[ReactionOut]:
+    """The message's reactions in the fixed order, only those someone gave."""
+    found = []
+    for emoji in CHAT_REACTIONS:
+        given = [r for r in message.reactions if r.emoji == emoji]
+        if given:
+            found.append(
+                ReactionOut(
+                    emoji=emoji,
+                    count=len(given),
+                    names=[r.user.full_name for r in given],
+                    mine=any(r.user_id == user.id for r in given),
+                )
+            )
+    return found
+
+
 class MessageOut(BaseModel):
     id: int
     # None: a Deleted User.
@@ -99,6 +125,9 @@ class MessageOut(BaseModel):
     deleted: bool
     # The message this one replies to; None when it isn't a reply.
     reply_to: QuoteOut | None
+    reactions: list[ReactionOut]
+    # It mentions the User (@name or @team): shown highlighted.
+    mentions_me: bool
     # What the User may do with it (Archived Chats aside: they are read-only).
     can_edit: bool
     can_delete: bool
@@ -119,6 +148,8 @@ class MessageOut(BaseModel):
             edited=message.edited_at is not None,
             deleted=deleted,
             reply_to=QuoteOut.of(message.reply_to) if message.reply_to else None,
+            reactions=_reactions(message, user),
+            mentions_me=any(m.user_id == user.id for m in message.mentions),
             can_edit=mine and not deleted,
             can_delete=(mine or chat.is_staff(user)) and not deleted,
         )
@@ -137,12 +168,16 @@ class ChatSummaryOut(BaseModel):
     title: str
     unread: int
     mine: bool
+    # An Unread message mentions the User: the red @ marker.
+    mentioned: bool
 
 
 class UnreadOut(BaseModel):
     count: int
     # Whether the User has any Chat (Students without a Project have none).
     has_chat: bool
+    # An Unread message in one of their Chats mentions them.
+    mentioned: bool
 
 
 @router.get("/projects/{project_id}/chat")
@@ -257,6 +292,23 @@ def edit_message(
     return MessageOut.of(chat.edit(session, user, message_id, body.body), user)
 
 
+@router.put("/chat/messages/{message_id}/reactions/{emoji}")
+def add_reaction(
+    message_id: int, emoji: str, session: SessionDep, user: CurrentUserDep
+) -> MessageOut:
+    """One of 👍 ❤️ 😂 😮 😢 🎉; adding it again changes nothing."""
+    message = chat.react(session, user, message_id, emoji, on=True)
+    return MessageOut.of(message, user)
+
+
+@router.delete("/chat/messages/{message_id}/reactions/{emoji}")
+def remove_reaction(
+    message_id: int, emoji: str, session: SessionDep, user: CurrentUserDep
+) -> MessageOut:
+    message = chat.react(session, user, message_id, emoji, on=False)
+    return MessageOut.of(message, user)
+
+
 @router.delete("/chat/messages/{message_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_message(
     message_id: int, session: SessionDep, settings: SettingsDep, user: CurrentUserDep
@@ -312,6 +364,7 @@ def list_chats(
             title=summary.title,
             unread=summary.unread,
             mine=summary.mine,
+            mentioned=summary.mentioned,
         )
         for summary in chat.chats(session, user, mine=mine)
     ]
@@ -319,5 +372,7 @@ def list_chats(
 
 @router.get("/chats/unread")
 def unread(session: SessionDep, user: CurrentUserDep) -> UnreadOut:
-    count, has_chat = chat.unread_total(session, user)
-    return UnreadOut(count=count, has_chat=has_chat)
+    total = chat.unread_total(session, user)
+    return UnreadOut(
+        count=total.count, has_chat=total.has_chat, mentioned=total.mentioned
+    )

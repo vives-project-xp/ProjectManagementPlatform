@@ -71,7 +71,13 @@ async def test_a_student_guest_chats_and_leaves(user: User):
 
     await user.should_see("You left the chat.", retries=30)
     assert await api.chats(superuser) == [
-        {"project_id": drone, "title": "Drone", "unread": 0, "mine": False}
+        {
+            "project_id": drone,
+            "title": "Drone",
+            "unread": 0,
+            "mine": False,
+            "mentioned": False,
+        }
     ]
 
 

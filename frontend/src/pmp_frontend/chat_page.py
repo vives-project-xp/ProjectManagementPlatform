@@ -39,25 +39,59 @@ CHATS_COLUMNS = [
     {"name": "title", "label": "Project", "field": "title", "align": "left"},
     {"name": "unread", "label": "Unread", "field": "unread", "align": "left"},
 ]
+# The Unread count, with a red @ while an Unread message mentions the User.
 UNREAD_CELL = """
 <q-td :props="props">
   <q-badge v-if="props.value > 0" color="primary" :label="props.value" />
+  <q-badge v-if="props.row.mentioned" outline color="primary" label="@"
+           class="q-ml-xs" />
 </q-td>
 """
+# The six reactions, in the order shown, with the names used in markers.
+REACTIONS = {
+    "👍": "thumbs-up",
+    "❤️": "heart",
+    "😂": "laugh",
+    "😮": "wow",
+    "😢": "sad",
+    "🎉": "party",
+}
+# "@" and what was typed after it, at the end of the text box.
+TYPING_MENTION = re.compile(r"(?:^|\s)@([^@\n]{0,40})$")
 
 
-def linked(text: str) -> str:
-    """A message as HTML: escaped, with its web links clickable (new tab)."""
+def _with_mentions(text: str, names: list[str]) -> str:
+    """Plain text as HTML, with @team and @<name> of the Chat people in bold."""
+    if "@" not in text:
+        return html.escape(text)
+    options = sorted([*names, "team"], key=len, reverse=True)
+    pattern = re.compile(
+        "@(?:" + "|".join(re.escape(name) for name in options) + r")(?!\w)",
+        re.IGNORECASE,
+    )
+    parts = []
+    last = 0
+    for match in pattern.finditer(text):
+        parts.append(html.escape(text[last : match.start()]))
+        parts.append(f"<b>{html.escape(match.group(0))}</b>")
+        last = match.end()
+    parts.append(html.escape(text[last:]))
+    return "".join(parts)
+
+
+def linked(text: str, names: list[str] | None = None) -> str:
+    """A message as HTML: escaped, with its web links clickable (new tab) and
+    mentions of `names` (and @team) in bold."""
     parts = []
     last = 0
     for match in URL.finditer(text):
-        parts.append(html.escape(text[last : match.start()]))
+        parts.append(_with_mentions(text[last : match.start()], names or []))
         url = html.escape(match.group(0))
         parts.append(
             f'<a href="{url}" target="_blank" rel="noopener noreferrer">{url}</a>'
         )
         last = match.end()
-    parts.append(html.escape(text[last:]))
+    parts.append(_with_mentions(text[last:], names or []))
     return "".join(parts)
 
 
@@ -135,6 +169,10 @@ class _Actions:
     delete: Callable[[dict[str, Any]], Awaitable[None]]
     # Scroll to the message with this id.
     go_to: Callable[[int], None]
+    # Add (True) or take back (False) the User's reaction.
+    react: Callable[[dict[str, Any], str, bool], Awaitable[None]]
+    # The Chat people's names, for showing mentions.
+    names: list[str]
 
 
 def _quote(quote: dict[str, Any], go_to: Callable[[int], None], marker: str) -> None:
@@ -172,15 +210,64 @@ def _menu(message: dict[str, Any], actions: _Actions) -> None:
             )
 
 
+def _reactions(message: dict[str, Any], actions: _Actions) -> None:
+    """The reactions with their counts (names on hover); a click on one adds or
+    takes back yours, and the smiley adds another."""
+    number = message["id"]
+    can_react = actions.writable and not message["deleted"]
+    if not message["reactions"] and not can_react:
+        return
+    with ui.row().classes("items-center gap-1 pt-1").mark(f"reactions-{number}"):
+        for reaction in message["reactions"]:
+            emoji = reaction["emoji"]
+            button = (
+                ui.button(
+                    f"{emoji} {reaction['count']}",
+                    on_click=lambda e=emoji, m=reaction["mine"]: actions.react(
+                        message, e, not m
+                    ),
+                )
+                .props(
+                    'dense no-caps unelevated rounded padding="2px 8px" '
+                    + (
+                        "color=primary outline"
+                        if reaction["mine"]
+                        else "flat color=dark"
+                    )
+                )
+                .mark(f"reaction-{number}-{REACTIONS[emoji]}")
+            )
+            button.tooltip(", ".join(reaction["names"]))
+            button.set_enabled(can_react)
+        if can_react:
+            with (
+                ui.button(icon="add_reaction")
+                .props("flat dense round size=sm color=dark")
+                .mark(f"react-{number}"),
+                ui.menu(),
+                ui.row().classes("gap-0 p-1 no-wrap"),
+            ):
+                for emoji, name in REACTIONS.items():
+                    ui.button(
+                        emoji, on_click=lambda e=emoji: actions.react(message, e, True)
+                    ).props("flat dense size=lg").mark(f"react-{number}-{name}")
+
+
 def _message(message: dict[str, Any], actions: _Actions) -> None:
     """One message: your own on the right on sand, others' on the left."""
     mine = message["mine"]
     with ui.row().classes("w-full" + (" justify-end" if mine else "")):
         bubble = "bg-[#efeee9]" if mine else "bg-white border"
+        if message["mentions_me"]:
+            # Meant for you: a red line on the left (accent, not text colour).
+            bubble += " border-l-4 border-l-[#e00020]"
         with (
             ui.column()
             .classes(f"gap-0 max-w-[80%] rounded-lg px-3 py-2 {bubble}")
-            .mark(f"message-{message['id']}")
+            .mark(
+                f"message-{message['id']}"
+                + (f" mentioned-{message['id']}" if message["mentions_me"] else "")
+            )
         ):
             with ui.row().classes("w-full items-center gap-1 no-wrap"):
                 edited = " · (edited)" if message["edited"] else ""
@@ -199,10 +286,11 @@ def _message(message: dict[str, Any], actions: _Actions) -> None:
                 return
             if message["body"]:
                 # Escaped by `linked`, so no sanitising needed.
-                ui.html(linked(message["body"]), sanitize=False).classes(
-                    "whitespace-pre-wrap break-words"
+                ui.html(linked(message["body"], actions.names), sanitize=False).classes(
+                    "chat-text whitespace-pre-wrap break-words"
                 ).mark("message-body")
             _files(message["files"])
+            _reactions(message, actions)
 
 
 async def chat_view(project_id: int) -> None:
@@ -210,6 +298,7 @@ async def chat_view(project_id: int) -> None:
     try:
         chat = await api.chat(token(), project_id)
         first = await api.chat_messages(token(), project_id)
+        people = await api.chat_people(token(), project_id)
     except api.ApiError as error:
         ui.label(error.message)
         return
@@ -224,6 +313,8 @@ async def chat_view(project_id: int) -> None:
         "oldest": min((m["id"] for m in first), default=None),
         "empty": None,
         "reply_to": None,
+        # The text being typed, for the @ suggestions.
+        "draft": "",
     }
 
     def show(messages: list[dict[str, Any]]) -> bool:
@@ -323,13 +414,56 @@ async def chat_view(project_id: int) -> None:
             return
         await poll()
 
+    async def react(message: dict[str, Any], emoji: str, on: bool) -> None:
+        change = api.add_chat_reaction if on else api.remove_chat_reaction
+        try:
+            changed = await change(token(), message["id"], emoji)
+        except api.ApiError as error:
+            ui.notify(error.message, type="negative")
+            return
+        show([changed])
+
+    # Who can be mentioned: the Chat people (staff who only read along can't).
+    names = [person["name"] for person in people]
     actions = _Actions(
         writable=not chat["read_only"],
         reply=reply,
         edit=edit,
         delete=delete,
         go_to=go_to,
+        react=react,
+        names=names,
     )
+
+    @ui.refreshable
+    def suggestions() -> None:
+        """While "@…" is being typed: the Chat people (and team) it may mean."""
+        typing = TYPING_MENTION.search(state["draft"])
+        if typing is None:
+            return
+        typed = typing.group(1).lower()
+        options = [name for name in [*names, "team"] if name.lower().startswith(typed)]
+        if not options:
+            return
+        with ui.row().classes("w-full items-center gap-1").mark("mention-suggestions"):
+            ui.label("Mention:").classes("text-caption").style("color: #666666")
+            for name in options[:8]:
+                ui.button(f"@{name}", on_click=lambda n=name: mention(n)).props(
+                    "flat dense no-caps color=dark"
+                ).mark("mention-option")
+
+    def typed() -> None:
+        state["draft"] = box.value or ""
+        suggestions.refresh()
+
+    def mention(name: str) -> None:
+        """Put "@name " in place of the "@…" being typed."""
+        text = box.value or ""
+        typing = TYPING_MENTION.search(text)
+        if typing is not None:
+            text = text[: typing.start(1) - 1]
+        box.value = f"{text}@{name} "
+        box.run_method("focus")
 
     # Photos and files picked for the next message: (name, bytes, media type).
     pending: list[tuple[str, bytes, str]] = []
@@ -421,6 +555,7 @@ async def chat_view(project_id: int) -> None:
     else:
         replying()
         attachments()
+        suggestions()
         with ui.row().classes("w-full items-end no-wrap"):
             ui.button(
                 icon="attach_file",
@@ -453,6 +588,7 @@ async def chat_view(project_id: int) -> None:
             .mark("chat-upload")
         )
         uploader.set_visibility(False)
+        box.on_value_change(typed)
         # Enter sends; Shift+Enter starts a new line.
         box.on("keydown.enter.exact.prevent", send)
         send_error = ErrorMessage()

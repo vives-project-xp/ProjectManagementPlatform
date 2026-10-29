@@ -5,6 +5,7 @@ Teacher and the Superuser can also read and write in every Chat. Unread counts
 come from how far each User read a Chat (`ChatRead`).
 """
 
+import re
 import shutil
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -17,9 +18,12 @@ from sqlalchemy.orm import Session
 from pmp_backend.domain import ProjectStatus, Role
 from pmp_backend.errors import Conflict, Forbidden, NotFound, Refused
 from pmp_backend.models import (
+    CHAT_REACTIONS,
     ChatFile,
     ChatGuest,
+    ChatMention,
     ChatMessage,
+    ChatReaction,
     ChatRead,
     Project,
     User,
@@ -175,14 +179,54 @@ def _message_in(session: Session, user: User, message_id: int) -> ChatMessage:
     return message
 
 
-def _changed(session: Session, message: ChatMessage) -> None:
-    """Give the message a new revision, and the replies quoting it too, so open
-    Chats show the change."""
+def _changed(session: Session, message: ChatMessage, *, replies: bool = True) -> None:
+    """Give the message a new revision, and (when its text changed) the replies
+    quoting it too, so open Chats show the change."""
+    which = ChatMessage.id == message.id
+    if replies:
+        which = or_(which, ChatMessage.reply_to_id == message.id)
     session.execute(
-        update(ChatMessage)
-        .where(or_(ChatMessage.id == message.id, ChatMessage.reply_to_id == message.id))
-        .values(revision=chat_revision.next_value())
+        update(ChatMessage).where(which).values(revision=chat_revision.next_value())
     )
+
+
+def _mention(session: Session, message: ChatMessage, project: Project) -> None:
+    """Record who the message mentions: Chat people by "@First Last", and every
+    Member by "@team"; never its author."""
+    text = message.body.lower()
+    found: set[int] = set()
+    if "@" in text:
+        if re.search(r"@team(?!\w)", text):
+            found |= {member.id for member in project.members}
+        for person in _chat_people(session, project):
+            name = re.escape(person.user.full_name.lower())
+            if re.search(rf"@{name}(?!\w)", text):
+                found.add(person.user.id)
+    found.discard(message.author_id)
+    message.mentions[:] = [m for m in message.mentions if m.user_id in found]
+    known = {m.user_id for m in message.mentions}
+    message.mentions += [ChatMention(user_id=i) for i in sorted(found - known)]
+
+
+def react(
+    session: Session, user: User, message_id: int, emoji: str, *, on: bool
+) -> ChatMessage:
+    """Add (`on`) or take back the User's reaction; adding twice changes nothing."""
+    if emoji not in CHAT_REACTIONS:
+        raise ChatError("React with " + " ".join(CHAT_REACTIONS) + " only.")
+    message = _message_in(session, user, message_id)
+    mine = [r for r in message.reactions if r.user_id == user.id and r.emoji == emoji]
+    if on and not mine:
+        message.reactions.append(ChatReaction(user_id=user.id, emoji=emoji))
+    elif not on and mine:
+        message.reactions.remove(mine[0])
+    else:
+        return message
+    session.flush()
+    _changed(session, message, replies=False)
+    session.commit()
+    session.refresh(message)
+    return message
 
 
 def edit(session: Session, user: User, message_id: int, body: str) -> ChatMessage:
@@ -197,6 +241,7 @@ def edit(session: Session, user: User, message_id: int, body: str) -> ChatMessag
         raise ChatError(f"A message can be at most {MAX_LENGTH} characters.")
     message.body = body
     message.edited_at = func.now()
+    _mention(session, message, get_project(session, message.project_id))
     session.flush()
     _changed(session, message)
     session.commit()
@@ -214,6 +259,8 @@ def delete(session: Session, files_dir: Path, user: User, message_id: int) -> No
     message.body = ""
     message.deleted_at = func.now()
     message.files.clear()
+    message.reactions.clear()
+    message.mentions.clear()
     session.flush()
     _changed(session, message)
     session.commit()
@@ -250,6 +297,7 @@ def send(
         project_id=project.id, author_id=user.id, body=body, reply_to_id=reply_to_id
     )
     session.add(message)
+    _mention(session, message, project)
     session.flush()
     written = _attach(session, files_dir, message, uploads) if uploads else []
     # Your own message is never Unread for you.
@@ -293,6 +341,8 @@ class ChatSummary:
     unread: int
     # Whether it counts for the User's badge: they are one of its Chat people.
     mine: bool
+    # An Unread message mentions the User (the red @ marker).
+    mentioned: bool = False
 
 
 def _visible_projects(
@@ -309,13 +359,22 @@ def _visible_projects(
     return list(session.scalars(query.order_by(func.lower(Project.title))))
 
 
-def _unread_counts(session: Session, user: User, project_ids: list[int]) -> dict:
-    """Per Project: messages by others after the User's read mark."""
+def _unread(session: Session, user: User, project_ids: list[int]) -> dict:
+    """Per Project: how many messages by others came after the User's read
+    mark, and whether one of them mentions the User."""
     if not project_ids:
         return {}
     read_mark = func.coalesce(ChatRead.last_read_id, 0)
+    mentioned = (
+        select(ChatMention.message_id)
+        .where(
+            ChatMention.message_id == ChatMessage.id,
+            ChatMention.user_id == user.id,
+        )
+        .exists()
+    )
     rows = session.execute(
-        select(ChatMessage.project_id, func.count())
+        select(ChatMessage.project_id, func.count(), func.bool_or(mentioned))
         .outerjoin(
             ChatRead,
             and_(
@@ -331,7 +390,7 @@ def _unread_counts(session: Session, user: User, project_ids: list[int]) -> dict
         )
         .group_by(ChatMessage.project_id)
     )
-    return dict(rows.all())
+    return {project_id: (count, bool(me)) for project_id, count, me in rows.all()}
 
 
 def chats(session: Session, user: User, *, mine: bool = False) -> list[ChatSummary]:
@@ -339,26 +398,39 @@ def chats(session: Session, user: User, *, mine: bool = False) -> list[ChatSumma
     Chat people), by title, with their Unread counts."""
     guest_ids = guest_project_ids(session, user)
     projects = _visible_projects(session, user, guest_ids)
-    counts = _unread_counts(session, user, [project.id for project in projects])
+    unread = _unread(session, user, [project.id for project in projects])
     summaries = [
         ChatSummary(
             project.id,
             project.title,
-            counts.get(project.id, 0),
+            unread.get(project.id, (0, False))[0],
             is_team(user, project) or project.id in guest_ids,
+            unread.get(project.id, (0, False))[1],
         )
         for project in projects
     ]
     return [summary for summary in summaries if summary.mine or not mine]
 
 
-def unread_total(session: Session, user: User) -> tuple[int, bool]:
+@dataclass(frozen=True)
+class UnreadTotal:
+    count: int
+    # Whether the User has any Chat at all.
+    has_chat: bool
+    # An Unread message in one of them mentions the User.
+    mentioned: bool
+
+
+def unread_total(session: Session, user: User) -> UnreadTotal:
     """The badge: Unread messages in the User's own Chats (for Teachers, those
-    where they are the Product Owner or a Guest), and whether they have any Chat
-    at all."""
+    where they are the Product Owner or a Guest)."""
     summaries = chats(session, user)
     mine = [summary for summary in summaries if summary.mine]
-    return sum(summary.unread for summary in mine), bool(summaries)
+    return UnreadTotal(
+        sum(summary.unread for summary in mine),
+        bool(summaries),
+        any(summary.mentioned for summary in summaries),
+    )
 
 
 # Who is in a Chat.
@@ -375,7 +447,10 @@ class ChatPerson:
 
 def people(session: Session, user: User, project_id: int) -> list[ChatPerson]:
     """The Chat people: the Product Owner, the Members, then the Guests."""
-    project = readable_project(session, user, project_id)
+    return _chat_people(session, readable_project(session, user, project_id))
+
+
+def _chat_people(session: Session, project: Project) -> list[ChatPerson]:
     found = [ChatPerson(project.product_owner, PRODUCT_OWNER)]
     found += [ChatPerson(member, MEMBER) for member in project.members]
     if project.status == ProjectStatus.ACTIVE.value:
