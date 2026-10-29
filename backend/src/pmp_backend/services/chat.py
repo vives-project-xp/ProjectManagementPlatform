@@ -5,16 +5,21 @@ Teacher and the Superuser can also read and write in every Chat. Unread counts
 come from how far each User read a Chat (`ChatRead`).
 """
 
+import asyncio
+import logging
 import re
 import shutil
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from datetime import date, timedelta
 from pathlib import Path, PurePath
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import and_, func, or_, select, update
+from sqlalchemy import delete as delete_rows
 from sqlalchemy.dialects.postgresql import insert
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
 from pmp_backend.domain import ProjectStatus, Role
 from pmp_backend.errors import Conflict, Forbidden, NotFound, Refused
@@ -32,6 +37,9 @@ from pmp_backend.models import (
 )
 from pmp_backend.services.projects import get_project
 from pmp_backend.services.users import get_user
+
+log = logging.getLogger(__name__)
+BRUSSELS = ZoneInfo("Europe/Brussels")
 
 MAX_LENGTH = 4000
 # The newest messages a Chat opens with; older ones come later (search, #97).
@@ -132,12 +140,11 @@ def is_guest(session: Session, user: User, project: Project) -> bool:
 
 
 def is_chat_person(session: Session, user: User, project: Project) -> bool:
-    """A Member, the Product Owner or a Guest: whom the Chat is for. Guests lose
-    access when the Project is archived."""
-    if is_team(user, project):
-        return True
-    active = project.status == ProjectStatus.ACTIVE.value
-    return active and is_guest(session, user, project)
+    """A Member, the Product Owner or a Guest: whom the Chat is for. An Archived
+    Project's Chat is for nobody: only Teachers and the Superuser still read it."""
+    if project.status != ProjectStatus.ACTIVE.value:
+        return False
+    return is_team(user, project) or is_guest(session, user, project)
 
 
 def readable_project(session: Session, user: User, project_id: int) -> Project:
@@ -614,6 +621,62 @@ def remove_guest(session: Session, actor: User, project_id: int, user_id: int) -
         raise ChatNotFoundError("This person is not a Guest in this chat.")
     session.delete(guest)
     session.commit()
+
+
+# Archived Chats are deleted this long after archiving.
+KEEP_ARCHIVED = timedelta(days=182)
+# How often the background loop looks for Chats to delete.
+CLEAN_UP_EVERY_SECONDS = 24 * 60 * 60
+
+
+def deleted_on(project: Project) -> date | None:
+    """The day an Archived Project's Chat will be deleted (Belgian time)."""
+    if project.archived_at is None:
+        return None
+    return (project.archived_at + KEEP_ARCHIVED).astimezone(BRUSSELS).date()
+
+
+def clean_up(session: Session, files_dir: Path) -> list[int]:
+    """Delete the messages and files of the Chats of Projects archived more than
+    KEEP_ARCHIVED ago; the ids of those Projects. Restoring one later starts an
+    empty Chat."""
+    expired = list(
+        session.scalars(
+            select(Project.id).where(
+                Project.status == ProjectStatus.ARCHIVED.value,
+                Project.archived_at < func.now() - KEEP_ARCHIVED,
+                select(ChatMessage.id)
+                .where(ChatMessage.project_id == Project.id)
+                .exists(),
+            )
+        )
+    )
+    if not expired:
+        return []
+    # Files, reactions and mentions go with their messages (ON DELETE CASCADE).
+    session.execute(delete_rows(ChatMessage).where(ChatMessage.project_id.in_(expired)))
+    session.execute(delete_rows(ChatRead).where(ChatRead.project_id.in_(expired)))
+    session.commit()
+    for project_id in expired:
+        discard_files(files_dir, project_id)
+    return expired
+
+
+async def clean_up_forever(make_session: sessionmaker, files_dir: Path) -> None:
+    """Once a day, delete the expired Chats; never crashes the backend."""
+
+    def run_once() -> None:
+        with make_session() as session:
+            deleted = clean_up(session, files_dir)
+        if deleted:
+            log.info("Deleted the chats of archived Projects %s", deleted)
+
+    while True:
+        try:
+            await asyncio.to_thread(run_once)
+        except Exception:
+            log.exception("The chat clean-up failed")
+        await asyncio.sleep(CLEAN_UP_EVERY_SECONDS)
 
 
 # Photos and files.

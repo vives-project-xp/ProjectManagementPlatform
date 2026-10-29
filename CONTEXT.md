@@ -113,7 +113,7 @@ A Project's one fixed weekly meeting: a weekday, a start and end time in Belgian
 _Avoid_: Recurring meeting, standup, timetable
 
 **Chat**:
-A Project's one group chat (spec #91): short messages of its Chat people, shown oldest first, with new ones appearing within seconds. Every Teacher and the Superuser can also read and write in every Chat without being one of its Chat people. An Archived Project's Chat is read-only.
+A Project's one group chat (spec #91): short messages of its Chat people, shown oldest first, with new ones appearing within seconds. Every Teacher and the Superuser can also read and write in every Chat without being one of its Chat people. An Archived Project's Chat is read-only and only Teachers and the Superuser still read it; its messages and files are deleted 6 months after archiving (restoring the Project before then brings it back with its history). Deleting a Project deletes its Chat; a deleted User's messages stay as "Deleted user".
 _Avoid_: Forum, channel, conversation, group
 
 **Chat file**:

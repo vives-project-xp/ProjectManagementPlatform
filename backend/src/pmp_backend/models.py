@@ -117,6 +117,8 @@ class Project(Base):
     team_size_min: Mapped[int]
     team_size_max: Mapped[int]
     status: Mapped[str] = mapped_column(String(20), default=ProjectStatus.ACTIVE.value)
+    # When it was archived (null while Active): its Chat is deleted 6 months later.
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # Snapshot of the Members at archive time (name, Programme, Year); see #10.
     makers: Mapped[list[dict]] = mapped_column(
         JSONB, default=list, server_default=text("'[]'::jsonb")
