@@ -1,11 +1,13 @@
 from datetime import datetime, time
 from typing import Annotated
 
-from fastapi import APIRouter
+from fastapi import APIRouter, File, Form, Response, UploadFile
 from pydantic import BaseModel, Field, StringConstraints
 
 from pmp_backend.api.deps import (
+    CurrentUserDep,
     SessionDep,
+    SettingsDep,
     StudentDep,
     SuperuserDep,
     TeacherOrSuperuserDep,
@@ -73,6 +75,16 @@ def set_settings(
     )
 
 
+class MediumOut(BaseModel):
+    id: int
+    # "photo" (or, from #113, "video"); the file is GET /api/weekly-media/{id}.
+    kind: str
+    width: int
+    height: int
+    uploaded_by: str
+    uploaded_at: datetime
+
+
 class WeeklyUpdateOut(BaseModel):
     closes_at: datetime
     text: str
@@ -80,10 +92,11 @@ class WeeklyUpdateOut(BaseModel):
     edited_by: str | None
     edited_at: datetime | None
     is_open: bool
+    media: list[MediumOut]
 
     @classmethod
     def of(cls, week: WeekView) -> "WeeklyUpdateOut":
-        return cls(**vars(week))
+        return cls(**vars(week) | {"media": [MediumOut(**vars(m)) for m in week.media]})
 
 
 class MyWeeklyUpdateOut(BaseModel):
@@ -130,3 +143,45 @@ def project_weekly_updates(
     return [
         WeeklyUpdateOut.of(week) for week in social.weekly_updates(session, project_id)
     ]
+
+
+@router.post("/my-weekly-update/photos")
+def upload_photo(
+    session: SessionDep,
+    settings: SettingsDep,
+    student: StudentDep,
+    photo: Annotated[UploadFile, File()],
+    consent: Annotated[bool, Form()] = False,
+) -> MyWeeklyUpdateOut:
+    """A form with one `photo` (JPG, PNG or HEIC, at most 15 MB) and `consent`
+    true (the Consent tick)."""
+    # One byte more than allowed is enough to know a photo is too large.
+    data = photo.file.read(social.MAX_PHOTO_BYTES + 1)
+    found = social.upload_photo(
+        session, settings.social_media_dir, student, data, consent=consent
+    )
+    return _mine(student, found)
+
+
+@router.delete("/my-weekly-update/media/{medium_id}")
+def remove_medium(
+    medium_id: int, session: SessionDep, settings: SettingsDep, student: StudentDep
+) -> MyWeeklyUpdateOut:
+    found = social.remove_medium(session, settings.social_media_dir, student, medium_id)
+    return _mine(student, found)
+
+
+@router.get("/weekly-media/{medium_id}")
+def get_medium(
+    medium_id: int, session: SessionDep, settings: SettingsDep, user: CurrentUserDep
+) -> Response:
+    """A photo or video for the Project's Members, Teachers and the Superuser."""
+    medium, data = social.read_medium(
+        session, settings.social_media_dir, user, medium_id
+    )
+    media_type = "image/jpeg" if medium.kind == "photo" else "video/mp4"
+    return Response(
+        content=data,
+        media_type=media_type,
+        headers={"X-Content-Type-Options": "nosniff"},
+    )

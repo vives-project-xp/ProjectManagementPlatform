@@ -1,8 +1,12 @@
+import io
+import random
+
 from nicegui import ui
 from nicegui.testing import User
+from PIL import Image, ImageDraw, ImageFilter
 
 from pmp_frontend import api
-from tests.conftest import ready_to_work
+from tests.conftest import eventually, ready_to_work
 from tests.test_chat import api_token, drone_with_the_student, navigation_targets
 
 WEDNESDAY_17 = {
@@ -90,3 +94,91 @@ async def test_staff_read_the_weekly_updates_on_the_project_page(user: User) -> 
 
     await user.should_see(marker="weekly-updates-card")
     await user.should_see("Tested the motors.")
+
+
+def photo(blurred: bool = False, seed: int = 1) -> bytes:
+    """A sharp (or blurred) JPEG that is large enough for the Quality check."""
+    shuffle = random.Random(seed)
+    image = Image.new("RGB", (1600, 1200), (120, 130, 140))
+    draw = ImageDraw.Draw(image)
+    for _ in range(400):
+        x, y = shuffle.randrange(1600), shuffle.randrange(1200)
+        colour = tuple(shuffle.randrange(30, 220) for _ in range(3))
+        draw.rectangle((x, y, x + 60, y + 30), fill=colour)
+    if blurred:
+        image = image.filter(ImageFilter.GaussianBlur(8))
+    out = io.BytesIO()
+    image.save(out, "JPEG", quality=92)
+    return out.getvalue()
+
+
+async def upload_to_week(user: User, data: bytes, name: str = "photo.jpg") -> None:
+    upload = user.find(marker="photo-upload").elements.pop()
+    assert isinstance(upload, ui.upload)
+    await upload.handle_uploads(
+        [ui.upload.SmallFileUpload(name=name, content_type="image/jpeg", _data=data)]
+    )
+
+
+async def member_on_the_weekly_update(user: User) -> tuple[str, int]:
+    staff = await api_token("superuser")
+    await api.set_social_settings(staff, WEDNESDAY_17)
+    project = await drone_with_the_student(staff)
+    await ready_to_work(user, "student")
+    await user.open("/weekly-update")
+    await user.should_see(marker="photo-upload")
+    return staff, project
+
+
+async def test_uploading_needs_the_consent_tick(user: User) -> None:
+    await member_on_the_weekly_update(user)
+    upload = user.find(marker="photo-upload").elements.pop()
+    assert not upload.enabled
+
+    user.find(marker="consent").click()
+
+    await eventually(lambda: upload.enabled)
+
+
+async def test_a_member_uploads_and_removes_a_photo(user: User) -> None:
+    staff, project = await member_on_the_weekly_update(user)
+    user.find(marker="consent").click()
+
+    await upload_to_week(user, photo())
+
+    await user.should_see("1 of 5 photos", retries=30)
+    [week] = await api.project_weekly_updates(staff, project)
+    [medium] = week["media"]
+    await user.should_see(marker=f"medium-{medium['id']}")
+
+    user.find(marker=f"remove-medium-{medium['id']}").click()
+    await user.should_see("Remove this photo?")
+    user.find(marker="confirm").click()
+    await user.should_see("0 of 5 photos", retries=30)
+
+
+async def test_a_blurry_photo_is_refused_with_the_reason(user: User) -> None:
+    await member_on_the_weekly_update(user)
+    user.find(marker="consent").click()
+
+    await upload_to_week(user, photo(blurred=True), name="shaky.jpg")
+
+    await user.should_see("shaky.jpg: This photo is blurry", retries=30)
+    await user.should_see("0 of 5 photos")
+
+
+async def test_staff_see_the_photos_on_the_project_page(user: User) -> None:
+    staff = await api_token("superuser")
+    await api.set_social_settings(staff, WEDNESDAY_17)
+    project = await drone_with_the_student(staff)
+    student, _ = await api.login("student@pmp.local", "student-secret-1")
+    await api.change_password(student, "student-secret-1", "student-api-password")
+    mine = await api.upload_weekly_photo(
+        student, "photo.jpg", photo(), "image/jpeg", consent=True
+    )
+    medium = mine["current"]["media"][0]["id"]
+
+    await ready_to_work(user, "teacher")
+    await user.open(f"/projects/{project}")
+
+    await user.should_see(marker=f"medium-{medium}")

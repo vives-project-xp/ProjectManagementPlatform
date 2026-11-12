@@ -2,16 +2,20 @@
 that teams write each Upload week."""
 
 import re
+import shutil
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
-from pmp_backend.errors import Refused
-from pmp_backend.models import SocialSettings, User, WeeklyUpdate
+from pmp_backend.domain import Role
+from pmp_backend.errors import Forbidden, NotFound, Refused
+from pmp_backend.models import SocialSettings, User, WeeklyMedium, WeeklyUpdate
+from pmp_backend.services import media
 from pmp_backend.services.projects import get_project
 
 BRUSSELS = ZoneInfo("Europe/Brussels")
@@ -28,6 +32,14 @@ _HASHTAG = re.compile(r"#\w+")
 
 class SocialError(Refused):
     """A social media change was refused; the message is fit to show."""
+
+
+class SocialNotFoundError(SocialError, NotFound):
+    pass
+
+
+class SocialForbiddenError(SocialError, Forbidden):
+    pass
 
 
 @dataclass(frozen=True)
@@ -145,24 +157,52 @@ def open_week(session: Session) -> datetime | None:
 
 
 @dataclass(frozen=True)
+class MediumView:
+    """A photo or video of a Weekly update, and who uploaded it."""
+
+    id: int
+    kind: str
+    width: int
+    height: int
+    uploaded_by: str
+    uploaded_at: datetime
+
+
+@dataclass(frozen=True)
 class WeekView:
     """A Project's Weekly update of one Upload week (text empty when nobody
-    wrote one yet), and whether that week is still open."""
+    wrote one yet), its Media, and whether that week is still open."""
 
     closes_at: datetime
     text: str
     edited_by: str | None
     edited_at: datetime | None
     is_open: bool
+    media: list[MediumView]
+
+
+def _name(user: User | None) -> str:
+    return user.full_name if user else "Deleted user"
 
 
 def _view(update_: WeeklyUpdate, now: datetime) -> WeekView:
     return WeekView(
         closes_at=update_.closes_at,
         text=update_.text,
-        edited_by=update_.edited_by.full_name if update_.edited_by else "Deleted user",
+        edited_by=_name(update_.edited_by),
         edited_at=update_.edited_at,
         is_open=update_.closes_at > now,
+        media=[
+            MediumView(
+                id=medium.id,
+                kind=medium.kind,
+                width=medium.width,
+                height=medium.height,
+                uploaded_by=_name(medium.uploaded_by),
+                uploaded_at=medium.uploaded_at,
+            )
+            for medium in update_.media
+        ],
     )
 
 
@@ -174,6 +214,8 @@ def weekly_updates(session: Session, project_id: int) -> list[WeekView]:
         select(WeeklyUpdate)
         .where(WeeklyUpdate.project_id == project_id)
         .order_by(WeeklyUpdate.closes_at.desc())
+        # Fresh text and Media, also right after a change in this session.
+        .execution_options(populate_existing=True)
     )
     return [_view(update_, now) for update_ in found]
 
@@ -197,7 +239,12 @@ def my_weekly_update(session: Session, student: User) -> MyWeeklyUpdate:
     current = next((u for u in updates if u.closes_at == closes_at), None)
     if current is None:
         current = WeekView(
-            closes_at=closes_at, text="", edited_by=None, edited_at=None, is_open=True
+            closes_at=closes_at,
+            text="",
+            edited_by=None,
+            edited_at=None,
+            is_open=True,
+            media=[],
         )
     return MyWeeklyUpdate(
         current=current, earlier=[u for u in updates if u.closes_at < closes_at]
@@ -233,3 +280,135 @@ def save_weekly_update(session: Session, student: User, text: str) -> MyWeeklyUp
     )
     session.commit()
     return my_weekly_update(session, student)
+
+
+# Media (photos since #112)
+
+MAX_PHOTOS = 5
+MAX_PHOTO_BYTES = 15 * 1024 * 1024
+NO_MEDIUM = "This photo or video doesn't exist (any more)."
+
+
+def _open_update(session: Session, student: User) -> WeeklyUpdate:
+    """The team's Weekly update of the open Upload week, created empty if
+    needed and locked until commit (so the photo limit holds)."""
+    if student.project_id is None:
+        raise SocialError("You're not in a Project.")
+    closes_at = open_week(session)
+    if closes_at is None:
+        raise SocialError("The Upload deadline hasn't been set yet.")
+    session.execute(
+        insert(WeeklyUpdate)
+        .values(
+            project_id=student.project_id,
+            closes_at=closes_at,
+            text="",
+            edited_by_id=student.id,
+        )
+        .on_conflict_do_nothing(constraint="uq_weekly_updates_project_week")
+    )
+    return session.scalars(
+        select(WeeklyUpdate)
+        .where(
+            WeeklyUpdate.project_id == student.project_id,
+            WeeklyUpdate.closes_at == closes_at,
+        )
+        .with_for_update(of=WeeklyUpdate)
+        .execution_options(populate_existing=True)
+    ).one()
+
+
+def _medium_path(media_dir: Path, project_id: int, medium: WeeklyMedium) -> Path:
+    # Never the uploaded name, so nothing outside the folder can be written.
+    extension = "jpg" if medium.kind == "photo" else "mp4"
+    return media_dir / str(project_id) / f"{medium.id}.{extension}"
+
+
+def _write(path: Path, data: bytes) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    # Written under another name first, so a failed write leaves no file.
+    partial = path.with_name(f"{path.name}.partial")
+    partial.write_bytes(data)
+    partial.replace(path)
+
+
+def upload_photo(
+    session: Session, media_dir: Path, student: User, data: bytes, *, consent: bool
+) -> MyWeeklyUpdate:
+    """Add a photo to the team's open Weekly update after the Consent tick and
+    the Quality check; refused photos are never stored or counted."""
+    if not consent:
+        raise SocialError(
+            "First tick that everyone recognisable in your photos agrees to them "
+            "being posted on VIVES social media."
+        )
+    if len(data) > MAX_PHOTO_BYTES:
+        raise SocialError("This photo is larger than 15 MB.")
+    # Checked before locking the Weekly update: decoding takes a moment.
+    photo = media.check_photo(data)
+    update_ = _open_update(session, student)
+    photos = [medium for medium in update_.media if medium.kind == "photo"]
+    if len(photos) >= MAX_PHOTOS:
+        raise SocialError(
+            f"Your team already has {MAX_PHOTOS} photos this week. Remove one first."
+        )
+    medium = WeeklyMedium(
+        weekly_update_id=update_.id,
+        kind="photo",
+        size=len(photo.jpeg),
+        width=photo.width,
+        height=photo.height,
+        quality_score=photo.score,
+        uploaded_by_id=student.id,
+    )
+    session.add(medium)
+    session.flush()
+    path = _medium_path(media_dir, update_.project_id, medium)
+    _write(path, photo.jpeg)
+    try:
+        session.commit()
+    except Exception:
+        path.unlink(missing_ok=True)
+        raise
+    return my_weekly_update(session, student)
+
+
+def _medium(session: Session, medium_id: int) -> tuple[WeeklyMedium, WeeklyUpdate]:
+    medium = session.get(WeeklyMedium, medium_id)
+    if medium is None:
+        raise SocialNotFoundError(NO_MEDIUM)
+    return medium, session.get(WeeklyUpdate, medium.weekly_update_id)
+
+
+def remove_medium(
+    session: Session, media_dir: Path, student: User, medium_id: int
+) -> MyWeeklyUpdate:
+    """Remove a photo or video of the team's open Weekly update."""
+    medium, update_ = _medium(session, medium_id)
+    if update_.project_id != student.project_id:
+        raise SocialNotFoundError(NO_MEDIUM)
+    if update_.closes_at <= _now(session):
+        raise SocialError("This Upload week has closed, so its media are locked.")
+    path = _medium_path(media_dir, update_.project_id, medium)
+    session.delete(medium)
+    session.commit()
+    path.unlink(missing_ok=True)
+    return my_weekly_update(session, student)
+
+
+def read_medium(
+    session: Session, media_dir: Path, user: User, medium_id: int
+) -> tuple[WeeklyMedium, bytes]:
+    """A photo or video for the Project's Members, Teachers and the Superuser."""
+    medium, update_ = _medium(session, medium_id)
+    if user.role == Role.STUDENT and user.project_id != update_.project_id:
+        raise SocialForbiddenError("Only the Project's Members can see its media.")
+    path = _medium_path(media_dir, update_.project_id, medium)
+    if not path.is_file():
+        raise SocialNotFoundError(NO_MEDIUM)
+    return medium, path.read_bytes()
+
+
+def discard_media(media_dir: Path, project_id: int) -> None:
+    """Delete the media files of a deleted Project."""
+    shutil.rmtree(media_dir / str(project_id), ignore_errors=True)
