@@ -1,10 +1,14 @@
 import io
 import random
+import subprocess
+from pathlib import Path
 
+import imageio_ffmpeg
 from nicegui import ui
 from nicegui.testing import User
 from PIL import Image, ImageDraw, ImageFilter
 
+from pmp_backend.services import social
 from pmp_frontend import api
 from tests.conftest import eventually, ready_to_work
 from tests.test_chat import api_token, drone_with_the_student, navigation_targets
@@ -182,3 +186,47 @@ async def test_staff_see_the_photos_on_the_project_page(user: User) -> None:
     await user.open(f"/projects/{project}")
 
     await user.should_see(marker=f"medium-{medium}")
+
+
+def short_clip(folder: Path) -> bytes:
+    target = folder / "clip.mp4"
+    subprocess.run(
+        [
+            imageio_ffmpeg.get_ffmpeg_exe(), "-loglevel", "error", "-y",
+            "-f", "lavfi", "-i", "testsrc=size=640x360:rate=10:duration=2",
+            "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
+            str(target),
+        ],
+        check=True,
+    )  # fmt: skip
+    return target.read_bytes()
+
+
+async def test_a_member_uploads_a_video(user: User, tmp_path: Path) -> None:
+    staff, project = await member_on_the_weekly_update(user)
+    user.find(marker="consent").click()
+    upload = user.find(marker="video-upload").elements.pop()
+    assert isinstance(upload, ui.upload)
+
+    await upload.handle_uploads(
+        [
+            ui.upload.SmallFileUpload(
+                name="clip.mp4", content_type="video/mp4", _data=short_clip(tmp_path)
+            )
+        ]
+    )
+
+    await user.should_see("1 of 1 video", retries=60)
+    [week] = await api.project_weekly_updates(staff, project)
+    [medium] = week["media"]
+    assert (medium["kind"], medium["state"]) == ("video", "ready")
+    await user.should_see(marker=f"medium-{medium['id']}")
+
+
+async def test_staff_are_warned_when_the_disk_is_full(user: User, monkeypatch) -> None:
+    monkeypatch.setattr(social, "DISK_WARNING", 0.0)
+    await ready_to_work(user, "superuser")
+    await user.open("/social-media")
+
+    await user.should_see(marker="storage-card")
+    await user.should_see("more than 80% full")

@@ -524,6 +524,9 @@ class WeeklyMedium(Base):
     __tablename__ = "weekly_media"
     __table_args__ = (
         CheckConstraint("kind IN ('photo', 'video')", name="ck_weekly_media_kind"),
+        CheckConstraint(
+            "state IN ('processing', 'ready', 'failed')", name="ck_weekly_media_state"
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -536,6 +539,11 @@ class WeeklyMedium(Base):
     height: Mapped[int] = mapped_column()
     # The Quality check's sharpness; the AI gets the best photos.
     quality_score: Mapped[float | None] = mapped_column()
+    # A video is "processing" until both copies are made (#113).
+    state: Mapped[str] = mapped_column(
+        String(12), default="ready", server_default="ready"
+    )
+    seconds: Mapped[float | None] = mapped_column()
     uploaded_by_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL")
     )

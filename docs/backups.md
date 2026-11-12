@@ -5,6 +5,7 @@ The `backup` service in `compose.yml` (ADR 0005) dumps the production database w
 - **When:** every night at 01:00 UTC, and once after every deploy (the Deploy workflow's restore test).
 - **Where:** `/opt/pmp/backups/pmp-YYYY-MM-DD_HHMMSS.dump`, `/opt/pmp/backups/photos-YYYY-MM-DD_HHMMSS.tar.gz` and `/opt/pmp/backups/chat-files-YYYY-MM-DD_HHMMSS.tar.gz` on the VM (same timestamp), readable by root only.
 - **How long:** 14 days; older dumps and archives are deleted after each backup.
+- **Social media files** (the photos and videos of Weekly updates, volume `social-media`, spec #110) are large, so they are archived **weekly**: every Sunday night, and after every deploy, as `/opt/pmp/backups/social-media-YYYY-MM-DD_HHMMSS.tar` (uncompressed: JPEG and MP4 are compressed already). Only the **2 newest** archives are kept (`KEEP_SOCIAL_MEDIA`). Uploads still being checked (`incoming/`) are left out.
 
 The commands below run on the VM as root, or as `github-runner` (in the `docker` group). The `backup` container has the database connection set, so `pg_dump`, `pg_restore`, `psql`, `createdb` and `dropdb` need no arguments for it.
 
@@ -23,7 +24,7 @@ docker exec pmp-backup-1 sh /backup.sh once
 
 ## Test a restore
 
-Makes a backup, restores it into the scratch database `pmp_restore_test`, compares every table's row count with the live database as it was during the backup, and drops the scratch database again. The site keeps writing (Chat, logins), so the live counts are taken just before and just after the dump; when they differ, the backup is made again (at most 3 times). It also checks that the new photo archive can be read and holds as many files as the photos folder, and that the new Chat files archive holds one file per row of the restored `chat_files` table. The Deploy workflow runs this after every deploy.
+Makes a backup, restores it into the scratch database `pmp_restore_test`, compares every table's row count with the live database as it was during the backup, and drops the scratch database again. The site keeps writing (Chat, logins), so the live counts are taken just before and just after the dump; when they differ, the backup is made again (at most 3 times). It also checks that the new photo archive can be read and holds as many files as the photos folder, that the new Chat files archive holds one file per row of the restored `chat_files` table, and that a new social media archive holds one main file per row of the restored `weekly_media` table (the photo, the video's posted copy, or an upload still being processed; a video's AI copy doesn't count). The Deploy workflow runs this after every deploy.
 
 ```sh
 docker exec pmp-backup-1 sh /backup.sh restore-test
@@ -68,5 +69,16 @@ Restore the Chat files archive with the same timestamp as the dump, so every `ch
 ```sh
 docker stop pmp-backend-1
 docker run --rm -v pmp_chat-files:/chat-files -v /opt/pmp/backups:/backups:ro postgres:16   sh -c 'find /chat-files -mindepth 1 -delete && tar -xzf /backups/chat-files-2026-10-01_010000.tar.gz -C /chat-files'
+docker start pmp-backend-1
+```
+
+## Restore the social media files
+
+The newest social media archive can be up to a week older than the dump, so restore the archive first, then the dump made closest after it; Weekly updates uploaded in between lose their files (their rows show a missing photo). The same short-lived container as above:
+
+```sh
+docker stop pmp-backend-1
+docker run --rm -v pmp_social-media:/social-media -v /opt/pmp/backups:/backups:ro postgres:16 \
+  sh -c 'find /social-media -mindepth 1 -delete && tar -xf /backups/social-media-2026-11-15_010000.tar -C /social-media'
 docker start pmp-backend-1
 ```

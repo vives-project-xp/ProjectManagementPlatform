@@ -75,6 +75,7 @@ services:
       - ${BACKUP_PATH:-/opt/pmp/backups}:/backups
       - photos:/photos:ro
       - chat-files:/chat-files:ro
+      - social-media:/social-media:ro
     depends_on:
       db:
         condition: service_healthy

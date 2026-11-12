@@ -1,7 +1,9 @@
 """Social media (spec #110): the Superuser's settings, the Members' Weekly
 update and the Weekly updates on a Project's page."""
 
+import tempfile
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 from nicegui import app, events, ui
@@ -24,9 +26,17 @@ MAX_UPDATE_LENGTH = 4000
 MAX_PHOTOS = 5
 MAX_PHOTO_BYTES = 15 * 1024 * 1024
 PHOTO_TYPES = ".jpg,.jpeg,.png,.heic,.heif"
+MAX_VIDEO_BYTES = 200 * 1024 * 1024
+VIDEO_TYPES = ".mp4,.mov"
 CONSENT = (
-    "Everyone recognisable in these photos agrees to them being posted on VIVES "
-    "social media."
+    "Everyone recognisable in these photos and videos agrees to them being posted "
+    "on VIVES social media."
+)
+# How often the page looks again while a video is being processed.
+PROCESSING_SECONDS = 5.0
+DISK_WARNING = (
+    "The server's disk is more than 80% full. Ask the Superuser to make room "
+    "before uploads fail."
 )
 
 
@@ -37,13 +47,26 @@ def medium_url(medium: dict[str, Any]) -> str:
 def _media_grid(
     media: list[dict[str, Any]], on_remove: Callable[[dict], Any] | None = None
 ) -> None:
-    """Thumbnails with who uploaded them; with Remove while the week is open."""
+    """Thumbnails and the video with who uploaded them; with Remove while the
+    week is open."""
     with ui.row().classes("w-full gap-3"):
         for medium in media:
             with ui.column().classes("gap-1").mark(f"medium-{medium['id']}"):
-                ui.image(medium_url(medium)).props("fit=cover").classes(
-                    "w-40 h-28 rounded-borders"
-                )
+                if medium["kind"] == "photo":
+                    ui.image(medium_url(medium)).props("fit=cover").classes(
+                        "w-40 h-28 rounded-borders"
+                    )
+                elif medium["state"] == "ready":
+                    ui.video(medium_url(medium), autoplay=False).classes("w-64")
+                elif medium["state"] == "processing":
+                    with ui.row().classes("w-64 h-28 items-center gap-2"):
+                        ui.spinner(color="dark")
+                        ui.label("Preparing the video…").mark("video-processing")
+                else:
+                    ui.label(
+                        "This video couldn't be prepared. Remove it and upload "
+                        "another one."
+                    ).classes("w-64").mark("video-failed")
                 ui.label(medium["uploaded_by"]).classes("text-caption")
                 if on_remove is not None:
                     ui.button("Remove", on_click=lambda m=medium: on_remove(m)).props(
@@ -72,11 +95,21 @@ def _earlier_weeks(weeks: list[dict[str, Any]]) -> None:
             ui.label(_edited(week)).classes("text-caption")
 
 
+def disk_warning(storage: dict[str, Any]) -> None:
+    """A warning for staff when the media disk is more than 80% full."""
+    if storage["warning"]:
+        with ui.row().classes("items-center gap-2").mark("disk-warning"):
+            ui.icon("warning", color="primary")
+            ui.label(DISK_WARNING)
+
+
 async def weekly_updates_card(project_id: int) -> None:
     """A Project's Weekly updates for Teachers and the Superuser, newest first."""
     weeks = await api.project_weekly_updates(token(), project_id)
+    storage = await api.social_storage(token())
     with ui.card().classes("w-full max-w-lg").mark("weekly-updates-card"):
         ui.label("Weekly updates").classes("text-h6")
+        disk_warning(storage)
         if not weeks:
             ui.label("No Weekly updates yet.")
             return
@@ -144,17 +177,50 @@ def _settings_form(settings: dict[str, Any]) -> None:
     ui.button("Save", on_click=save).mark("save-social-settings")
 
 
-def _photos_card(media: list[dict[str, Any]]) -> None:
-    """Upload, see and remove the team's photos of the open Upload week."""
+def _media_card(media: list[dict[str, Any]]) -> None:
+    """Upload, see and remove the team's photos and video of the open Upload
+    week."""
 
     @ui.refreshable
     def photos(media: list[dict[str, Any]]) -> None:
         count = sum(1 for medium in media if medium["kind"] == "photo")
-        ui.label(f"{count} of {MAX_PHOTOS} photos").mark("photo-count")
+        videos = sum(1 for medium in media if medium["kind"] == "video")
+        ui.label(f"{count} of {MAX_PHOTOS} photos, {videos} of 1 video").mark(
+            "photo-count"
+        )
         _media_grid(media, on_remove=remove)
+        # Look again until the video is ready.
+        checker.active = any(medium["state"] == "processing" for medium in media)
 
     def show(mine: dict[str, Any]) -> None:
         photos.refresh(mine["current"]["media"])
+
+    async def check_processing() -> None:
+        try:
+            mine = await api.my_weekly_update(token())
+        except api.ApiError:
+            return
+        if mine and mine["current"]:
+            show(mine)
+
+    async def upload_video(event: events.UploadEventArguments) -> None:
+        file = event.file
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "video"
+            await file.save(path)
+            try:
+                mine = await api.upload_weekly_video(
+                    token(),
+                    path,
+                    file.name,
+                    file.content_type,
+                    consent=bool(consent.value),
+                )
+            except api.ApiError as problem:
+                error.show(f"{file.name}: {problem.message}")
+                return
+        error.hide()
+        show(mine)
 
     async def upload(event: events.UploadEventArguments) -> None:
         file = event.file
@@ -173,19 +239,21 @@ def _photos_card(media: list[dict[str, Any]]) -> None:
         show(mine)
 
     async def remove(medium: dict[str, Any]) -> None:
-        if not await confirm("Remove this photo?", "Remove"):
+        if not await confirm(f"Remove this {medium['kind']}?", "Remove"):
             return
         try:
             show(await api.remove_weekly_medium(token(), medium["id"]))
         except api.ApiError as problem:
             error.show(problem.message)
 
+    checker = ui.timer(PROCESSING_SECONDS, check_processing, active=False)
     with ui.column().classes("w-full gap-2").mark("photos"):
-        ui.label("Photos").classes("text-h6")
+        ui.label("Photos and video").classes("text-h6")
         ui.label(
             f"Up to {MAX_PHOTOS} photos: JPG, PNG or HEIC, at most 15 MB, the short "
             "side at least 1080 pixels. Blurry, dark or overexposed photos are "
-            "refused straight away."
+            "refused straight away. One video: MP4 or MOV, at most 200 MB and 90 "
+            "seconds."
         ).classes("text-caption")
         consent = ui.checkbox(CONSENT).mark("consent")
         ui.upload(
@@ -200,6 +268,17 @@ def _photos_card(media: list[dict[str, Any]]) -> None:
         ).props(f'accept="{PHOTO_TYPES}" flat bordered').classes(
             "w-full"
         ).bind_enabled_from(consent, "value").mark("photo-upload")
+        ui.upload(
+            label="Upload a video",
+            auto_upload=True,
+            max_file_size=MAX_VIDEO_BYTES,
+            on_upload=upload_video,
+            on_rejected=lambda: error.show(
+                "Only MP4 and MOV videos up to 200 MB are accepted."
+            ),
+        ).props(f'accept="{VIDEO_TYPES}" flat bordered').classes(
+            "w-full"
+        ).bind_enabled_from(consent, "value").mark("video-upload")
         error = ErrorMessage()
         photos(media)
 
@@ -241,7 +320,7 @@ def _weekly_update_page(mine: dict[str, Any]) -> None:
             error = ErrorMessage()
             ui.button("Save", on_click=save).mark("save-weekly-update")
         if current is not None:
-            _photos_card(current["media"])
+            _media_card(current["media"])
     if mine["earlier"]:
         ui.label("Earlier weeks").classes("text-h6")
         _earlier_weeks(mine["earlier"])
@@ -267,6 +346,11 @@ def register() -> None:
     @role_page("/social-media", "Social media", {"superuser"})
     async def settings_page(user: api.CurrentUser) -> None:
         _settings_form(await api.social_settings(token()))
+        storage = await api.social_storage(token())
+        with ui.card().classes("w-full max-w-lg").mark("storage-card"):
+            ui.label("Storage").classes("text-h6")
+            ui.label(f"The server's disk is {storage['used_share']:.0%} full.")
+            disk_warning(storage)
 
     @role_page("/weekly-update", "Weekly update", {"student"})
     async def weekly_update_page(user: api.CurrentUser) -> None:

@@ -27,6 +27,7 @@ from pmp_backend.services.auth import LoginGuard
 from pmp_backend.services.chat import TypingBoard, clean_up_forever
 from pmp_backend.services.github import HttpGitHub
 from pmp_backend.services.seeding import seed_starting_accounts
+from pmp_backend.services.social import resume_processing
 from pmp_backend.services.trello import HttpTrello
 from pmp_backend.settings import Settings
 
@@ -50,8 +51,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         cleaner = asyncio.create_task(
             clean_up_forever(make_session, settings.chat_files_dir)
         )
+        # Videos a restart interrupted are processed again (#113).
+        resumer = asyncio.create_task(
+            asyncio.to_thread(
+                resume_processing, make_session, settings.social_media_dir
+            )
+        )
         yield
-        for task in (sender, cleaner):
+        for task in (sender, cleaner, resumer):
             if task is not None:
                 task.cancel()
                 with suppress(asyncio.CancelledError):

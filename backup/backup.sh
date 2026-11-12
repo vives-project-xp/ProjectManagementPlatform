@@ -4,20 +4,25 @@
 # sets PGHOST/PGUSER/PGPASSWORD/PGDATABASE and mounts both folders read-only.
 #
 #   backup.sh               every night at BACKUP_HOUR_UTC: back up, then delete
-#                           old backups
+#                           old backups; on Sundays also the social media files
 #   backup.sh once          one backup now
 #   backup.sh restore-test  one backup now; the dump is restored into a scratch
 #                           database and compared table by table with the live
 #                           database as it was during the dump (backed up again,
 #                           up to 3 times, when it changed meanwhile); the photo
 #                           archive is compared file count with the photos folder,
-#                           the Chat files archive with the restored chat_files rows
+#                           the Chat files archive with the restored chat_files rows,
+#                           and a new social media archive with the restored
+#                           weekly_media rows
 set -eu
 
 BACKUP_DIR=/backups
 PHOTOS_DIR=/photos
 CHAT_FILES_DIR=/chat-files
+SOCIAL_MEDIA_DIR=/social-media
 KEEP_DAYS="${KEEP_DAYS:-14}"
+# Weekly photos and videos are large: only the newest archives are kept.
+KEEP_SOCIAL_MEDIA="${KEEP_SOCIAL_MEDIA:-2}"
 BACKUP_HOUR_UTC="${BACKUP_HOUR_UTC:-01}"
 SCRATCH_DB=pmp_restore_test
 
@@ -60,6 +65,29 @@ backup() {
     -o -name 'chat-files-*.tar.gz' \) -mtime +"$((KEEP_DAYS - 1))" -print -delete
 }
 
+# The photos and videos of Weekly updates (spec #110), weekly because of their
+# size; uncompressed, as JPEG and MP4 are compressed already.
+backup_social_media() {
+  stamp="$(date -u +%Y-%m-%d_%H%M%S)"
+  social="$BACKUP_DIR/social-media-$stamp.tar"
+  # Uploads still being checked are left out.
+  if ! tar -cf "$social.partial" -C "$SOCIAL_MEDIA_DIR" --exclude=./incoming .; then
+    rm -f "$social.partial"
+    log "social media backup FAILED" >&2
+    return 1
+  fi
+  mv "$social.partial" "$social"
+  log "social media backup written: $social"
+  ls -1 "$BACKUP_DIR"/social-media-*.tar | sort -r | tail -n +"$((KEEP_SOCIAL_MEDIA + 1))" |
+    while read -r old; do rm -f "$old" && log "deleted $old"; done
+}
+
+# One main file per weekly_media row: the photo, the video's posted copy, or the
+# upload a video is still made from (not the video's AI copy).
+archived_media_count() {
+  tar -tf "$1" | grep -E '/[0-9]+\.(jpg|mp4|original)$' | wc -l
+}
+
 newest_backup_matching() {
   ls -1 "$BACKUP_DIR"/$1 | sort | tail -n 1
 }
@@ -92,6 +120,7 @@ restore_test() {
   while :; do
     before="$(row_counts "$PGDATABASE")"
     backup
+    backup_social_media
     after="$(row_counts "$PGDATABASE")"
     [ "$before" = "$after" ] && break
     if [ "$attempt" -ge 3 ]; then
@@ -138,6 +167,16 @@ restore_test() {
     exit 1
   fi
   log "chat files restore test passed: $chat_files"
+
+  social="$(newest_backup_matching 'social-media-*.tar')"
+  rows="$(echo "$restored" | awk '$1 == "weekly_media" { print $2 }')"
+  archived="$(archived_media_count "$social")"
+  echo "social media $archived"
+  if [ "${rows:-0}" != "$archived" ]; then
+    log "social media restore test FAILED: $social holds $archived files, not $rows" >&2
+    exit 1
+  fi
+  log "social media restore test passed: $social"
 }
 
 seconds_until_next_run() {
@@ -161,6 +200,10 @@ case "${1:-nightly}" in
       wait $!
       # A failed night is logged; the next night tries again.
       backup || true
+      # Sundays (day 7): the social media files.
+      if [ "$(date -u +%u)" = 7 ]; then
+        backup_social_media || true
+      fi
     done
     ;;
   *)

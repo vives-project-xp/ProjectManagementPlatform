@@ -1,8 +1,11 @@
 """Social media (spec #110): the Superuser's settings and the Weekly updates
 that teams write each Upload week."""
 
+import logging
 import re
 import shutil
+import subprocess
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta
 from pathlib import Path
@@ -15,7 +18,7 @@ from sqlalchemy.orm import Session
 from pmp_backend.domain import Role
 from pmp_backend.errors import Forbidden, NotFound, Refused
 from pmp_backend.models import SocialSettings, User, WeeklyMedium, WeeklyUpdate
-from pmp_backend.services import media
+from pmp_backend.services import media, video
 from pmp_backend.services.projects import get_project
 
 BRUSSELS = ZoneInfo("Europe/Brussels")
@@ -162,8 +165,12 @@ class MediumView:
 
     id: int
     kind: str
+    # "processing" while a video is being prepared, "failed" when that went
+    # wrong, otherwise "ready".
+    state: str
     width: int
     height: int
+    seconds: float | None
     uploaded_by: str
     uploaded_at: datetime
 
@@ -196,8 +203,10 @@ def _view(update_: WeeklyUpdate, now: datetime) -> WeekView:
             MediumView(
                 id=medium.id,
                 kind=medium.kind,
+                state=medium.state,
                 width=medium.width,
                 height=medium.height,
+                seconds=medium.seconds,
                 uploaded_by=_name(medium.uploaded_by),
                 uploaded_at=medium.uploaded_at,
             )
@@ -282,10 +291,15 @@ def save_weekly_update(session: Session, student: User, text: str) -> MyWeeklyUp
     return my_weekly_update(session, student)
 
 
-# Media (photos since #112)
+# Media (photos since #112, the video since #113)
+
+log = logging.getLogger(__name__)
 
 MAX_PHOTOS = 5
 MAX_PHOTO_BYTES = 15 * 1024 * 1024
+MAX_VIDEO_BYTES = 200 * 1024 * 1024
+# Above this share of the disk in use, staff see a warning.
+DISK_WARNING = 0.80
 NO_MEDIUM = "This photo or video doesn't exist (any more)."
 
 
@@ -318,10 +332,33 @@ def _open_update(session: Session, student: User) -> WeeklyUpdate:
     ).one()
 
 
-def _medium_path(media_dir: Path, project_id: int, medium: WeeklyMedium) -> Path:
-    # Never the uploaded name, so nothing outside the folder can be written.
-    extension = "jpg" if medium.kind == "photo" else "mp4"
-    return media_dir / str(project_id) / f"{medium.id}.{extension}"
+def _medium_path(
+    media_dir: Path, project_id: int, medium: WeeklyMedium, copy: str = ""
+) -> Path:
+    """A medium's file: the photo, or the video's posted copy; `copy` "ai" is
+    the video's small copy for the AI, "original" the upload until processed.
+    Never the uploaded name, so nothing outside the folder can be written."""
+    if medium.kind == "photo":
+        name = f"{medium.id}.jpg"
+    elif copy:
+        name = f"{medium.id}.{copy}" + (".mp4" if copy == "ai" else "")
+    else:
+        name = f"{medium.id}.mp4"
+    return media_dir / str(project_id) / name
+
+
+def _all_files(media_dir: Path, project_id: int, medium: WeeklyMedium) -> list[Path]:
+    return [
+        _medium_path(media_dir, project_id, medium, copy)
+        for copy in ("", "ai", "original")
+    ]
+
+
+def incoming_path(media_dir: Path, name: str) -> Path:
+    """Where an upload is written before it is checked."""
+    folder = media_dir / "incoming"
+    folder.mkdir(parents=True, exist_ok=True)
+    return folder / name
 
 
 def _write(path: Path, data: bytes) -> None:
@@ -389,26 +426,140 @@ def remove_medium(
         raise SocialNotFoundError(NO_MEDIUM)
     if update_.closes_at <= _now(session):
         raise SocialError("This Upload week has closed, so its media are locked.")
-    path = _medium_path(media_dir, update_.project_id, medium)
+    paths = _all_files(media_dir, update_.project_id, medium)
     session.delete(medium)
     session.commit()
-    path.unlink(missing_ok=True)
+    for path in paths:
+        path.unlink(missing_ok=True)
     return my_weekly_update(session, student)
 
 
 def read_medium(
     session: Session, media_dir: Path, user: User, medium_id: int
-) -> tuple[WeeklyMedium, bytes]:
-    """A photo or video for the Project's Members, Teachers and the Superuser."""
+) -> tuple[WeeklyMedium, Path]:
+    """A photo or video (its posted copy) for the Project's Members, Teachers
+    and the Superuser."""
     medium, update_ = _medium(session, medium_id)
     if user.role == Role.STUDENT and user.project_id != update_.project_id:
         raise SocialForbiddenError("Only the Project's Members can see its media.")
+    if medium.state != "ready":
+        raise SocialNotFoundError("This video isn't ready yet.")
     path = _medium_path(media_dir, update_.project_id, medium)
     if not path.is_file():
         raise SocialNotFoundError(NO_MEDIUM)
-    return medium, path.read_bytes()
+    return medium, path
 
 
 def discard_media(media_dir: Path, project_id: int) -> None:
     """Delete the media files of a deleted Project."""
     shutil.rmtree(media_dir / str(project_id), ignore_errors=True)
+
+
+def upload_video(
+    session: Session, media_dir: Path, student: User, upload: Path, *, consent: bool
+) -> tuple[MyWeeklyUpdate, int]:
+    """Add the team's one video of the open Upload week from `upload` (a file
+    in the incoming folder, moved away or deleted here). It is "processing"
+    until `process_video` with the returned id has made its copies."""
+    try:
+        if not consent:
+            raise SocialError(
+                "First tick that everyone recognisable in your video agrees to it "
+                "being posted on VIVES social media."
+            )
+        if upload.stat().st_size > MAX_VIDEO_BYTES:
+            raise SocialError("This video is larger than 200 MB.")
+        # Checked before locking the Weekly update: reading it takes a moment.
+        found = video.check(upload)
+        update_ = _open_update(session, student)
+        if any(medium.kind == "video" for medium in update_.media):
+            raise SocialError(
+                "Your team already has a video this week. Remove it first."
+            )
+        medium = WeeklyMedium(
+            weekly_update_id=update_.id,
+            kind="video",
+            state="processing",
+            size=upload.stat().st_size,
+            width=found.width,
+            height=found.height,
+            seconds=found.seconds,
+            uploaded_by_id=student.id,
+        )
+        session.add(medium)
+        session.flush()
+        original = _medium_path(media_dir, update_.project_id, medium, "original")
+        original.parent.mkdir(parents=True, exist_ok=True)
+        upload.replace(original)
+        try:
+            session.commit()
+        except Exception:
+            original.unlink(missing_ok=True)
+            raise
+    finally:
+        upload.unlink(missing_ok=True)
+    return my_weekly_update(session, student), medium.id
+
+
+def process_video(
+    make_session: Callable[[], Session], media_dir: Path, medium_id: int
+) -> None:
+    """Make the posted copy and the AI copy of an uploaded video, then delete
+    the original; runs in the background after the upload."""
+    with make_session() as session:
+        medium = session.get(WeeklyMedium, medium_id)
+        if medium is None or medium.state != "processing":
+            return
+        project_id = session.get(WeeklyUpdate, medium.weekly_update_id).project_id
+        original, posted, for_ai = (
+            _medium_path(media_dir, project_id, medium, copy)
+            for copy in ("original", "", "ai")
+        )
+    try:
+        made = video.encode(original, posted, for_ai)
+        state = "ready"
+    except (OSError, subprocess.SubprocessError, video.VideoRefused):
+        log.exception("Processing video %s failed", medium_id)
+        posted.unlink(missing_ok=True)
+        for_ai.unlink(missing_ok=True)
+        made, state = None, "failed"
+    original.unlink(missing_ok=True)
+    with make_session() as session:
+        medium = session.get(WeeklyMedium, medium_id)
+        if medium is None:
+            # Removed while it was being processed.
+            posted.unlink(missing_ok=True)
+            for_ai.unlink(missing_ok=True)
+            return
+        medium.state = state
+        if made is not None:
+            medium.width, medium.height = made.width, made.height
+            medium.size = posted.stat().st_size
+        session.commit()
+
+
+def resume_processing(make_session: Callable[[], Session], media_dir: Path) -> None:
+    """Process the videos whose processing a restart interrupted."""
+    with make_session() as session:
+        waiting = session.scalars(
+            select(WeeklyMedium.id).where(WeeklyMedium.state == "processing")
+        ).all()
+    for medium_id in waiting:
+        process_video(make_session, media_dir, medium_id)
+
+
+@dataclass(frozen=True)
+class Storage:
+    """How full the disk with the media is."""
+
+    used_share: float
+
+    @property
+    def warning(self) -> bool:
+        return self.used_share > DISK_WARNING
+
+
+def storage(media_dir: Path) -> Storage:
+    media_dir.mkdir(parents=True, exist_ok=True)
+    usage = shutil.disk_usage(media_dir)
+    return Storage(used_share=usage.used / usage.total)
