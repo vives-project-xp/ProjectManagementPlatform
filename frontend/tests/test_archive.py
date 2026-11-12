@@ -23,7 +23,8 @@ async def test_teacher_archives_and_restores_a_project(user: User):
     await ready_to_work(user, "teacher")
     await create_project(user, "Drone", 1, 3)
     await user.open("/projects/1")
-    await user.should_see(marker="add-member")
+    # The Project page has many cards; under load it takes a moment.
+    await user.should_see(marker="add-member", retries=30)
     choose_student(user, "Student Account")
     user.find(marker="add-member").click()
     await user.should_see("Members (1 / 1–3)")

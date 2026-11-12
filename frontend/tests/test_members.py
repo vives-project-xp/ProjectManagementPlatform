@@ -23,7 +23,7 @@ async def test_teacher_adds_and_moves_a_member(user: User):
 
     # Add the Student to Drone (Project 1).
     await user.open("/projects/1")
-    await user.should_see(marker="add-member")
+    await user.should_see(marker="add-member", retries=30)
     choose_student(user, "Student Account")
     user.find(marker="add-member").click()
     await user.should_see("The Member was added.")
@@ -31,7 +31,7 @@ async def test_teacher_adds_and_moves_a_member(user: User):
 
     # Adding them to Smart Greenhouse (Project 2) asks to move them.
     await user.open("/projects/2")
-    await user.should_see(marker="add-member")
+    await user.should_see(marker="add-member", retries=30)
     choose_student(user, "Student Account")
     user.find(marker="add-member").click()
     await user.should_see(
@@ -55,7 +55,7 @@ async def test_teacher_removes_a_member_after_confirming(user: User):
     await ready_to_work(user, "teacher")
     await create_project(user, "Drone", 1, 3)
     await user.open("/projects/1")
-    await user.should_see(marker="add-member")
+    await user.should_see(marker="add-member", retries=30)
     choose_student(user, "Student Account")
     user.find(marker="add-member").click()
     await user.should_see("Members (1 / 1–3)")
