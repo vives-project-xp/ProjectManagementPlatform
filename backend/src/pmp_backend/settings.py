@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -37,6 +38,11 @@ class Settings(DatabaseSettings):
     trello_api_key: str | None = None
     trello_token: str | None = None
     trello_api_url: str = "https://api.trello.com/1"
+    # The school's LLM for Post suggestions (spec #110, ADR 0009): a personal
+    # key from the school's LiteLLM portal. Without a key, no suggestions.
+    llm_base_url: str = "https://api.llm.mechatronics.be/v1"
+    llm_model: str = "qwen3.8-27b"
+    llm_api_key: SecretStr | None = None
     # The mailbox for the 08:30 daily email (spec #68); without SMTP_HOST no
     # email is sent. Only in /opt/pmp/.env.
     smtp_host: str | None = None

@@ -100,7 +100,8 @@ async def backend_in_process(
         seed_starting_accounts(session, logins_file)
     transport = FinishingTransport(backend)
     api.use_transport(transport)
-    yield
+    # Tests that run backend jobs themselves ask for this fixture by name.
+    yield backend
     api.use_transport(None)
     await transport.finish()
     backend.state.sessionmaker.kw["bind"].dispose()

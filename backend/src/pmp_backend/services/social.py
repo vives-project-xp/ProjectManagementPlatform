@@ -192,7 +192,7 @@ def _name(user: User | None) -> str:
     return user.full_name if user else "Deleted user"
 
 
-def _view(update_: WeeklyUpdate, now: datetime) -> WeekView:
+def week_view(update_: WeeklyUpdate, now: datetime) -> WeekView:
     return WeekView(
         closes_at=update_.closes_at,
         text=update_.text,
@@ -226,7 +226,7 @@ def weekly_updates(session: Session, project_id: int) -> list[WeekView]:
         # Fresh text and Media, also right after a change in this session.
         .execution_options(populate_existing=True)
     )
-    return [_view(update_, now) for update_ in found]
+    return [week_view(update_, now) for update_ in found]
 
 
 @dataclass(frozen=True)
@@ -332,7 +332,7 @@ def _open_update(session: Session, student: User) -> WeeklyUpdate:
     ).one()
 
 
-def _medium_path(
+def medium_path(
     media_dir: Path, project_id: int, medium: WeeklyMedium, copy: str = ""
 ) -> Path:
     """A medium's file: the photo, or the video's posted copy; `copy` "ai" is
@@ -349,7 +349,7 @@ def _medium_path(
 
 def _all_files(media_dir: Path, project_id: int, medium: WeeklyMedium) -> list[Path]:
     return [
-        _medium_path(media_dir, project_id, medium, copy)
+        medium_path(media_dir, project_id, medium, copy)
         for copy in ("", "ai", "original")
     ]
 
@@ -400,7 +400,7 @@ def upload_photo(
     )
     session.add(medium)
     session.flush()
-    path = _medium_path(media_dir, update_.project_id, medium)
+    path = medium_path(media_dir, update_.project_id, medium)
     _write(path, photo.jpeg)
     try:
         session.commit()
@@ -444,7 +444,7 @@ def read_medium(
         raise SocialForbiddenError("Only the Project's Members can see its media.")
     if medium.state != "ready":
         raise SocialNotFoundError("This video isn't ready yet.")
-    path = _medium_path(media_dir, update_.project_id, medium)
+    path = medium_path(media_dir, update_.project_id, medium)
     if not path.is_file():
         raise SocialNotFoundError(NO_MEDIUM)
     return medium, path
@@ -488,7 +488,7 @@ def upload_video(
         )
         session.add(medium)
         session.flush()
-        original = _medium_path(media_dir, update_.project_id, medium, "original")
+        original = medium_path(media_dir, update_.project_id, medium, "original")
         original.parent.mkdir(parents=True, exist_ok=True)
         upload.replace(original)
         try:
@@ -512,7 +512,7 @@ def process_video(
             return
         project_id = session.get(WeeklyUpdate, medium.weekly_update_id).project_id
         original, posted, for_ai = (
-            _medium_path(media_dir, project_id, medium, copy)
+            medium_path(media_dir, project_id, medium, copy)
             for copy in ("original", "", "ai")
         )
     try:

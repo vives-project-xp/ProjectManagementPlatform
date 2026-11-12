@@ -24,7 +24,7 @@ from pmp_backend.api.deps import (
     TeacherOrSuperuserDep,
 )
 from pmp_backend.api.schemas import ProjectRefOut
-from pmp_backend.services import social
+from pmp_backend.services import post_ai, social, suggestions
 from pmp_backend.services.social import MyWeeklyUpdate, WeekView
 
 router = APIRouter(prefix="/api", tags=["social"])
@@ -254,3 +254,63 @@ class StorageOut(BaseModel):
 def get_storage(settings: SettingsDep, user: TeacherOrSuperuserDep) -> StorageOut:
     found = social.storage(settings.social_media_dir)
     return StorageOut(used_share=found.used_share, warning=found.warning)
+
+
+class SocialStatusOut(BaseModel):
+    # Whether LLM_API_KEY is set: without it, no Post suggestions are made.
+    ai_configured: bool
+
+
+@router.get("/social/status")
+def get_status(settings: SettingsDep, user: SuperuserDep) -> SocialStatusOut:
+    return SocialStatusOut(ai_configured=post_ai.is_configured(settings))
+
+
+class SuggestionOut(BaseModel):
+    id: int
+    project: ProjectRefOut
+    # The Upload week it is about.
+    closes_at: datetime
+    # "generating" (the AI is busy, or tries again soon), "waiting" (for
+    # Review) or "failed"; later tickets add the Review and posting states.
+    state: str
+    title: str | None
+    caption: str | None
+    chosen: MediumOut | None
+    # The Media, best first (the chosen one first).
+    ranking: list[MediumOut]
+    why: str | None
+    attempts: int
+    last_error: str | None
+
+
+@router.get("/post-suggestions")
+def list_suggestions(
+    session: SessionDep, user: TeacherOrSuperuserDep
+) -> list[SuggestionOut]:
+    found = []
+    for view in suggestions.suggestions(session):
+        suggestion = view.suggestion
+
+        def medium(medium_id: int | None, view=view) -> MediumOut | None:
+            known = view.media.get(medium_id) if medium_id is not None else None
+            return MediumOut(**vars(known)) if known else None
+
+        found.append(
+            SuggestionOut(
+                id=suggestion.id,
+                project=ProjectRefOut(id=view.project.id, title=view.project.title),
+                closes_at=view.closes_at,
+                state=suggestion.state,
+                title=suggestion.title,
+                caption=suggestion.caption,
+                chosen=medium(suggestion.chosen_medium_id),
+                ranking=[
+                    m for m in (medium(i) for i in suggestion.ranking) if m is not None
+                ],
+                why=suggestion.why,
+                attempts=suggestion.attempts,
+                last_error=suggestion.last_error,
+            )
+        )
+    return found

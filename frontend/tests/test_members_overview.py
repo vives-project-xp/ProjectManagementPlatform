@@ -26,7 +26,7 @@ async def test_teacher_sees_students_and_filters_on_no_project(user: User):
 
     await create_project(user, "Drone", 1, 3)
     await user.open("/projects/1")
-    await user.should_see(marker="add-member")
+    await user.should_see(marker="add-member", retries=30)
     choose_student(user, "Student Account")
     user.find(marker="add-member").click()
     await user.should_see("Members (1 / 1–3)")

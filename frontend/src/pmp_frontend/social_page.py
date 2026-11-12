@@ -330,7 +330,70 @@ def _weekly_update_page(mine: dict[str, Any]) -> None:
         _earlier_weeks(mine["earlier"])
 
 
+STATES = {
+    "generating": ("Being written", "grey-7"),
+    "waiting": ("Waiting for Review", "primary"),
+    "failed": ("No suggestion", "grey-7"),
+}
+
+
+def _suggestion_card(suggestion: dict[str, Any]) -> None:
+    """One Post suggestion as the AI made it (read-only until Review, #115).
+    Its texts are shown as plain text, never as HTML."""
+    label, colour = STATES.get(
+        suggestion["state"], (suggestion["state"].capitalize(), "grey-7")
+    )
+    with ui.card().classes("w-full max-w-3xl").mark(f"suggestion-{suggestion['id']}"):
+        with ui.row().classes("w-full items-center"):
+            ui.label(suggestion["project"]["title"]).classes("text-h6")
+            ui.label(f"Upload week until {shown(suggestion['closes_at'])}").classes(
+                "text-caption"
+            )
+            ui.space()
+            ui.badge(label, color=colour).mark("suggestion-state")
+        if suggestion["state"] == "generating":
+            with ui.row().classes("items-center gap-2"):
+                ui.spinner(color="dark")
+                ui.label("The AI is writing this suggestion.")
+            if suggestion["attempts"]:
+                ui.label(
+                    f"Try {suggestion['attempts']} of 3 didn't work "
+                    f"({suggestion['last_error']}); it tries again soon."
+                ).classes("text-caption")
+            return
+        if suggestion["state"] == "failed":
+            ui.label("The AI couldn't make a suggestion.").mark("suggestion-failed")
+            ui.label(suggestion["last_error"] or "").classes("text-caption")
+            return
+        with ui.row().classes("w-full gap-4 items-start no-wrap"):
+            if suggestion["chosen"]:
+                _media_grid([suggestion["chosen"]])
+            with ui.column().classes("gap-2 min-w-0"):
+                ui.label(suggestion["title"]).classes("font-medium").mark(
+                    "suggestion-title"
+                )
+                ui.label(suggestion["caption"]).classes("whitespace-pre-wrap")
+                ui.label(f"Why: {suggestion['why']}").classes("text-caption")
+        others = [m for m in suggestion["ranking"][1:]]
+        if others:
+            ui.label("The other photos and video, best first").classes("text-caption")
+            _media_grid(others)
+
+
 def register() -> None:
+    @role_page("/post-suggestions", "Post suggestions", {"superuser", "teacher"})
+    async def suggestions_page(user: api.CurrentUser) -> None:
+        found = await api.post_suggestions(token())
+        ui.label(
+            "The AI writes a suggestion at 07:00 on the Upload deadline's weekday, "
+            "a week after each Upload week, for every Active Project with photos "
+            "or a video."
+        ).classes("text-caption")
+        if not found:
+            ui.label("No Post suggestions yet.")
+        for suggestion in found:
+            _suggestion_card(suggestion)
+
     @app.get("/weekly-media/{medium_id}")
     async def weekly_medium(medium_id: int) -> Response:
         """A Weekly update's photo or video, fetched with the User's token."""
@@ -350,6 +413,16 @@ def register() -> None:
     @role_page("/social-media", "Social media", {"superuser"})
     async def settings_page(user: api.CurrentUser) -> None:
         _settings_form(await api.social_settings(token()))
+        status = await api.social_status(token())
+        with ui.card().classes("w-full max-w-lg").mark("ai-card"):
+            ui.label("AI").classes("text-h6")
+            if status["ai_configured"]:
+                ui.label("The school's AI is set up: Post suggestions are made.")
+            else:
+                ui.label(
+                    "The AI isn't set up yet (LLM_API_KEY on the server), so no "
+                    "Post suggestions are made."
+                )
         storage = await api.social_storage(token())
         with ui.card().classes("w-full max-w-lg").mark("storage-card"):
             ui.label("Storage").classes("text-h6")

@@ -22,10 +22,11 @@ from pmp_backend.api import (
 )
 from pmp_backend.database import is_reachable, make_engine
 from pmp_backend.errors import Conflict, Forbidden, NotFound, Refused, Unavailable
-from pmp_backend.services import daily_email, mail
+from pmp_backend.services import daily_email, mail, suggestions
 from pmp_backend.services.auth import LoginGuard
 from pmp_backend.services.chat import TypingBoard, clean_up_forever
 from pmp_backend.services.github import HttpGitHub
+from pmp_backend.services.post_ai import HttpLLM, is_configured
 from pmp_backend.services.seeding import seed_starting_accounts
 from pmp_backend.services.social import resume_processing
 from pmp_backend.services.trello import HttpTrello
@@ -57,8 +58,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 resume_processing, make_session, settings.social_media_dir
             )
         )
+        # Post suggestions at 07:00, a week after an Upload week (#114).
+        writer = None
+        if is_configured(settings):
+            writer = asyncio.create_task(
+                suggestions.run_forever(
+                    make_session, app.state.llm, settings.social_media_dir
+                )
+            )
         yield
-        for task in (sender, cleaner, resumer):
+        for task in (sender, cleaner, resumer, writer):
             if task is not None:
                 task.cancel()
                 with suppress(asyncio.CancelledError):
@@ -77,6 +86,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.trello = HttpTrello(settings)
     # Tests replace it with testing.FakeMailer.
     app.state.mailer = mail.SmtpMailer(settings)
+    # The school's LLM (ADR 0009); tests replace it with testing.FakeLLM.
+    app.state.llm = HttpLLM(settings)
     app.include_router(auth.router)
     app.include_router(users.router)
     app.include_router(programmes.router)

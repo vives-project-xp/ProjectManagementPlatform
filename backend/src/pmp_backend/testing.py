@@ -1,6 +1,8 @@
 """Database helpers shared by the backend and frontend test suites."""
 
+import json
 import os
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -17,6 +19,7 @@ from pmp_backend.services.github import (
     RepoInfo,
     repo_exists_error,
 )
+from pmp_backend.services.post_ai import AiAnswer, AiError, AiRequest
 from pmp_backend.services.trello import (
     BoardInfo,
     CreatedBoard,
@@ -343,3 +346,36 @@ class FakeMailer:
 
     def to(self, address: str) -> list[SentEmail]:
         return [email for email in self.sent if email.to == address]
+
+
+class FakeLLM:
+    """The school's LLM for tests (spec #110): records every request and answers
+    with a valid suggestion choosing the first medium, unless `answers` holds
+    scripted ones (AiAnswer, or a content string) or `failing` is set."""
+
+    def __init__(self) -> None:
+        self.requests: list[AiRequest] = []
+        self.answers: list[AiAnswer | str] = []
+        self.failing = False
+
+    def ask(self, request: AiRequest) -> AiAnswer:
+        self.requests.append(request)
+        if self.failing:
+            raise AiError("The AI can't be reached right now.")
+        if self.answers:
+            answer = self.answers.pop(0)
+            return answer if isinstance(answer, AiAnswer) else AiAnswer(answer, "stop")
+        labels = [medium.label for medium in request.media]
+        fixed = " ".join(re.findall(r"#\w+", request.instructions))
+        return AiAnswer(
+            json.dumps(
+                {
+                    "title": "Onze drone zweeft! 🚁",
+                    "caption": f"Deze week testten we de motoren. {fixed} #drone",
+                    "chosen": labels[0],
+                    "ranking": labels,
+                    "why": "The first photo shows the drone best.",
+                }
+            ),
+            "stop",
+        )

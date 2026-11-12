@@ -1,6 +1,7 @@
 import io
 import random
 import subprocess
+from datetime import datetime
 from pathlib import Path
 
 import imageio_ffmpeg
@@ -8,7 +9,8 @@ from nicegui import ui
 from nicegui.testing import User
 from PIL import Image, ImageDraw, ImageFilter
 
-from pmp_backend.services import social
+from pmp_backend.services import social, suggestions
+from pmp_backend.testing import FakeLLM
 from pmp_frontend import api
 from tests.conftest import eventually, ready_to_work
 from tests.test_chat import api_token, drone_with_the_student, navigation_targets
@@ -230,3 +232,32 @@ async def test_staff_are_warned_when_the_disk_is_full(user: User, monkeypatch) -
 
     await user.should_see(marker="storage-card")
     await user.should_see("more than 80% full")
+
+
+async def test_staff_see_the_ais_post_suggestion(
+    user: User, backend_in_process, tmp_path: Path
+) -> None:
+    staff = await api_token("superuser")
+    await api.set_social_settings(staff, WEDNESDAY_17)
+    await drone_with_the_student(staff)
+    student, _ = await api.login("student@pmp.local", "student-secret-1")
+    await api.change_password(student, "student-secret-1", "student-api-password")
+    await api.save_weekly_update(student, "We tested the motors.")
+    mine = await api.upload_weekly_photo(
+        student, "photo.jpg", photo(), "image/jpeg", consent=True
+    )
+    closes = datetime.fromisoformat(mine["current"]["closes_at"])
+    with backend_in_process.state.sessionmaker() as session:
+        suggestions.run_once(
+            session,
+            FakeLLM(),
+            tmp_path / "social-media",
+            suggestions.generate_at(closes),
+        )
+
+    await ready_to_work(user, "teacher")
+    await user.open("/post-suggestions")
+
+    await user.should_see("Waiting for Review")
+    await user.should_see("Onze drone zweeft! 🚁")
+    await user.should_see(marker=f"medium-{mine['current']['media'][0]['id']}")
