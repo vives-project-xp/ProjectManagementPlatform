@@ -51,6 +51,9 @@ async def test_student_sees_their_projects_photo(user: User):
     await user.should_see("Members (1 / 1–3)")
     await upload_photo(user)
     await user.should_see(marker="project-photo", retries=30)
+    # The reloaded page is complete once its last card is there; logging out
+    # before that leaves its last backend calls without a session.
+    await user.should_see(marker="weekly-updates-card", retries=30)
     user.find("Log out").click()
     await user.should_see("Log in")
 

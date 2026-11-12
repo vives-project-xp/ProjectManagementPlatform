@@ -1,7 +1,18 @@
+import shutil
+import uuid
 from datetime import datetime, time
 from typing import Annotated
 
-from fastapi import APIRouter, File, Form, Response, UploadFile
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    File,
+    Form,
+    Request,
+    Response,
+    UploadFile,
+)
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field, StringConstraints
 
 from pmp_backend.api.deps import (
@@ -77,10 +88,14 @@ def set_settings(
 
 class MediumOut(BaseModel):
     id: int
-    # "photo" (or, from #113, "video"); the file is GET /api/weekly-media/{id}.
+    # "photo" or "video"; the file is GET /api/weekly-media/{id}.
     kind: str
+    # "processing" while a video is being prepared, "failed" when that went
+    # wrong, otherwise "ready".
+    state: str
     width: int
     height: int
+    seconds: float | None
     uploaded_by: str
     uploaded_at: datetime
 
@@ -176,12 +191,66 @@ def get_medium(
     medium_id: int, session: SessionDep, settings: SettingsDep, user: CurrentUserDep
 ) -> Response:
     """A photo or video for the Project's Members, Teachers and the Superuser."""
-    medium, data = social.read_medium(
+    medium, path = social.read_medium(
         session, settings.social_media_dir, user, medium_id
     )
     media_type = "image/jpeg" if medium.kind == "photo" else "video/mp4"
-    return Response(
-        content=data,
-        media_type=media_type,
-        headers={"X-Content-Type-Options": "nosniff"},
+    return FileResponse(
+        path, media_type=media_type, headers={"X-Content-Type-Options": "nosniff"}
     )
+
+
+@router.post("/my-weekly-update/video")
+def upload_video(
+    request: Request,
+    background: BackgroundTasks,
+    session: SessionDep,
+    settings: SettingsDep,
+    student: StudentDep,
+    video: Annotated[UploadFile, File()],
+    consent: Annotated[bool, Form()] = False,
+) -> MyWeeklyUpdateOut:
+    """A form with one `video` (MP4 or MOV, at most 200 MB and 90 seconds) and
+    `consent` true. It is "processing" until its copies are made."""
+    media_dir = settings.social_media_dir
+    upload = social.incoming_path(media_dir, uuid.uuid4().hex)
+    with upload.open("wb") as target:
+        # One byte more than allowed is enough to know a video is too large.
+        shutil.copyfileobj(
+            _limited(video.file, social.MAX_VIDEO_BYTES + 1), target, 1024 * 1024
+        )
+    found, medium_id = social.upload_video(
+        session, media_dir, student, upload, consent=consent
+    )
+    background.add_task(
+        social.process_video, request.app.state.sessionmaker, media_dir, medium_id
+    )
+    return _mine(student, found)
+
+
+class _limited:
+    """At most `limit` bytes of `source`, read like a file."""
+
+    def __init__(self, source, limit: int) -> None:
+        self._source = source
+        self._left = limit
+
+    def read(self, size: int = -1) -> bytes:
+        if self._left <= 0:
+            return b""
+        size = self._left if size < 0 else min(size, self._left)
+        data = self._source.read(size)
+        self._left -= len(data)
+        return data
+
+
+class StorageOut(BaseModel):
+    # The share of the disk in use (0-1), and whether that is above 80%.
+    used_share: float
+    warning: bool
+
+
+@router.get("/social/storage")
+def get_storage(settings: SettingsDep, user: TeacherOrSuperuserDep) -> StorageOut:
+    found = social.storage(settings.social_media_dir)
+    return StorageOut(used_share=found.used_share, warning=found.warning)

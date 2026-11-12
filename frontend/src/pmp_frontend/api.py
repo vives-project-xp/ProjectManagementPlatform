@@ -1,6 +1,7 @@
 """The only way the frontend talks to the backend: its REST API over HTTP (ADR 0003)."""
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 from urllib.parse import quote, urlencode
 
@@ -16,6 +17,8 @@ TIMEOUT = 5
 BULK_TIMEOUT = 300
 # Sending up to 5 files of 10 MB.
 UPLOAD_TIMEOUT = 60
+# Sending a video of up to 200 MB (#113).
+VIDEO_TIMEOUT = 300
 
 
 def use_transport(transport: httpx.AsyncBaseTransport | None) -> None:
@@ -878,3 +881,25 @@ async def remove_weekly_medium(token: str, medium_id: int) -> dict[str, Any]:
 async def weekly_medium(token: str, medium_id: int) -> httpx.Response:
     """A photo or video of a Weekly update: the backend's answer, with its headers."""
     return await _response("GET", f"/api/weekly-media/{medium_id}", token=token)
+
+
+async def upload_weekly_video(
+    token: str, path: Path, name: str, content_type: str, *, consent: bool
+) -> dict[str, Any]:
+    """Add the video in the file at `path` to the team's open Weekly update; the
+    same answer as my_weekly_update, with the video still "processing"."""
+    with path.open("rb") as video:
+        return await _request(
+            "POST",
+            "/api/my-weekly-update/video",
+            token=token,
+            files={"video": (name, video, content_type or "video/mp4")},
+            data={"consent": "true" if consent else "false"},
+            timeout=VIDEO_TIMEOUT,
+        )
+
+
+async def social_storage(token: str) -> dict[str, Any]:
+    """How full the disk with the media is: used_share (0-1) and warning (above
+    80%). Teachers and the Superuser."""
+    return await _request("GET", "/api/social/storage", token=token)
