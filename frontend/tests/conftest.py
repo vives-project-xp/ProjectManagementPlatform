@@ -84,6 +84,7 @@ async def backend_in_process(
             logins_file=logins_file,
             photos_dir=tmp_path / "photos",
             chat_files_dir=tmp_path / "chat-files",
+            social_media_dir=tmp_path / "social-media",
             github_org="TestOrg",
             github_token="test-token",
             trello_api_key="test-key",

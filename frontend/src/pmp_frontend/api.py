@@ -852,3 +852,29 @@ async def project_weekly_updates(token: str, project_id: int) -> list[dict[str, 
     return await _request(
         "GET", f"/api/projects/{project_id}/weekly-updates", token=token
     )
+
+
+async def upload_weekly_photo(
+    token: str, name: str, data: bytes, content_type: str, *, consent: bool
+) -> dict[str, Any]:
+    """Add a photo to the team's open Weekly update; the same answer as
+    my_weekly_update. Refused (with the reason) by the Quality check."""
+    return await _request(
+        "POST",
+        "/api/my-weekly-update/photos",
+        token=token,
+        files={"photo": (name, data, content_type or "application/octet-stream")},
+        data={"consent": "true" if consent else "false"},
+        timeout=UPLOAD_TIMEOUT,
+    )
+
+
+async def remove_weekly_medium(token: str, medium_id: int) -> dict[str, Any]:
+    return await _request(
+        "DELETE", f"/api/my-weekly-update/media/{medium_id}", token=token
+    )
+
+
+async def weekly_medium(token: str, medium_id: int) -> httpx.Response:
+    """A photo or video of a Weekly update: the backend's answer, with its headers."""
+    return await _response("GET", f"/api/weekly-media/{medium_id}", token=token)

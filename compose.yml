@@ -25,6 +25,7 @@ services:
       LOGINS_FILE: /run/secrets/logins.txt
       PHOTOS_DIR: /data/photos
       CHAT_FILES_DIR: /data/chat-files
+      SOCIAL_MEDIA_DIR: /data/social-media
       # Test login without a password (api/dev_login.py); set DEV_LOGIN=true in
       # .env only while the team is testing.
       DEV_LOGIN: ${DEV_LOGIN:-false}
@@ -49,6 +50,8 @@ services:
       - photos:/data/photos
       # Photos and files attached to Chat messages, one folder per Project.
       - chat-files:/data/chat-files
+      # Photos and videos of Weekly updates (spec #110), one folder per Project.
+      - social-media:/data/social-media
       # Starting accounts; the file stays outside the repository on the VM. If it
       # is missing, the backend logs a warning and starts without them.
       - ${LOGINS_PATH:-./logins.txt}:/run/secrets/logins.txt:ro
@@ -120,5 +123,6 @@ volumes:
   frontend-storage:
   photos:
   chat-files:
+  social-media:
   caddy-data:
   caddy-config:

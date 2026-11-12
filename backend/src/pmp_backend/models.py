@@ -511,3 +511,37 @@ class WeeklyUpdate(Base):
     )
 
     edited_by: Mapped[User | None] = relationship(lazy="joined")
+    media: Mapped[list["WeeklyMedium"]] = relationship(
+        order_by="WeeklyMedium.id", lazy="selectin", passive_deletes=True
+    )
+
+
+class WeeklyMedium(Base):
+    """A photo (or, from #113, the video) of a Weekly update, stored as a file
+    named after its id. `uploaded_by_id` null after that User was deleted;
+    `posted` once it was part of a published post (never cleaned up)."""
+
+    __tablename__ = "weekly_media"
+    __table_args__ = (
+        CheckConstraint("kind IN ('photo', 'video')", name="ck_weekly_media_kind"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    weekly_update_id: Mapped[int] = mapped_column(
+        ForeignKey("weekly_updates.id", ondelete="CASCADE"), index=True
+    )
+    kind: Mapped[str] = mapped_column(String(10))
+    size: Mapped[int] = mapped_column(BigInteger)
+    width: Mapped[int] = mapped_column()
+    height: Mapped[int] = mapped_column()
+    # The Quality check's sharpness; the AI gets the best photos.
+    quality_score: Mapped[float | None] = mapped_column()
+    uploaded_by_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
+    uploaded_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    posted: Mapped[bool] = mapped_column(default=False, server_default=false())
+
+    uploaded_by: Mapped[User | None] = relationship(lazy="joined")

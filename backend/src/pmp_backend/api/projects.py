@@ -22,6 +22,7 @@ from pmp_backend.services import (
     photos,
     projects,
     repos,
+    social,
     top3,
 )
 from pmp_backend.services.projects import ProjectFields
@@ -258,6 +259,7 @@ def delete_project(
 ) -> Response:
     photos.delete_project(session, settings.photos_dir, project_id)
     chat.discard_files(settings.chat_files_dir, project_id)
+    social.discard_media(settings.social_media_dir, project_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
