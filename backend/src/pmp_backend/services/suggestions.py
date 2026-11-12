@@ -12,11 +12,18 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from PIL import Image
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from pmp_backend.domain import ProjectStatus
-from pmp_backend.models import PostSuggestion, Project, WeeklyMedium, WeeklyUpdate
+from pmp_backend.errors import Conflict, NotFound, Refused
+from pmp_backend.models import (
+    PostSuggestion,
+    Project,
+    User,
+    WeeklyMedium,
+    WeeklyUpdate,
+)
 from pmp_backend.services import post_ai, social
 from pmp_backend.services.post_ai import LLM, AiError
 
@@ -192,13 +199,19 @@ class SuggestionView:
     media: dict[int, social.MediumView]
 
 
-def suggestions(session: Session) -> list[SuggestionView]:
-    """Every Post suggestion, newest Upload week first."""
-    found = session.scalars(
+def suggestions(session: Session, owner_id: int | None = None) -> list[SuggestionView]:
+    """Every Post suggestion (only of Projects `owner_id` is the Product Owner of,
+    when given), newest Upload week first."""
+    query = (
         select(PostSuggestion)
         .join(WeeklyUpdate, WeeklyUpdate.id == PostSuggestion.weekly_update_id)
-        .order_by(WeeklyUpdate.closes_at.desc(), PostSuggestion.id)
-    ).all()
+        .join(Project, Project.id == WeeklyUpdate.project_id)
+        .order_by(WeeklyUpdate.closes_at.desc(), Project.title, PostSuggestion.id)
+        .execution_options(populate_existing=True)
+    )
+    if owner_id is not None:
+        query = query.where(Project.product_owner_id == owner_id)
+    found = session.scalars(query).all()
     views = []
     for suggestion in found:
         update = suggestion.weekly_update
@@ -212,3 +225,106 @@ def suggestions(session: Session) -> list[SuggestionView]:
             )
         )
     return views
+
+
+# Review (#115)
+
+
+class ReviewError(Refused):
+    """A Review action was refused; the message is fit to show."""
+
+
+class ReviewNotFoundError(ReviewError, NotFound):
+    pass
+
+
+class ReviewConflictError(ReviewError, Conflict):
+    pass
+
+
+def _locked(session: Session, suggestion_id: int, states: set[str]) -> PostSuggestion:
+    suggestion = session.scalar(
+        select(PostSuggestion)
+        .where(PostSuggestion.id == suggestion_id)
+        .with_for_update(of=PostSuggestion)
+        .execution_options(populate_existing=True)
+    )
+    if suggestion is None:
+        raise ReviewNotFoundError("This Post suggestion doesn't exist (any more).")
+    if suggestion.state not in states:
+        raise ReviewConflictError(
+            "This suggestion changed meanwhile. Reload the page and try again."
+        )
+    return suggestion
+
+
+def _reviewed(session: Session, suggestion: PostSuggestion, reviewer: User) -> None:
+    suggestion.reviewed_by_id = reviewer.id
+    suggestion.reviewed_at = session.scalar(select(func.now()))
+
+
+def edit(
+    session: Session,
+    reviewer: User,
+    suggestion_id: int,
+    *,
+    title: str,
+    caption: str,
+    chosen_medium_id: int,
+) -> PostSuggestion:
+    """Change the title, caption or medium, on the same rules as the AI's
+    answer; writing it yourself turns a failed suggestion into one waiting for
+    Review."""
+    suggestion = _locked(session, suggestion_id, {"waiting", "failed"})
+    title, caption = title.strip(), caption.strip()
+    hashtags = social.get_settings(session).fixed_hashtags
+    problems = post_ai.text_problems(title, caption, hashtags)
+    if problems:
+        raise ReviewError("The post needs " + ", ".join(problems) + ".")
+    usable = _usable(suggestion.weekly_update)
+    if chosen_medium_id not in {medium.id for medium in usable}:
+        raise ReviewError("Choose one of this week's photos or its video.")
+    suggestion.title, suggestion.caption = title, caption
+    suggestion.chosen_medium_id = chosen_medium_id
+    if not suggestion.ranking:
+        suggestion.ranking = [medium.id for medium in usable]
+    suggestion.state = "waiting"
+    suggestion.last_error = None
+    _reviewed(session, suggestion, reviewer)
+    session.commit()
+    return suggestion
+
+
+def refuse(
+    session: Session, reviewer: User, suggestion_id: int, reason: str | None
+) -> PostSuggestion:
+    """No post for this Project this Upload week; the team sees the reason."""
+    suggestion = _locked(session, suggestion_id, {"waiting", "failed"})
+    suggestion.state = "refused"
+    suggestion.refusal_reason = (reason or "").strip()[:500] or None
+    _reviewed(session, suggestion, reviewer)
+    session.commit()
+    return suggestion
+
+
+def generate_again(
+    session: Session, reviewer: User, suggestion_id: int
+) -> PostSuggestion:
+    """Let the AI start over; `attempt_now` then makes it at once."""
+    suggestion = _locked(session, suggestion_id, {"waiting", "failed", "refused"})
+    suggestion.state = "generating"
+    suggestion.attempts = 0
+    suggestion.next_attempt_at = None
+    suggestion.last_error = None
+    suggestion.refusal_reason = None
+    _reviewed(session, suggestion, reviewer)
+    session.commit()
+    return suggestion
+
+
+def attempt_now(
+    make_session: Callable[[], Session], llm: LLM, media_dir: Path, suggestion_id: int
+) -> None:
+    """One try right away (after Generate again), without waiting for the job."""
+    with make_session() as session:
+        attempt(session, llm, media_dir, suggestion_id, datetime.now(BRUSSELS))

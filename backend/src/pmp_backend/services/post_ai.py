@@ -142,18 +142,7 @@ def check(answer: AiAnswer, request: AiRequest, fixed_hashtags: str) -> Suggesti
     except (ValueError, KeyError, TypeError) as error:
         raise AiError("The AI's answer wasn't in the agreed format.") from error
     labels = [medium.label for medium in request.media]
-    problems = []
-    if not suggestion.title or len(suggestion.title) > MAX_TITLE:
-        problems.append(f"a title of 1-{MAX_TITLE} characters")
-    if not suggestion.caption or len(suggestion.caption) > MAX_CAPTION:
-        problems.append(f"a caption of at most {MAX_CAPTION} characters")
-    tags = {tag.lower() for tag in _HASHTAG.findall(suggestion.caption)}
-    fixed = {tag.lower() for tag in fixed_hashtags.split()}
-    extra = len(tags - fixed)
-    if not fixed <= tags or not EXTRA_HASHTAGS[0] <= extra <= EXTRA_HASHTAGS[1]:
-        problems.append("the fixed hashtags plus 1-3 others")
-    if len(_EMOJI.findall(suggestion.title + suggestion.caption)) > MAX_EMOJI:
-        problems.append(f"at most {MAX_EMOJI} emoji")
+    problems = text_problems(suggestion.title, suggestion.caption, fixed_hashtags)
     if suggestion.chosen not in labels:
         problems.append("a photo or video that was sent")
     if not set(suggestion.ranking) <= set(labels):
@@ -168,6 +157,24 @@ def check(answer: AiAnswer, request: AiRequest, fixed_hashtags: str) -> Suggesti
     return Suggestion(
         suggestion.title, suggestion.caption, suggestion.chosen, ranking, suggestion.why
     )
+
+
+def text_problems(title: str, caption: str, fixed_hashtags: str) -> list[str]:
+    """What a title and caption need and don't have: the same rules for the
+    AI's answer and for a reviewer's edit."""
+    problems = []
+    if not title or len(title) > MAX_TITLE:
+        problems.append(f"a title of 1-{MAX_TITLE} characters")
+    if not caption or len(caption) > MAX_CAPTION:
+        problems.append(f"a caption of at most {MAX_CAPTION} characters")
+    tags = {tag.lower() for tag in _HASHTAG.findall(caption)}
+    fixed = {tag.lower() for tag in fixed_hashtags.split()}
+    extra = len(tags - fixed)
+    if not fixed <= tags or not EXTRA_HASHTAGS[0] <= extra <= EXTRA_HASHTAGS[1]:
+        problems.append("the fixed hashtags plus 1-3 others")
+    if len(_EMOJI.findall(title + caption)) > MAX_EMOJI:
+        problems.append(f"at most {MAX_EMOJI} emoji")
+    return problems
 
 
 def is_configured(settings: Settings) -> bool:

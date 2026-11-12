@@ -910,8 +910,36 @@ async def social_status(token: str) -> dict[str, Any]:
     return await _request("GET", "/api/social/status", token=token)
 
 
-async def post_suggestions(token: str) -> list[dict[str, Any]]:
+async def post_suggestions(token: str, *, mine: bool = False) -> list[dict[str, Any]]:
     """Every Post suggestion, newest Upload week first (Teachers, Superuser):
     project, closes_at, state ("generating", "waiting", "failed", …), title,
     caption, chosen and ranking (Media), why, attempts and last_error."""
-    return await _request("GET", "/api/post-suggestions", token=token)
+    query = "?mine=true" if mine else ""
+    return await _request("GET", f"/api/post-suggestions{query}", token=token)
+
+
+async def edit_suggestion(
+    token: str, suggestion_id: int, body: dict[str, Any]
+) -> dict[str, Any]:
+    """Save title, caption and chosen_medium_id (also to write a failed one)."""
+    return await _request(
+        "PUT", f"/api/post-suggestions/{suggestion_id}", token=token, json=body
+    )
+
+
+async def refuse_suggestion(
+    token: str, suggestion_id: int, reason: str | None
+) -> dict[str, Any]:
+    return await _request(
+        "POST",
+        f"/api/post-suggestions/{suggestion_id}/refuse",
+        token=token,
+        json={"reason": reason},
+    )
+
+
+async def generate_suggestion(token: str, suggestion_id: int) -> dict[str, Any]:
+    """Let the AI start over; it answers in the background (1-2 minutes)."""
+    return await _request(
+        "POST", f"/api/post-suggestions/{suggestion_id}/generate", token=token
+    )
