@@ -117,6 +117,8 @@ class CurrentUser:
     must_change_password: bool
     github_username: str | None = None
     daily_email: bool = True
+    # A Student's Project, if any.
+    project_id: int | None = None
 
     @classmethod
     def of(cls, body: dict[str, Any]) -> "CurrentUser":
@@ -128,6 +130,7 @@ class CurrentUser:
             must_change_password=body["must_change_password"],
             github_username=body.get("github_username"),
             daily_email=body.get("daily_email", True),
+            project_id=body.get("project_id"),
         )
 
     @property
@@ -818,3 +821,34 @@ async def remove_chat_guest(token: str, project_id: int, user_id: int) -> None:
 async def leave_chat(token: str, project_id: int) -> None:
     """A Guest leaves the Chat."""
     await _request("POST", f"/api/projects/{project_id}/chat/leave", token=token)
+
+
+async def social_settings(token: str) -> dict[str, Any]:
+    """The social media settings (Superuser): upload_weekday (0 = Monday) and
+    upload_time ("HH:MM"), both None until set; instagram_weekdays,
+    instagram_times and fixed_hashtags."""
+    return await _request("GET", "/api/social/settings", token=token)
+
+
+async def set_social_settings(token: str, body: dict[str, Any]) -> dict[str, Any]:
+    return await _request("PUT", "/api/social/settings", token=token, json=body)
+
+
+async def my_weekly_update(token: str) -> dict[str, Any] | None:
+    """The Member's Project, the open Upload week's Weekly update (`current`,
+    None until the Upload deadline is set) and the `earlier` ones; None
+    without a Project."""
+    return await _request("GET", "/api/my-weekly-update", token=token)
+
+
+async def save_weekly_update(token: str, text: str) -> dict[str, Any]:
+    return await _request(
+        "PUT", "/api/my-weekly-update", token=token, json={"text": text}
+    )
+
+
+async def project_weekly_updates(token: str, project_id: int) -> list[dict[str, Any]]:
+    """A Project's Weekly updates, newest first (Teachers and the Superuser)."""
+    return await _request(
+        "GET", f"/api/projects/{project_id}/weekly-updates", token=token
+    )

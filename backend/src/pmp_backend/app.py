@@ -14,6 +14,7 @@ from pmp_backend.api import (
     planning,
     programmes,
     projects,
+    social,
     students,
     top3,
     trello,
@@ -79,6 +80,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(trello.router)
     app.include_router(planning.router)
     app.include_router(chat.router)
+    app.include_router(social.router)
     if settings.dev_login:
         app.include_router(dev_login.router)
 

@@ -55,3 +55,5 @@ class UserOut(BaseModel):
     year: str | None
     github_username: str | None
     daily_email: bool
+    # A Student's Project; the Weekly update item only shows with one.
+    project_id: int | None

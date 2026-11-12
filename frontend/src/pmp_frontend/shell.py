@@ -23,6 +23,7 @@ NAVIGATION: dict[str, list[tuple[str, str, str]]] = {
         ("Top 3", "/top3", "format_list_numbered"),
         ("Planning", "/planning", "event"),
         ("Chats", "/chats", "forum"),
+        ("Social media", "/social-media", "campaign"),
     ],
     "teacher": [
         ("Projects", "/projects", "folder"),
@@ -31,11 +32,17 @@ NAVIGATION: dict[str, list[tuple[str, str, str]]] = {
         ("Planning", "/planning", "event"),
         ("Chats", "/chats", "forum"),
     ],
-    "student": [("My project", "/my-project", "work"), ("Chat", "/chat", "chat")],
+    "student": [
+        ("My project", "/my-project", "work"),
+        ("Weekly update", "/weekly-update", "edit_note"),
+        ("Chat", "/chat", "chat"),
+    ],
 }
 # The navigation items that show the Unread badge (spec #91), and how often it
 # is refreshed.
 CHAT_PATHS = {"/chat", "/chats"}
+# Only Students in a Project have a Weekly update (spec #110).
+PROJECT_ONLY_PATHS = {"/weekly-update"}
 BADGE_SECONDS = 10.0
 
 
@@ -80,6 +87,8 @@ def header(user: api.CurrentUser) -> None:
         # Until the Temporary password is changed, there is nowhere else to go.
         if not user.must_change_password:
             for label, path, icon in NAVIGATION[user.role]:
+                if path in PROJECT_ONLY_PATHS and user.project_id is None:
+                    continue
                 link = _navigation_link(label, path, icon).mark("navigation")
                 if path in CHAT_PATHS:
                     # A Student without any Chat doesn't get the item at all.

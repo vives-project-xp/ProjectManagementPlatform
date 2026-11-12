@@ -11,6 +11,7 @@ from pmp_frontend import (
     planning,
     programmes_page,
     projects_page,
+    social_page,
     top3_page,
     users_page,
 )
@@ -198,4 +199,5 @@ def register_pages() -> None:
     photos.register()
     top3_page.register()
     planning.register()
+    social_page.register()
     chat_page.register()

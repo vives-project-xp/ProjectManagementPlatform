@@ -462,3 +462,52 @@ class ChatGuest(Base):
     )
 
     user: Mapped[User] = relationship(lazy="joined")
+
+
+class SocialSettings(Base):
+    """The social media settings (spec #110), one row, set by the Superuser; no
+    row yet means the defaults. Weekday 0 is Monday, times are Belgian time."""
+
+    __tablename__ = "social_settings"
+    __table_args__ = (
+        CheckConstraint("id = 1", name="ck_social_settings_single"),
+        CheckConstraint(
+            "upload_weekday BETWEEN 0 AND 6", name="ck_social_settings_weekday"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    # The Upload deadline; both null until the Superuser sets it.
+    upload_weekday: Mapped[int | None] = mapped_column(SmallInteger)
+    upload_time: Mapped[time | None] = mapped_column(Time)
+    # Instagram's Posting times: these weekdays, at these "HH:MM" times.
+    instagram_weekdays: Mapped[list[int]] = mapped_column(JSONB)
+    instagram_times: Mapped[list[str]] = mapped_column(JSONB)
+    fixed_hashtags: Mapped[str] = mapped_column(String(500))
+
+
+class WeeklyUpdate(Base):
+    """What a Project's team did in one Upload week, identified by the moment
+    that week closes. `edited_by_id` null after that User was deleted."""
+
+    __tablename__ = "weekly_updates"
+    __table_args__ = (
+        UniqueConstraint(
+            "project_id", "closes_at", name="uq_weekly_updates_project_week"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE")
+    )
+    closes_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    text: Mapped[str] = mapped_column(Text)
+    edited_by_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
+    edited_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    edited_by: Mapped[User | None] = relationship(lazy="joined")
