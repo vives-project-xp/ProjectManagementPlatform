@@ -514,6 +514,9 @@ class WeeklyUpdate(Base):
     media: Mapped[list["WeeklyMedium"]] = relationship(
         order_by="WeeklyMedium.id", lazy="selectin", passive_deletes=True
     )
+    suggestion: Mapped["PostSuggestion | None"] = relationship(
+        lazy="selectin", viewonly=True
+    )
 
 
 class WeeklyMedium(Base):
@@ -588,5 +591,13 @@ class PostSuggestion(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+    # The Review (#115): who last edited, refused or regenerated it, and when;
+    # null reviewer after that User was deleted.
+    reviewed_by_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    refusal_reason: Mapped[str | None] = mapped_column(String(500))
 
     weekly_update: Mapped[WeeklyUpdate] = relationship(lazy="joined")
+    reviewed_by: Mapped[User | None] = relationship(lazy="joined")

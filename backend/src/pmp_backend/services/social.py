@@ -186,6 +186,9 @@ class WeekView:
     edited_at: datetime | None
     is_open: bool
     media: list[MediumView]
+    # The Post suggestion's state once there is one, and why it was refused.
+    suggestion_state: str | None = None
+    refusal_reason: str | None = None
 
 
 def _name(user: User | None) -> str:
@@ -212,6 +215,10 @@ def week_view(update_: WeeklyUpdate, now: datetime) -> WeekView:
             )
             for medium in update_.media
         ],
+        suggestion_state=update_.suggestion.state if update_.suggestion else None,
+        refusal_reason=update_.suggestion.refusal_reason
+        if update_.suggestion
+        else None,
     )
 
 

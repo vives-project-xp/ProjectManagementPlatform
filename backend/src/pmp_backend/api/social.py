@@ -108,6 +108,9 @@ class WeeklyUpdateOut(BaseModel):
     edited_at: datetime | None
     is_open: bool
     media: list[MediumOut]
+    # The Post suggestion's state once there is one (e.g. "refused"), and why.
+    suggestion_state: str | None
+    refusal_reason: str | None
 
     @classmethod
     def of(cls, week: WeekView) -> "WeeklyUpdateOut":
@@ -282,14 +285,25 @@ class SuggestionOut(BaseModel):
     why: str | None
     attempts: int
     last_error: str | None
+    # Who last edited, refused or regenerated it (null before any Review).
+    reviewed_by: str | None
+    reviewed_at: datetime | None
+    refusal_reason: str | None
 
 
 @router.get("/post-suggestions")
 def list_suggestions(
-    session: SessionDep, user: TeacherOrSuperuserDep
+    session: SessionDep, user: TeacherOrSuperuserDep, mine: bool = False
 ) -> list[SuggestionOut]:
+    """`mine`: only of Projects the User is the Product Owner of."""
+    return _suggestions_out(
+        suggestions.suggestions(session, owner_id=user.id if mine else None)
+    )
+
+
+def _suggestions_out(views: list[suggestions.SuggestionView]) -> list[SuggestionOut]:
     found = []
-    for view in suggestions.suggestions(session):
+    for view in views:
         suggestion = view.suggestion
 
         def medium(medium_id: int | None, view=view) -> MediumOut | None:
@@ -311,6 +325,85 @@ def list_suggestions(
                 why=suggestion.why,
                 attempts=suggestion.attempts,
                 last_error=suggestion.last_error,
+                reviewed_by=(
+                    suggestion.reviewed_by.full_name
+                    if suggestion.reviewed_by
+                    else "Deleted user"
+                )
+                if suggestion.reviewed_at
+                else None,
+                reviewed_at=suggestion.reviewed_at,
+                refusal_reason=suggestion.refusal_reason,
             )
         )
     return found
+
+
+def _one(session, suggestion_id: int) -> SuggestionOut:
+    views = [
+        view
+        for view in suggestions.suggestions(session)
+        if view.suggestion.id == suggestion_id
+    ]
+    return _suggestions_out(views)[0]
+
+
+class SuggestionIn(BaseModel):
+    title: str
+    caption: str
+    chosen_medium_id: int
+
+
+class RefusalIn(BaseModel):
+    reason: str | None = None
+
+
+@router.put("/post-suggestions/{suggestion_id}")
+def edit_suggestion(
+    suggestion_id: int,
+    body: SuggestionIn,
+    session: SessionDep,
+    user: TeacherOrSuperuserDep,
+) -> SuggestionOut:
+    """Edit a suggestion waiting for Review, or write one the AI couldn't make."""
+    suggestions.edit(
+        session,
+        user,
+        suggestion_id,
+        title=body.title,
+        caption=body.caption,
+        chosen_medium_id=body.chosen_medium_id,
+    )
+    return _one(session, suggestion_id)
+
+
+@router.post("/post-suggestions/{suggestion_id}/refuse")
+def refuse_suggestion(
+    suggestion_id: int,
+    body: RefusalIn,
+    session: SessionDep,
+    user: TeacherOrSuperuserDep,
+) -> SuggestionOut:
+    suggestions.refuse(session, user, suggestion_id, body.reason)
+    return _one(session, suggestion_id)
+
+
+@router.post("/post-suggestions/{suggestion_id}/generate")
+def generate_again(
+    suggestion_id: int,
+    request: Request,
+    background: BackgroundTasks,
+    session: SessionDep,
+    settings: SettingsDep,
+    user: TeacherOrSuperuserDep,
+) -> SuggestionOut:
+    """The AI starts over; the answer comes in the background."""
+    suggestions.generate_again(session, user, suggestion_id)
+    background.add_task(
+        suggestions.attempt_now,
+        request.app.state.sessionmaker,
+        request.app.state.llm,
+        settings.social_media_dir,
+        suggestion_id,
+    )
+    return _one(session, suggestion_id)
