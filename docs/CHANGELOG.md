@@ -16,6 +16,20 @@ Numbers like #24 are GitHub issues or pull requests on [vives-project-xp/Project
 
 Newest first. Each request has the same four parts: **Before**, **Asked**, **Changed**, **Where**.
 
+### R16. Short, centered GitHub and Trello links (2026-11-12)
+
+**Before.** The GitHub repository card showed the whole URL (`https://github.com/ProjectManagementVives/ProjectManagmentPlatform`) against the left edge, and a long one ran outside the card. The Trello card showed the board's whole URL the same way.
+
+**Asked.** *"make the URL nicer, its going outside the box, also maybe make it centered not left"* (with a screenshot of the GitHub repository card).
+
+**Changed.**
+- The GitHub link shows only **Organisation/Repository**, with the GitHub icon and an "opens in a new tab" icon.
+- The Trello link reads **Open the board on Trello**, with the Trello icon.
+- Both are **centered** in their card. A long name wraps inside the card instead of running out of it, with the icons staying next to the text.
+- On a Project's page (Teachers, Superuser) and on the Students' **My project**.
+
+**Where.** `frontend/src/pmp_frontend/theme.py` (`external_link`, `svg_icon`), `repos.py`, `trello.py`, `static/icons/github.svg` and `trello.svg` (Bootstrap Icons, MIT, like the footer icons).
+
 ### R15. Save buttons turn grey once saved (2026-11-12, #121)
 
 **Before.** The **Save** buttons were always red and clickable, so after saving you couldn't tell whether your change had been stored, or whether you still had unsaved changes.
@@ -269,7 +283,8 @@ Newest first. "Live" means deployed to the VIVES VM by the Deploy workflow. "Mig
 | New | **Photos with the Quality check and Consent tick:** up to 5 photos per Weekly update (JPG, PNG or HEIC, at most 15 MB, short side at least 1080 px), only after ticking that everyone recognisable agrees; blurry, too dark, overexposed or too small photos are refused at once with a reason (no AI; thresholds tuned on real photos); stored as a JPEG of at most 2160 px, turned upright, without location or other metadata; Members remove them until the deadline; thumbnails for the team and on the Project's page; volume `social-media` (backup follows in #113); migration `0021` | #112 | #120 |
 | New | **Video, weekly backup, disk warning:** one video per Weekly update (MP4 or MOV, at most 200 MB and 90 s; checked only on type, length and size), prepared in the background into an Instagram-friendly 1080p H.264/AAC copy and a small copy for the AI ("Preparing the video…" until ready; the original is deleted; a restart picks up where it stopped); ffmpeg comes with the `imageio-ffmpeg` package; the `social-media` volume is archived every Sunday night and after each deploy (2 newest kept) and the restore test compares it with the `weekly_media` rows; staff see a warning when the disk is more than 80% full, and the Superuser sees disk use on the Social media screen; migration `0022`; fixed the flaky My project photo test | #113 | #122 |
 | Changed | Save buttons grey once saved, red again after a change (R15) | #121 | #123 |
-| Fixed | **Trello "Bad member type":** Check members failed for every Project whose Product Owner has no Trello account yet, because Trello refuses *admin* for such an email; the Product Owner is now invited as a normal member and made admin by a later Check members once they have an account and accepted | – | |
+| Fixed | **Trello "Bad member type":** Check members failed for every Project whose Product Owner has no Trello account yet, because Trello refuses *admin* for such an email; the Product Owner is now invited as a normal member and made admin by a later Check members once they have an account and accepted | – | #124 |
+| Changed | Short, centered GitHub and Trello links (R16) | – | |
 
 ### 2026-10-29: Project chat, continued (spec #91)
 
