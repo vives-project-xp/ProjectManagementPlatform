@@ -275,9 +275,12 @@ class FakeTrello:
         board = self.boards[board_id]
         if email in board.emails():
             return None
-        member = FakeMember(
-            self._next_id("m"), email, member_type, email not in self.accounts
-        )
+        unconfirmed = email not in self.accounts
+        # Like Trello: no admin without an account; HttpTrello then invites
+        # them as a normal member.
+        if unconfirmed and member_type == "admin":
+            member_type = "normal"
+        member = FakeMember(self._next_id("m"), email, member_type, unconfirmed)
         board.members[member.member_id] = member
         return member.member_id
 
@@ -297,7 +300,10 @@ class FakeTrello:
 
     def set_member_type(self, board_id: str, member_id: str, member_type: str) -> None:
         self._check()
-        self.boards[board_id].members[member_id].member_type = member_type
+        member = self.boards[board_id].members[member_id]
+        if member.unconfirmed and member_type == "admin":
+            raise TrelloError("Trello refused: Bad member type")
+        member.member_type = member_type
 
     def remove_member(self, board_id: str, member_id: str) -> None:
         self._check()

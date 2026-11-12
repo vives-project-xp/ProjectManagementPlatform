@@ -75,7 +75,8 @@ def test_members_and_the_product_owner_are_invited_by_email(
     assert board.emails() == {
         "lisa@student.vives.be": "normal",
         "bram@student.vives.be": "normal",
-        TEACHER_EMAIL: "admin",
+        # Admin only once they have a Trello account (Trello refuses it before).
+        TEACHER_EMAIL: "normal",
     }
     unconfirmed = {m.email for m in board.members.values() if m.unconfirmed}
     # Lisa has a Trello account and joins at once; the others still sign up.
@@ -175,3 +176,15 @@ def test_students_cannot_create_boards(client: TestClient):
 
     assert create_boards(client, student).status_code == 403
     assert client.get("/api/trello/status", headers=student).status_code == 403
+
+
+def test_a_product_owner_with_trello_is_invited_as_admin(
+    client: TestClient, trello: FakeTrello
+):
+    trello.accounts.add(TEACHER_EMAIL)
+    headers = ready_to_work(client, "superuser")
+    project_with_member(client, headers, "Drone", "Lisa")
+
+    create_boards(client, headers)
+
+    assert trello.board_named("Drone").emails()[TEACHER_EMAIL] == "admin"

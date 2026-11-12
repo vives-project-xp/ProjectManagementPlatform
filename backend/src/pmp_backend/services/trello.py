@@ -161,6 +161,7 @@ class HttpTrello:
         self._send("PUT", f"/boards/{board_id}", closed=str(closed).lower())
 
     def set_member_type(self, board_id: str, member_id: str, member_type: str) -> None:
+        """Refused for a member without a Trello account (still unconfirmed)."""
         self._send("PUT", f"/boards/{board_id}/members/{member_id}", type=member_type)
 
     def remove_member(self, board_id: str, member_id: str) -> None:
@@ -181,7 +182,12 @@ class HttpTrello:
             # already invited", seen in the real try of #62).
             if "already" in str(error).lower():
                 return None
-            raise
+            # Someone without a Trello account can't be an admin yet ("Bad
+            # member type", 2026-11-12): invited as a normal member, made admin
+            # by Check members once they have an account.
+            if member_type == NORMAL or "bad member type" not in str(error).lower():
+                raise
+            return self.invite(board_id, email, NORMAL)
         # Trello doesn't say which member the email became: the new one.
         added = {item["idMember"] for item in body["memberships"]} - before
         return added.pop() if len(added) == 1 else None
