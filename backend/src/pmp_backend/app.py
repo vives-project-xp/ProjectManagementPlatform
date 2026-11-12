@@ -22,7 +22,7 @@ from pmp_backend.api import (
 )
 from pmp_backend.database import is_reachable, make_engine
 from pmp_backend.errors import Conflict, Forbidden, NotFound, Refused, Unavailable
-from pmp_backend.services import daily_email, mail, suggestions
+from pmp_backend.services import daily_email, mail, posting, suggestions
 from pmp_backend.services.auth import LoginGuard
 from pmp_backend.services.chat import TypingBoard, clean_up_forever
 from pmp_backend.services.github import HttpGitHub
@@ -66,8 +66,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     make_session, app.state.llm, settings.social_media_dir
                 )
             )
+        # Scheduled posts move to To post today at their Posting time (#116).
+        poster = asyncio.create_task(posting.run_forever(make_session))
         yield
-        for task in (sender, cleaner, resumer, writer):
+        for task in (sender, cleaner, resumer, writer, poster):
             if task is not None:
                 task.cancel()
                 with suppress(asyncio.CancelledError):

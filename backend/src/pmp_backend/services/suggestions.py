@@ -242,7 +242,7 @@ class ReviewConflictError(ReviewError, Conflict):
     pass
 
 
-def _locked(session: Session, suggestion_id: int, states: set[str]) -> PostSuggestion:
+def locked(session: Session, suggestion_id: int, states: set[str]) -> PostSuggestion:
     suggestion = session.scalar(
         select(PostSuggestion)
         .where(PostSuggestion.id == suggestion_id)
@@ -258,7 +258,7 @@ def _locked(session: Session, suggestion_id: int, states: set[str]) -> PostSugge
     return suggestion
 
 
-def _reviewed(session: Session, suggestion: PostSuggestion, reviewer: User) -> None:
+def mark_reviewed(session: Session, suggestion: PostSuggestion, reviewer: User) -> None:
     suggestion.reviewed_by_id = reviewer.id
     suggestion.reviewed_at = session.scalar(select(func.now()))
 
@@ -275,7 +275,7 @@ def edit(
     """Change the title, caption or medium, on the same rules as the AI's
     answer; writing it yourself turns a failed suggestion into one waiting for
     Review."""
-    suggestion = _locked(session, suggestion_id, {"waiting", "failed"})
+    suggestion = locked(session, suggestion_id, {"waiting", "failed"})
     title, caption = title.strip(), caption.strip()
     hashtags = social.get_settings(session).fixed_hashtags
     problems = post_ai.text_problems(title, caption, hashtags)
@@ -290,7 +290,7 @@ def edit(
         suggestion.ranking = [medium.id for medium in usable]
     suggestion.state = "waiting"
     suggestion.last_error = None
-    _reviewed(session, suggestion, reviewer)
+    mark_reviewed(session, suggestion, reviewer)
     session.commit()
     return suggestion
 
@@ -299,10 +299,10 @@ def refuse(
     session: Session, reviewer: User, suggestion_id: int, reason: str | None
 ) -> PostSuggestion:
     """No post for this Project this Upload week; the team sees the reason."""
-    suggestion = _locked(session, suggestion_id, {"waiting", "failed"})
+    suggestion = locked(session, suggestion_id, {"waiting", "failed"})
     suggestion.state = "refused"
     suggestion.refusal_reason = (reason or "").strip()[:500] or None
-    _reviewed(session, suggestion, reviewer)
+    mark_reviewed(session, suggestion, reviewer)
     session.commit()
     return suggestion
 
@@ -311,13 +311,13 @@ def generate_again(
     session: Session, reviewer: User, suggestion_id: int
 ) -> PostSuggestion:
     """Let the AI start over; `attempt_now` then makes it at once."""
-    suggestion = _locked(session, suggestion_id, {"waiting", "failed", "refused"})
+    suggestion = locked(session, suggestion_id, {"waiting", "failed", "refused"})
     suggestion.state = "generating"
     suggestion.attempts = 0
     suggestion.next_attempt_at = None
     suggestion.last_error = None
     suggestion.refusal_reason = None
-    _reviewed(session, suggestion, reviewer)
+    mark_reviewed(session, suggestion, reviewer)
     session.commit()
     return suggestion
 

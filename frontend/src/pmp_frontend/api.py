@@ -943,3 +943,27 @@ async def generate_suggestion(token: str, suggestion_id: int) -> dict[str, Any]:
     return await _request(
         "POST", f"/api/post-suggestions/{suggestion_id}/generate", token=token
     )
+
+
+async def post_suggestion(token: str, suggestion_id: int) -> dict[str, Any]:
+    """Accept it: it gets Instagram's next free Posting time (scheduled_for)."""
+    return await _request(
+        "POST", f"/api/post-suggestions/{suggestion_id}/post", token=token
+    )
+
+
+async def pull_back_suggestion(token: str, suggestion_id: int) -> dict[str, Any]:
+    return await _request(
+        "POST", f"/api/post-suggestions/{suggestion_id}/pull-back", token=token
+    )
+
+
+async def mark_posted(token: str, suggestion_id: int) -> dict[str, Any]:
+    return await _request(
+        "POST", f"/api/post-suggestions/{suggestion_id}/posted", token=token
+    )
+
+
+async def scheduled_posts(token: str) -> dict[str, Any]:
+    """`to_post` (due, to publish by hand) and `scheduled` (the line)."""
+    return await _request("GET", "/api/scheduled-posts", token=token)
