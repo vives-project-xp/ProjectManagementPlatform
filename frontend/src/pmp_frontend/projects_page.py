@@ -19,6 +19,7 @@ from pmp_frontend.shell import (
     role_page,
     token,
 )
+from pmp_frontend.social_page import weekly_updates_card
 from pmp_frontend.trello import trello_buttons, trello_card
 
 STAFF = {"superuser", "teacher"}
@@ -283,6 +284,7 @@ def register() -> None:
             await repository_card(project, editable=not archived)
             await trello_card(project, editable=not archived)
             await planning_card(project, editable=not archived)
+            await weekly_updates_card(project_id)
             if archived:
                 # Archived Projects are read-only: shown, never edited.
                 with ui.card().classes("w-full max-w-lg"):

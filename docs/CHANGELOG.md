@@ -247,6 +247,13 @@ After the MVP went live, the team tried it and listed what bothered them. The li
 
 Newest first. "Live" means deployed to the VIVES VM by the Deploy workflow. "Migration" is the Alembic database version after that change.
 
+### 2026-11-12: Social media posts (spec #110)
+
+| | What | Issue | PR |
+|---|---|---|---|
+| New | Spec #110 (grilling Q1–Q26): Weekly updates with photos and a video, AI Post suggestions from the school's LLM, Review, Posting times on Instagram; `CONTEXT.md` "Social media" terms, ADR 0009 (school LLM, fixed inputs) and ADR 0010 (short-lived public media links) | #110 | – |
+| New | **Upload deadline + Weekly update:** the Superuser's **Social media** screen (Upload deadline weekday + time, Instagram Posting times, Fixed hashtags); Members' **Weekly update** item and page (one text per Project per Upload week, any Member edits until the deadline, then locked; earlier weeks listed); Weekly updates card on a Project's page; a new deadline moves the open week; `.gitignore` also ignores key and credential files; migration `0020` | #111 | |
+
 ### 2026-10-29: Project chat, continued (spec #91)
 
 | | What | Issue | PR |

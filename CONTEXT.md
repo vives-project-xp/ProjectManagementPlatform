@@ -163,3 +163,65 @@ _Avoid_: Course, study course, opleiding
 **Year**:
 Where a Student stands in their Programme: 1, 2, 3, or International for exchange students who belong to no year.
 _Avoid_: Level, grade
+
+### Social media
+
+**Upload deadline**:
+The weekday and time, in Belgian time, at which every Project's Weekly update closes; set by the Superuser, the same for all Projects.
+_Avoid_: Due date, Deadline (that is a Project's own)
+
+**Upload week**:
+The period from one Upload deadline to the next. Each Project has at most one Weekly update per Upload week.
+_Avoid_: Sprint, Week (alone)
+
+**Weekly update**:
+What a Project's team did in one Upload week: a text and its Media, written and edited by any Member until the Upload deadline, then locked. The input for that week's Post suggestion.
+_Avoid_: Report, log, progress post
+
+**Media**:
+The photos (at most 5) and video (at most 1) of a Weekly update. Photos: JPG, PNG or HEIC, at most 15 MB, short side at least 1080 px. Video: MP4 or MOV, at most 200 MB and 90 seconds. Only uploaded after the Consent tick; Members can remove and replace them until the Upload deadline. Media that were never posted are deleted 4 months after their Upload week; posted Media are kept. They belong to the Project, so they stay when the uploader is deleted ("Deleted user").
+_Avoid_: Chat file, attachment, Project photo (that is the cover)
+
+**Consent tick**:
+The confirmation, at every upload, that everyone recognisable in the Media agrees to being posted on VIVES social media. Without it nothing is uploaded.
+_Avoid_: Permission, GDPR checkbox
+
+**Quality check**:
+The check, without AI, that refuses a photo at upload when it is blurry, too dark, overexposed or too small, with a reason the Student can act on; there is no override, and refused photos don't count towards the 5. A video is only checked on its length and size.
+_Avoid_: AI check, filter, moderation
+
+**Post suggestion**:
+What the AI proposes for one Project's Weekly update: a title (at most 80 characters), a Dutch caption (at most about 1,000 characters, the Fixed hashtags plus 1–3 that fit), the chosen medium with a ranking of the others, and a short "why" for the reviewer. Made at 07:00 on the Upload deadline's weekday, a week after the Upload week closed, for every Active Project with a Weekly update and at least one usable medium. Staff can click "Generate again", or write it themselves when the AI couldn't make one. It never names Students.
+_Avoid_: Draft, AI post, proposal
+
+**Fixed hashtags**:
+The hashtags every caption carries (`#VIVEShogeschool #ElektronicaICT`), editable by the Superuser.
+_Avoid_: Default tags
+
+**Review**:
+A Teacher or the Superuser (usually the Project's Product Owner) checking a Post suggestion: they can edit the title and caption and pick another medium, then Post or Refuse it. A Refused suggestion means no post for that Project that Upload week; the reason, if given, is shown to the team, as is the outcome.
+_Avoid_: Approval, moderation
+
+**Post** (the action):
+Accepting a reviewed Post suggestion: it becomes a Scheduled post at the next free Posting time of its Channel. There is no "post right now".
+_Avoid_: Publish (for the reviewer's click), approve
+
+**Scheduled post**:
+An accepted Post suggestion waiting for its Posting time; staff can pull it back until it is published. Publishing is tried again once 10 minutes later; if that fails too, it moves to the To post today list. Archiving the Project doesn't cancel it.
+_Avoid_: Queue item, planned post
+
+**Channel**:
+A VIVES social media account the platform publishes to: Instagram (a photo post or a Reel per Project), later TikTok (the Weekly slideshow, and a Project's video when its reviewer ticked "Also on TikTok"). Each Channel has its own Posting times and order.
+_Avoid_: Platform, network, account (alone)
+
+**Posting time**:
+A moment at which a Channel publishes at most one Scheduled post, in Belgian time and set by the Superuser: Instagram 12:00 and 19:00 Monday–Friday; TikTok the Weekly slideshow on Friday 18:00 and at most one video a day at 17:00. Scheduled posts go out oldest first, never the same Project twice in a row.
+_Avoid_: Slot (that is a Weekly slot's meeting), timetable
+
+**Weekly slideshow**:
+TikTok's one photo post per Upload week: the best photo of each Project's posted suggestion, with a short caption the AI writes from the Projects' titles, reviewed by any Teacher or the Superuser.
+_Avoid_: Carousel, compilation
+
+**To post today**:
+The list of posts staff publish by hand (Download media, Copy caption, then "Posted"): every post until automatic publishing is live, and afterwards any post whose publishing failed.
+_Avoid_: Manual queue, backlog

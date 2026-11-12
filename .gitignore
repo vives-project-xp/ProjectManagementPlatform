@@ -3,6 +3,10 @@
 .env.*
 !.env.example
 logins.txt
+# Key and credential files, should one ever be copied into the repo (#111).
+*api-key*
+*.key
+*credentials*.txt
 
 # Python
 __pycache__/
