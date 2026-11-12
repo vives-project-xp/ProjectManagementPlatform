@@ -4,6 +4,7 @@ from collections.abc import Callable
 from typing import Any
 
 from nicegui import ui
+from nicegui.elements.mixins.value_element import ValueElement
 from starlette.responses import Response
 
 from pmp_frontend import api
@@ -12,6 +13,7 @@ from pmp_frontend.planning import planning_card
 from pmp_frontend.repos import github_buttons, repository_card
 from pmp_frontend.shell import (
     ErrorMessage,
+    SaveButton,
     confirm,
     guard,
     no_access,
@@ -72,8 +74,9 @@ def _row(project: dict[str, Any]) -> dict[str, Any]:
 
 def _project_form(
     teachers: list[dict[str, Any]], project: dict[str, Any] | None = None
-) -> Callable[[], dict[str, Any]]:
-    """The Project fields, filled from `project`; returns a function reading them."""
+) -> tuple[Callable[[], dict[str, Any]], list[ValueElement]]:
+    """The Project fields, filled from `project`; returns a function reading
+    them, and the fields themselves."""
     project = project or {}
     title = ui.input("Title", value=project.get("title", "")).classes("w-full")
     title.mark("title")
@@ -104,7 +107,7 @@ def _project_form(
             "team_size_max": int(maximum.value) if maximum.value is not None else None,
         }
 
-    return read
+    return read, [title, description, owner, minimum, maximum]
 
 
 def register() -> None:
@@ -128,7 +131,7 @@ def register() -> None:
 
         with ui.dialog() as dialog, ui.card().classes("w-full max-w-lg"):
             ui.label("New Project").classes("text-h6")
-            read_fields = _project_form(teachers)
+            read_fields, _ = _project_form(teachers)
             error_message = ErrorMessage()
             with ui.row():
                 ui.button("Create", on_click=create).mark("create-project")
@@ -184,6 +187,7 @@ def register() -> None:
                     error_message.show(error.message)
                     return
                 error_message.hide()
+                save_button.saved()
                 heading.text = saved["title"]
                 if saved.get("warning"):
                     # Saved in the platform; Trello catches up with Check members.
@@ -291,9 +295,10 @@ def register() -> None:
                     _read_only_details(project)
             else:
                 with ui.card().classes("w-full max-w-lg"):
-                    read_fields = _project_form(teachers, project)
+                    read_fields, fields = _project_form(teachers, project)
                     error_message = ErrorMessage()
-                    ui.button("Save", on_click=save).mark("save-project")
+                    save_button = SaveButton(fields, save)
+                    save_button.button.mark("save-project")
                 with ui.card().classes("w-full max-w-lg"):
                     await _members_section(project)
             if project["makers"]:

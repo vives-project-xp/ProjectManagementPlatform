@@ -16,6 +16,19 @@ Numbers like #24 are GitHub issues or pull requests on [vives-project-xp/Project
 
 Newest first. Each request has the same four parts: **Before**, **Asked**, **Changed**, **Where**.
 
+### R15. Save buttons turn grey once saved (2026-11-12, #121)
+
+**Before.** The **Save** buttons were always red and clickable, so after saving you couldn't tell whether your change had been stored, or whether you still had unsaved changes.
+
+**Asked.** *"if we save a setting on our website, can u make it greyed out once saved? so people know it saved successfully, only make it bright again once we have it different than our saved"*.
+
+**Changed.**
+- The **Save** button is greyed out while the form shows exactly what is saved, and turns red as soon as a field differs. Changing a field back to the saved value greys it out again.
+- After a successful save, the button turns grey. After a refused save (for example an invalid hashtag) it stays red, because nothing was stored.
+- On the five forms that stay on the page after saving: **Social media** settings, **Weekly update** text, a **Project's** details, a **User's** details, and the **Repository name**. Save buttons in dialogs that close after saving are unchanged.
+
+**Where.** `frontend/src/pmp_frontend/shell.py` (`SaveButton`), `social_page.py`, `projects_page.py`, `users_page.py`, `repos.py`.
+
 ### R14. Login page centered (2026-10-29, #108, PR #109)
 
 **Before.** The login page's title, subtitle and **Log in** card stood against the left edge of the page, with empty space on the right.
@@ -254,7 +267,8 @@ Newest first. "Live" means deployed to the VIVES VM by the Deploy workflow. "Mig
 | New | Spec #110 (grilling Q1–Q26): Weekly updates with photos and a video, AI Post suggestions from the school's LLM, Review, Posting times on Instagram; `CONTEXT.md` "Social media" terms, ADR 0009 (school LLM, fixed inputs) and ADR 0010 (short-lived public media links) | #110 | – |
 | New | **Upload deadline + Weekly update:** the Superuser's **Social media** screen (Upload deadline weekday + time, Instagram Posting times, Fixed hashtags); Members' **Weekly update** item and page (one text per Project per Upload week, any Member edits until the deadline, then locked; earlier weeks listed); Weekly updates card on a Project's page; a new deadline moves the open week; `.gitignore` also ignores key and credential files; migration `0020` | #111 | #119 |
 | New | **Photos with the Quality check and Consent tick:** up to 5 photos per Weekly update (JPG, PNG or HEIC, at most 15 MB, short side at least 1080 px), only after ticking that everyone recognisable agrees; blurry, too dark, overexposed or too small photos are refused at once with a reason (no AI; thresholds tuned on real photos); stored as a JPEG of at most 2160 px, turned upright, without location or other metadata; Members remove them until the deadline; thumbnails for the team and on the Project's page; volume `social-media` (backup follows in #113); migration `0021` | #112 | #120 |
-| New | **Video, weekly backup, disk warning:** one video per Weekly update (MP4 or MOV, at most 200 MB and 90 s; checked only on type, length and size), prepared in the background into an Instagram-friendly 1080p H.264/AAC copy and a small copy for the AI ("Preparing the video…" until ready; the original is deleted; a restart picks up where it stopped); ffmpeg comes with the `imageio-ffmpeg` package; the `social-media` volume is archived every Sunday night and after each deploy (2 newest kept) and the restore test compares it with the `weekly_media` rows; staff see a warning when the disk is more than 80% full, and the Superuser sees disk use on the Social media screen; migration `0022` | #113 | |
+| New | **Video, weekly backup, disk warning:** one video per Weekly update (MP4 or MOV, at most 200 MB and 90 s; checked only on type, length and size), prepared in the background into an Instagram-friendly 1080p H.264/AAC copy and a small copy for the AI ("Preparing the video…" until ready; the original is deleted; a restart picks up where it stopped); ffmpeg comes with the `imageio-ffmpeg` package; the `social-media` volume is archived every Sunday night and after each deploy (2 newest kept) and the restore test compares it with the `weekly_media` rows; staff see a warning when the disk is more than 80% full, and the Superuser sees disk use on the Social media screen; migration `0022`; fixed the flaky My project photo test | #113 | #122 |
+| Changed | Save buttons grey once saved, red again after a change (R15) | #121 | |
 
 ### 2026-10-29: Project chat, continued (spec #91)
 

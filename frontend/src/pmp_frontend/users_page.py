@@ -9,6 +9,7 @@ from pmp_frontend import api
 from pmp_frontend.github_username import github_username_card
 from pmp_frontend.shell import (
     ErrorMessage,
+    SaveButton,
     confirm,
     guard,
     no_access,
@@ -196,6 +197,7 @@ def register() -> None:
                     error_message.show(error.message)
                     return
                 error_message.hide()
+                save_button.saved()
                 heading.text = f"{saved['first_name']} {saved['last_name']}"
                 ui.notify("The changes were saved.")
 
@@ -276,7 +278,10 @@ def register() -> None:
                 programme.set_visibility(is_student)
                 year.set_visibility(is_student)
                 error_message = ErrorMessage()
-                ui.button("Save", on_click=save).mark("save-user")
+                save_button = SaveButton(
+                    [first_name, last_name, email, programme, year], save
+                )
+                save_button.button.mark("save-user")
 
             with ui.card().classes("w-full max-w-lg"):
                 status_label = ui.label()
