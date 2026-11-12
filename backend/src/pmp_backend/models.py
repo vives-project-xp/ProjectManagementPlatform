@@ -598,6 +598,19 @@ class PostSuggestion(Base):
     )
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     refusal_reason: Mapped[str | None] = mapped_column(String(500))
+    # Planning (#116): when it was Posted (its place in the Channel's line) and
+    # the Posting time it got; who posted it by hand, and when.
+    queued_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    scheduled_for: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    posted_by_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
+    posted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     weekly_update: Mapped[WeeklyUpdate] = relationship(lazy="joined")
-    reviewed_by: Mapped[User | None] = relationship(lazy="joined")
+    reviewed_by: Mapped[User | None] = relationship(
+        lazy="joined", foreign_keys=[reviewed_by_id]
+    )
+    posted_by: Mapped[User | None] = relationship(
+        lazy="joined", foreign_keys=[posted_by_id]
+    )

@@ -16,6 +16,9 @@ STATES = {
     "waiting": ("Waiting for Review", "primary"),
     "failed": ("No suggestion", "grey-7"),
     "refused": ("Refused", "grey-7"),
+    "scheduled": ("Scheduled", "positive"),
+    "to_post_by_hand": ("To post by hand", "primary"),
+    "posted_by_hand": ("Posted", "positive"),
 }
 # How often the page looks again while the AI is writing.
 GENERATING_SECONDS = 5.0
@@ -103,8 +106,67 @@ class SuggestionCard:
         with ui.row():
             self._generate_button()
 
+    def _scheduled(self) -> None:
+        ui.label(
+            f"Scheduled for {shown(self.suggestion['scheduled_for'])} on Instagram."
+        ).mark("scheduled-for")
+        self._post_preview()
+        self._reviewed()
+        ui.button("Pull back", icon="undo", on_click=self._pull_back).props(
+            "outline color=dark"
+        ).mark("pull-back")
+
+    def _to_post_by_hand(self) -> None:
+        ui.label(
+            f"Its Posting time ({shown(self.suggestion['scheduled_for'])}) has "
+            "come: publish it from "
+        ).mark("to-post")
+        ui.link("Scheduled posts", "/scheduled-posts")
+        self._post_preview()
+
+    def _posted_by_hand(self) -> None:
+        ui.label(
+            f"Posted by {self.suggestion['posted_by']} on "
+            f"{shown(self.suggestion['posted_at'])}."
+        ).mark("posted")
+        self._post_preview()
+
     def _other(self) -> None:
         self._reviewed()
+
+    def _post_preview(self) -> None:
+        with ui.row().classes("w-full gap-4 items-start no-wrap"):
+            if self.suggestion["chosen"]:
+                media_grid([self.suggestion["chosen"]])
+            with ui.column().classes("gap-1 min-w-0"):
+                ui.label(self.suggestion["title"] or "").classes("font-medium")
+                ui.label(self.suggestion["caption"] or "").classes(
+                    "whitespace-pre-wrap"
+                )
+
+    async def _post(self) -> None:
+        question = (
+            "Post this? It gets Instagram's next free Posting time; you can pull "
+            "it back until then."
+        )
+        if not await confirm(question, "Post"):
+            return
+        try:
+            done = await api.post_suggestion(token(), self._id)
+        except api.ApiError as problem:
+            self.error.show(problem.message)
+            return
+        ui.notify(f"Scheduled for {shown(done['scheduled_for'])}.")
+        await self.reload()
+
+    async def _pull_back(self) -> None:
+        try:
+            await api.pull_back_suggestion(token(), self._id)
+        except api.ApiError as problem:
+            self.error.show(problem.message)
+            return
+        ui.notify("The post was pulled back to Review.")
+        await self.reload()
 
     def _editor(self) -> None:
         suggestion = self.suggestion
@@ -155,7 +217,13 @@ class SuggestionCard:
 
         self._reviewed()
         with ui.row().classes("items-center gap-2"):
-            SaveButton([medium, title, caption], save).button.mark("save-suggestion")
+            save_button = SaveButton([medium, title, caption], save)
+            save_button.button.mark("save-suggestion")
+            if suggestion["state"] == "waiting":
+                # What is posted is what is saved: save changes first.
+                ui.button("Post", icon="send", on_click=self._post).bind_enabled_from(
+                    save_button.button, "enabled", backward=lambda unsaved: not unsaved
+                ).mark("post-suggestion")
             ui.button("Refuse", on_click=self._refuse).props("outline color=dark").mark(
                 "refuse-suggestion"
             )

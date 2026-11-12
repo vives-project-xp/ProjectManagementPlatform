@@ -24,7 +24,7 @@ from pmp_backend.api.deps import (
     TeacherOrSuperuserDep,
 )
 from pmp_backend.api.schemas import ProjectRefOut
-from pmp_backend.services import post_ai, social, suggestions
+from pmp_backend.services import post_ai, posting, social, suggestions
 from pmp_backend.services.social import MyWeeklyUpdate, WeekView
 
 router = APIRouter(prefix="/api", tags=["social"])
@@ -289,6 +289,10 @@ class SuggestionOut(BaseModel):
     reviewed_by: str | None
     reviewed_at: datetime | None
     refusal_reason: str | None
+    # Its Posting time once Posted ("scheduled"); who posted it by hand, when.
+    scheduled_for: datetime | None
+    posted_by: str | None
+    posted_at: datetime | None
 
 
 @router.get("/post-suggestions")
@@ -334,6 +338,15 @@ def _suggestions_out(views: list[suggestions.SuggestionView]) -> list[Suggestion
                 else None,
                 reviewed_at=suggestion.reviewed_at,
                 refusal_reason=suggestion.refusal_reason,
+                scheduled_for=suggestion.scheduled_for,
+                posted_by=(
+                    suggestion.posted_by.full_name
+                    if suggestion.posted_by
+                    else "Deleted user"
+                )
+                if suggestion.posted_at
+                else None,
+                posted_at=suggestion.posted_at,
             )
         )
     return found
@@ -407,3 +420,49 @@ def generate_again(
         suggestion_id,
     )
     return _one(session, suggestion_id)
+
+
+@router.post("/post-suggestions/{suggestion_id}/post")
+def post_suggestion(
+    suggestion_id: int, session: SessionDep, user: TeacherOrSuperuserDep
+) -> SuggestionOut:
+    """Accept it: it gets Instagram's next free Posting time (no "right now")."""
+    posting.post(session, user, suggestion_id)
+    return _one(session, suggestion_id)
+
+
+@router.post("/post-suggestions/{suggestion_id}/pull-back")
+def pull_back(
+    suggestion_id: int, session: SessionDep, user: TeacherOrSuperuserDep
+) -> SuggestionOut:
+    """Take a Scheduled post out of the line, back to Review."""
+    posting.pull_back(session, user, suggestion_id)
+    return _one(session, suggestion_id)
+
+
+@router.post("/post-suggestions/{suggestion_id}/posted")
+def mark_posted(
+    suggestion_id: int, session: SessionDep, user: TeacherOrSuperuserDep
+) -> SuggestionOut:
+    """It was published by hand from the To post today list."""
+    posting.mark_posted(session, user, suggestion_id)
+    return _one(session, suggestion_id)
+
+
+class ScheduledPostsOut(BaseModel):
+    # Due posts to publish by hand (oldest first), and the line (soonest first).
+    to_post: list[SuggestionOut]
+    scheduled: list[SuggestionOut]
+
+
+@router.get("/scheduled-posts")
+def scheduled_posts(
+    session: SessionDep, user: TeacherOrSuperuserDep
+) -> ScheduledPostsOut:
+    to_post, scheduled = posting.lists(session)
+    by_id = {
+        found.id: found for found in _suggestions_out(suggestions.suggestions(session))
+    }
+    return ScheduledPostsOut(
+        to_post=[by_id[i] for i in to_post], scheduled=[by_id[i] for i in scheduled]
+    )
