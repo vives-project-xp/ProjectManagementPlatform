@@ -283,3 +283,28 @@ def test_students_cannot_check_or_see_the_status(client: TestClient, drone):
     assert client.post("/api/trello/check-all", headers=student).status_code == 403
     response = client.get(f"/api/projects/{project}/trello", headers=student)
     assert response.status_code == 403
+
+
+def test_a_product_owner_without_trello_becomes_admin_after_signing_up(
+    client: TestClient, trello: FakeTrello, drone
+):
+    """Trello refuses admin for someone without an account ("Bad member type",
+    2026-11-12): they are invited as a normal member first."""
+    staff, project, _ = drone
+    owner = next(
+        m
+        for m in trello.board_named("Drone").members.values()
+        if m.email == TEACHER_EMAIL
+    )
+    assert (owner.member_type, owner.unconfirmed) == ("normal", True)
+
+    # Checking again while they still have no account doesn't fail.
+    response = check(client, staff, project)
+    assert response.status_code == 200, response.text
+    assert owner.member_type == "normal"
+
+    trello.sign_up(TEACHER_EMAIL)
+    response = check(client, staff, project)
+
+    assert response.status_code == 200, response.text
+    assert owner.member_type == "admin"

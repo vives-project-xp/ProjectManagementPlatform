@@ -228,6 +228,10 @@ def _check(
                 session.flush()
                 result.invited.append(user.full_name)
         elif on_board[grant.trello_member_id].member_type != member_type:
+            # Without a Trello account they can't be admin yet: a later Check
+            # members does it once they have accepted.
+            if on_board[grant.trello_member_id].unconfirmed:
+                continue
             client.set_member_type(board_id, grant.trello_member_id, member_type)
             result.updated.append(user.full_name)
     return result
