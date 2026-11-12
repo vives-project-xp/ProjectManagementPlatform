@@ -9,8 +9,11 @@ from nicegui import ui
 from pmp_frontend import api
 from pmp_frontend.repos import show_results, while_working
 from pmp_frontend.shell import ErrorMessage, confirm, token
+from pmp_frontend.theme import external_link
 
 SIGN_UP_URL = "https://trello.com/signup"
+# The board link's text, instead of the whole URL (R16).
+BOARD_LINK = "Open the board on Trello"
 
 
 def _status_text(person: dict[str, Any]) -> str:
@@ -60,7 +63,7 @@ async def trello_card(project: dict[str, Any], *, editable: bool) -> None:
         error = ErrorMessage()
         if project["trello_board_url"]:
             url = project["trello_board_url"]
-            ui.link(url, url, new_tab=True).mark("trello-link")
+            external_link(url, BOARD_LINK, "trello").mark("trello-link")
             if editable:
                 await access()
                 ui.button("Check members", on_click=check).props(
@@ -165,7 +168,7 @@ async def my_trello_card() -> None:
         return
     with ui.card().classes("w-full").mark("my-trello-board"):
         ui.label("Trello board").classes("text-h6")
-        ui.link(mine["board_url"], mine["board_url"], new_tab=True)
+        external_link(mine["board_url"], BOARD_LINK, "trello")
         if mine["status"] == "invited":
             ui.link(
                 f"Sign up on Trello with {mine['email']} to get access",

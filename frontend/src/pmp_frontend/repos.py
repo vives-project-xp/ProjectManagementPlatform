@@ -3,11 +3,13 @@ page, and "Create repos for all Projects" / "Check all members"."""
 
 from collections.abc import Awaitable
 from typing import Any
+from urllib.parse import urlparse
 
 from nicegui import ui
 
 from pmp_frontend import api
 from pmp_frontend.shell import ErrorMessage, SaveButton, confirm, token
+from pmp_frontend.theme import external_link
 
 STATUS_TEXT = {
     "has_access": "Has access",
@@ -66,9 +68,7 @@ async def repository_card(project: dict[str, Any], *, editable: bool) -> None:
         ui.label("GitHub repository").classes("text-h6")
         error = ErrorMessage()
         if project["repo_url"]:
-            ui.link(project["repo_url"], project["repo_url"], new_tab=True).mark(
-                "repo-link"
-            )
+            repository_link(project["repo_url"]).mark("repo-link")
             if editable:
                 await access()
                 ui.button("Check members", on_click=check).props(
@@ -196,6 +196,11 @@ NEXT_STEP = {
 }
 
 
+def repository_link(url: str) -> ui.link:
+    """ "Organisation/Repository" instead of the whole URL."""
+    return external_link(url, urlparse(url).path.strip("/"), "github")
+
+
 async def my_repository_card() -> None:
     """On My project: the Student's repository and their next step."""
     try:
@@ -207,7 +212,7 @@ async def my_repository_card() -> None:
         return
     with ui.card().classes("w-full").mark("my-repository"):
         ui.label("GitHub repository").classes("text-h6")
-        ui.link(mine["repo_url"], mine["repo_url"], new_tab=True)
+        repository_link(mine["repo_url"])
         if mine["status"] == "invited":
             ui.link(
                 "Accept your invitation on GitHub", mine["invitation_url"], new_tab=True

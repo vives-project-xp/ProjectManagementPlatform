@@ -80,6 +80,29 @@ def frame(
     footer()
 
 
+def svg_icon(name: str) -> None:
+    """A brand icon from static/icons (Bootstrap Icons, MIT), in the text colour."""
+    # Our own files, so no sanitising needed.
+    ui.html(
+        (ICONS_DIR / f"{name}.svg").read_text(encoding="utf-8"), sanitize=False
+    ).classes("flex shrink-0").mark(f"icon-{name}")
+
+
+def external_link(url: str, text: str, icon: str) -> ui.link:
+    """A short link to another site (GitHub, Trello) with its icon, centered in
+    its card; a long name wraps instead of running out of the card (R16)."""
+    with (
+        ui.row().classes("w-full justify-center"),
+        ui.link(target=url, new_tab=True).classes(
+            "flex flex-nowrap items-center gap-2 max-w-full"
+        ) as link,
+    ):
+        svg_icon(icon)
+        ui.label(text).classes("break-all min-w-0")
+        ui.icon("open_in_new", size="xs").classes("shrink-0")
+    return link
+
+
 def footer() -> None:
     """Black, with white text (house style): VIVES' socials, the campus address,
     the privacy policy and the copyright. Scrolls with the page. The links and
@@ -103,11 +126,7 @@ def footer() -> None:
                     .classes("text-white flex items-center gap-1")
                     .mark(f"footer-{name}")
                 ):
-                    # Our own files, so no sanitising needed.
-                    ui.html(
-                        (ICONS_DIR / f"{name}.svg").read_text(encoding="utf-8"),
-                        sanitize=False,
-                    ).classes("flex").mark(f"icon-{name}")
+                    svg_icon(name)
                     ui.label(label)
             ui.space()
             if settings.footer_privacy_url:
