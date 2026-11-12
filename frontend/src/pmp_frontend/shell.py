@@ -2,9 +2,11 @@
 
 from collections.abc import Awaitable, Callable
 from contextlib import suppress
+from typing import Any
 
 from fastapi.responses import RedirectResponse
 from nicegui import app, ui
+from nicegui.elements.mixins.value_element import ValueElement
 from starlette.responses import Response
 
 from pmp_frontend import api
@@ -180,6 +182,49 @@ def role_page(
             return None
 
     return register
+
+
+def _comparable(value: Any) -> Any:
+    """A field value as it would be saved: empty is empty, spaces around text
+    and the order of a multiple choice don't matter."""
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, list):
+        return sorted(value)
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    return value
+
+
+class SaveButton:
+    """A Save button that is greyed out while the form shows what was saved,
+    and active as soon as a field differs (#121). Call `saved()` after a
+    successful save."""
+
+    def __init__(
+        self,
+        fields: list[ValueElement],
+        on_click: Callable[[], Awaitable[None]],
+        label: str = "Save",
+    ) -> None:
+        self._fields = fields
+        self.button = ui.button(label, on_click=on_click)
+        self.saved()
+        for field in fields:
+            field.on_value_change(self._check)
+
+    def _values(self) -> list[Any]:
+        return [_comparable(field.value) for field in self._fields]
+
+    def saved(self) -> None:
+        """What the fields show now is what is saved."""
+        self._saved = self._values()
+        self._check()
+
+    def _check(self) -> None:
+        self.button.set_enabled(self._values() != self._saved)
 
 
 async def confirm(message: str, action: str) -> bool:

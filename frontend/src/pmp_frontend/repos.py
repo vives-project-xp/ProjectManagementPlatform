@@ -7,7 +7,7 @@ from typing import Any
 from nicegui import ui
 
 from pmp_frontend import api
-from pmp_frontend.shell import ErrorMessage, confirm, token
+from pmp_frontend.shell import ErrorMessage, SaveButton, confirm, token
 
 STATUS_TEXT = {
     "has_access": "Has access",
@@ -42,6 +42,7 @@ async def repository_card(project: dict[str, Any], *, editable: bool) -> None:
             return
         error.hide()
         name.value = saved["repo_name"]
+        save_button.saved()
         ui.notify(f"The repository will be called {saved['repo_name']}.")
 
     async def check() -> None:
@@ -83,9 +84,8 @@ async def repository_card(project: dict[str, Any], *, editable: bool) -> None:
         ).classes("text-caption")
         name = ui.input("Repository name", value=project["repo_name"]).classes("w-full")
         name.mark("repo-name")
-        ui.button("Save name", on_click=save).props("outline color=dark").mark(
-            "save-repo-name"
-        )
+        save_button = SaveButton([name], save, "Save name")
+        save_button.button.props("outline color=dark").mark("save-repo-name")
 
 
 async def while_working[T](text: str, call: Awaitable[T]) -> T:

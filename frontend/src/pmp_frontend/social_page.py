@@ -10,7 +10,7 @@ from nicegui import app, events, ui
 from starlette.responses import Response
 
 from pmp_frontend import api
-from pmp_frontend.shell import ErrorMessage, confirm, role_page, token
+from pmp_frontend.shell import ErrorMessage, SaveButton, confirm, role_page, token
 from pmp_frontend.times import shown
 
 WEEKDAYS = [
@@ -138,6 +138,7 @@ def _settings_form(settings: dict[str, Any]) -> None:
             error.show(problem.message)
             return
         error.hide()
+        save_button.saved()
         ui.notify("The social media settings were saved.")
 
     days = dict(enumerate(WEEKDAYS))
@@ -174,7 +175,10 @@ def _settings_form(settings: dict[str, Any]) -> None:
         hashtags = ui.input("Hashtags", value=settings["fixed_hashtags"])
         hashtags.classes("w-full").mark("fixed-hashtags")
     error = ErrorMessage()
-    ui.button("Save", on_click=save).mark("save-social-settings")
+    save_button = SaveButton(
+        [weekday, deadline_time, posting_days, first, second, hashtags], save
+    )
+    save_button.button.mark("save-social-settings")
 
 
 def _media_card(media: list[dict[str, Any]]) -> None:
@@ -318,7 +322,7 @@ def _weekly_update_page(mine: dict[str, Any]) -> None:
             )
             ui.label(_edited(current)).classes("text-caption")
             error = ErrorMessage()
-            ui.button("Save", on_click=save).mark("save-weekly-update")
+            SaveButton([editor], save).button.mark("save-weekly-update")
         if current is not None:
             _media_card(current["media"])
     if mine["earlier"]:
