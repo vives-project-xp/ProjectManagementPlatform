@@ -4,7 +4,7 @@ Wekelijkse scrum van het team. De nieuwste week staat bovenaan, de oudste ondera
 
 ---
 
-##Scrum 12/11/2026
+## Scrum 12/11/2026
 
 **vorige keer**
 - chat functie volledig afgewerkt + bijhorende aanpassingen na review
