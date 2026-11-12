@@ -903,3 +903,15 @@ async def social_storage(token: str) -> dict[str, Any]:
     """How full the disk with the media is: used_share (0-1) and warning (above
     80%). Teachers and the Superuser."""
     return await _request("GET", "/api/social/storage", token=token)
+
+
+async def social_status(token: str) -> dict[str, Any]:
+    """Whether the AI is configured (ai_configured); Superuser only."""
+    return await _request("GET", "/api/social/status", token=token)
+
+
+async def post_suggestions(token: str) -> list[dict[str, Any]]:
+    """Every Post suggestion, newest Upload week first (Teachers, Superuser):
+    project, closes_at, state ("generating", "waiting", "failed", …), title,
+    caption, chosen and ranking (Media), why, attempts and last_error."""
+    return await _request("GET", "/api/post-suggestions", token=token)

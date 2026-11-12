@@ -553,3 +553,40 @@ class WeeklyMedium(Base):
     posted: Mapped[bool] = mapped_column(default=False, server_default=false())
 
     uploaded_by: Mapped[User | None] = relationship(lazy="joined")
+
+
+class PostSuggestion(Base):
+    """What the AI (or a reviewer) proposes to post for one Weekly update
+    (spec #110). `chosen_medium_id` and the `ranking` of medium ids point at
+    the Weekly update's Media."""
+
+    __tablename__ = "post_suggestions"
+    __table_args__ = (
+        CheckConstraint(
+            "state IN ('generating', 'waiting', 'failed', 'refused', 'scheduled', "
+            "'published', 'to_post_by_hand', 'posted_by_hand')",
+            name="ck_post_suggestions_state",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    weekly_update_id: Mapped[int] = mapped_column(
+        ForeignKey("weekly_updates.id", ondelete="CASCADE"), unique=True
+    )
+    state: Mapped[str] = mapped_column(String(20), default="generating")
+    title: Mapped[str | None] = mapped_column(String(200))
+    caption: Mapped[str | None] = mapped_column(Text)
+    chosen_medium_id: Mapped[int | None] = mapped_column(
+        ForeignKey("weekly_media.id", ondelete="SET NULL")
+    )
+    ranking: Mapped[list[int]] = mapped_column(JSONB, default=list)
+    why: Mapped[str | None] = mapped_column(Text)
+    # Failed tries of the AI; after 3 the state is "failed".
+    attempts: Mapped[int] = mapped_column(default=0)
+    last_error: Mapped[str | None] = mapped_column(String(500))
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    weekly_update: Mapped[WeeklyUpdate] = relationship(lazy="joined")

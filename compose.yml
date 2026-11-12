@@ -37,6 +37,11 @@ services:
       # account. Without them, the Trello actions are off.
       TRELLO_API_KEY: ${TRELLO_API_KEY:-}
       TRELLO_TOKEN: ${TRELLO_TOKEN:-}
+      # The school's LLM for Post suggestions (spec #110). Without a key, no
+      # suggestions are made.
+      LLM_BASE_URL: ${LLM_BASE_URL:-https://api.llm.mechatronics.be/v1}
+      LLM_MODEL: ${LLM_MODEL:-qwen3.8-27b}
+      LLM_API_KEY: ${LLM_API_KEY:-}
       # The 08:30 daily email (spec #68): the mailbox it is sent from. Without
       # SMTP_HOST no email is sent.
       SMTP_HOST: ${SMTP_HOST:-}

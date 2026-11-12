@@ -25,6 +25,7 @@ NAVIGATION: dict[str, list[tuple[str, str, str]]] = {
         ("Top 3", "/top3", "format_list_numbered"),
         ("Planning", "/planning", "event"),
         ("Chats", "/chats", "forum"),
+        ("Post suggestions", "/post-suggestions", "auto_awesome"),
         ("Social media", "/social-media", "campaign"),
     ],
     "teacher": [
@@ -33,6 +34,7 @@ NAVIGATION: dict[str, list[tuple[str, str, str]]] = {
         ("Top 3", "/top3", "format_list_numbered"),
         ("Planning", "/planning", "event"),
         ("Chats", "/chats", "forum"),
+        ("Post suggestions", "/post-suggestions", "auto_awesome"),
     ],
     "student": [
         ("My project", "/my-project", "work"),
