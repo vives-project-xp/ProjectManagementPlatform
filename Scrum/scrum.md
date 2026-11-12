@@ -4,9 +4,18 @@ Wekelijkse scrum van het team. De nieuwste week staat bovenaan, de oudste ondera
 
 ---
 
+##Scrum 12/11/2026
+
+**vorige keer**
+- chat functie volledig afgewerkt + bijhorende aanpassingen na review
+- research over ai agent (social media)
+
+**deze week**
+- beginnen met ai agent (social media) development
+
 ## Scrum 29/10/2026
 
-**Vorige week**
+**Vorige keer**
 - Footer toegevoegd.
 - Deadlines / kalender.
 - Begonnen met de chatfunctie.
