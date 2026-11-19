@@ -88,29 +88,48 @@ async def _logout() -> None:
     ui.navigate.to("/login")
 
 
-def header(user: api.CurrentUser) -> None:
-    with ui.row().classes("items-center gap-4"):
+def navigation(user: api.CurrentUser) -> None:
+    """The left menu (R17): the Role's screens one under the other, then My
+    account, the User's name and Log out at the bottom."""
+    current = _current_path()
+    with ui.column().classes("w-full h-full gap-0 no-wrap py-2"):
         # Until the Temporary password is changed, there is nowhere else to go.
         if not user.must_change_password:
             for label, path, icon in NAVIGATION[user.role]:
                 if path in PROJECT_ONLY_PATHS and user.project_id is None:
                     continue
-                link = _navigation_link(label, path, icon).mark("navigation")
+                link = _navigation_link(label, path, icon, current).mark("navigation")
                 if path in CHAT_PATHS:
                     # A Student without any Chat doesn't get the item at all.
                     _unread_badge(link, hide_without_chat=user.role == "student")
-            _navigation_link("My account", "/account", "account_circle")
-        ui.label(user.full_name).classes("font-medium")
-        ui.button("Log out", icon="logout", on_click=_logout).props("flat color=dark")
+        ui.space()
+        ui.separator()
+        if not user.must_change_password:
+            _navigation_link("My account", "/account", "account_circle", current)
+        ui.label(user.full_name).classes("px-5 pt-3 text-caption text-grey-8")
+        ui.button("Log out", icon="logout", on_click=_logout).props(
+            "flat no-caps align=left color=dark"
+        ).classes("w-full px-5 font-normal")
 
 
-def _navigation_link(label: str, path: str, icon: str) -> ui.link:
+def _current_path() -> str:
+    with suppress(AttributeError, RuntimeError):
+        return ui.context.client.request.url.path
+    return ""
+
+
+def _navigation_link(label: str, path: str, icon: str, current: str) -> ui.link:
+    """One menu row; the screen you're on (or one of its details pages) gets a
+    sand background and a red bar on the left."""
     # Icons stay black like the text (house style), always next to the label.
+    active = current == path or current.startswith(f"{path}/")
+    style = "bg-[#efeee9] border-l-4 border-[#e00020] pl-4" if active else "pl-5"
     with ui.link(target=path).classes(
-        "text-dark no-underline flex items-center gap-1"
+        f"text-dark no-underline flex flex-nowrap items-center gap-3 w-full pr-4 py-2"
+        f" hover:bg-[#efeee9] {style}"
     ) as link:
         ui.icon(icon, color="dark")
-        ui.label(label)
+        ui.label(label).classes("grow")
     return link
 
 
@@ -147,7 +166,7 @@ def page_frame(title: str, user: api.CurrentUser):
     """The frame of a logged-in page: navigation, and the logo leading home."""
     # Until the Temporary password is changed, there is nowhere else to go.
     logo_target = None if user.must_change_password else home(user)
-    return frame(title, header=lambda: header(user), home=logo_target)
+    return frame(title, navigation=lambda: navigation(user), home=logo_target)
 
 
 class ErrorMessage:
