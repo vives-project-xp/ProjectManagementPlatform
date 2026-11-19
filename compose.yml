@@ -48,6 +48,10 @@ services:
       # Without a token every post goes through To post today.
       INSTAGRAM_TOKEN: ${INSTAGRAM_TOKEN:-}
       INSTAGRAM_ACCOUNT_ID: ${INSTAGRAM_ACCOUNT_ID:-me}
+      # Unified login (apps since 2026): https://graph.facebook.com/v23.0 and
+      # an empty INSTAGRAM_REFRESH_URL, because that token never expires.
+      INSTAGRAM_API_URL: ${INSTAGRAM_API_URL:-https://graph.instagram.com/v23.0}
+      INSTAGRAM_REFRESH_URL: ${INSTAGRAM_REFRESH_URL-https://graph.instagram.com/refresh_access_token}
       PUBLIC_MEDIA_URL: ${PUBLIC_MEDIA_URL:-}
       # The 08:30 daily email (spec #68): the mailbox it is sent from. Without
       # SMTP_HOST no email is sent.

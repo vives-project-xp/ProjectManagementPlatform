@@ -299,3 +299,21 @@ def test_a_failed_refresh_shows_a_notice(
     staff_view = TestClient(create_app(on_instagram))
     body = staff_view.get("/api/scheduled-posts", headers=staff).json()
     assert "Fake refresh failure" in body["channel"]["refresh_error"]
+
+
+def test_a_token_that_never_expires_is_not_refreshed(
+    client: TestClient, instagram: FakeInstagram, on_instagram: Settings
+):
+    """Unified login (graph.facebook.com): INSTAGRAM_REFRESH_URL empty."""
+    unified = on_instagram.model_copy(
+        update={
+            "instagram_refresh_url": "",
+            "instagram_api_url": "https://graph.facebook.com/v23.0",
+        }
+    )
+    with client.app.state.sessionmaker() as session:
+        assert not publishing.refresh_token(
+            session, instagram, unified, datetime.now().astimezone()
+        )
+        assert publishing.status(session, unified).refresh_error is None
+    assert instagram.refreshes == []
