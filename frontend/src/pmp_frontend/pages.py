@@ -7,6 +7,7 @@ from pmp_frontend import (
     chat_page,
     members_page,
     my_project_page,
+    my_projects_page,
     photos,
     planning,
     programmes_page,
@@ -182,18 +183,23 @@ def register_pages() -> None:
                 )
                 error_message = ErrorMessage()
                 ui.button("Change password", on_click=submit).mark("change-password")
-            # GitHub needs a password of your own first, like everything else.
-            if not user.must_change_password:
+            # GitHub needs a password of your own first, like everything else;
+            # Clients have no GitHub username and no Daily email (spec #132).
+            if not user.must_change_password and user.role != "client":
                 github_username_card(
                     user.github_username,
                     lambda username: api.set_my_github_username(token(), username),
                 )
             # The Superuser is on no Project, so never gets the Daily email.
-            if not user.must_change_password and user.role != "superuser":
+            if not user.must_change_password and user.role not in (
+                "superuser",
+                "client",
+            ):
                 _daily_email_card(user.daily_email)
         return None
 
     users_page.register()
+    my_projects_page.register()
     projects_page.register()
     members_page.register()
     my_project_page.register()

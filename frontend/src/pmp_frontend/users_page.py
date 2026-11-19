@@ -62,6 +62,12 @@ COLUMNS = [
     },
     {"name": "programme", "label": "Programme", "field": "programme", "align": "left"},
     {"name": "year", "label": "Year", "field": "year", "align": "left"},
+    {
+        "name": "organisation",
+        "label": "Organisation",
+        "field": "organisation",
+        "align": "left",
+    },
     {"name": "status", "label": "Status", "field": "status", "align": "left"},
 ]
 
@@ -75,6 +81,7 @@ def _row(user: dict[str, Any]) -> dict[str, Any]:
         "role": user["role"].capitalize(),
         "programme": user["programme"] or "",
         "year": user["year"] or "",
+        "organisation": user["organisation"] or "",
         "status": "Active" if user["is_active"] else "Deactivated",
     }
 
@@ -101,6 +108,8 @@ def register() -> None:
             }
             if role.value == "student":
                 new_user |= {"programme": programme.value, "year": year.value}
+            if role.value == "client":
+                new_user["organisation"] = organisation.value or None
             try:
                 created = await api.create_user(token(), new_user)
             except api.ApiError as error:
@@ -113,7 +122,7 @@ def register() -> None:
             await refresh()
 
         def open_dialog() -> None:
-            for field in (first_name, last_name, email):
+            for field in (first_name, last_name, email, organisation):
                 field.value = ""
             programme.value = programmes[0] if len(programmes) == 1 else None
             year.value = None
@@ -134,6 +143,12 @@ def register() -> None:
                 )
                 year = ui.select(YEARS, label="Year").classes("w-full").mark("year")
             student_fields.bind_visibility_from(role, "value", value="student")
+            organisation = (
+                ui.input("Organisation (optional)")
+                .classes("w-full")
+                .mark("organisation")
+            )
+            organisation.bind_visibility_from(role, "value", value="client")
             ui.label(
                 "A Temporary password is generated and shown after creating."
             ).classes("text-caption")
@@ -182,6 +197,7 @@ def register() -> None:
                 return None
             programmes = await api.programmes(token())
             is_student = shown["role"] == "student"
+            is_client = shown["role"] == "client"
 
             async def save() -> None:
                 fields = {
@@ -190,6 +206,7 @@ def register() -> None:
                     "email": email.value,
                     "programme": programme.value if is_student else None,
                     "year": year.value if is_student else None,
+                    "organisation": (organisation.value or None) if is_client else None,
                 }
                 try:
                     saved = await api.update_user(token(), user_id, fields)
@@ -277,9 +294,14 @@ def register() -> None:
                 )
                 programme.set_visibility(is_student)
                 year.set_visibility(is_student)
+                organisation = ui.input(
+                    "Organisation (optional)", value=shown["organisation"] or ""
+                ).classes("w-full")
+                organisation.mark("edit-organisation")
+                organisation.set_visibility(is_client)
                 error_message = ErrorMessage()
                 save_button = SaveButton(
-                    [first_name, last_name, email, programme, year], save
+                    [first_name, last_name, email, programme, year, organisation], save
                 )
                 save_button.button.mark("save-user")
 
@@ -297,10 +319,14 @@ def register() -> None:
                 reset_error = ErrorMessage()
                 ui.button("Reset password", on_click=reset).mark("reset-password")
 
-            github_username_card(
-                shown["github_username"],
-                lambda username: api.set_github_username(token(), user_id, username),
-            )
+            # Clients have no GitHub username (spec #132).
+            if not is_client:
+                github_username_card(
+                    shown["github_username"],
+                    lambda username: api.set_github_username(
+                        token(), user_id, username
+                    ),
+                )
 
             # The Superuser can never be deleted, so their page has no Delete.
             if shown["role"] != "superuser":

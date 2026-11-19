@@ -5,10 +5,10 @@ from fastapi import APIRouter, Response, status
 from pydantic import AwareDatetime, BaseModel, Field, StringConstraints
 
 from pmp_backend.api.deps import (
-    CurrentUserDep,
     SessionDep,
     StudentDep,
     TeacherOrSuperuserDep,
+    VivesUserDep,
 )
 from pmp_backend.api.schemas import UserOut
 from pmp_backend.models import Deadline, WeeklySlot
@@ -294,7 +294,7 @@ class DailyEmailIn(BaseModel):
 
 @router.put("/me/daily-email")
 def set_daily_email(
-    body: DailyEmailIn, session: SessionDep, user: CurrentUserDep
+    body: DailyEmailIn, session: SessionDep, user: VivesUserDep
 ) -> UserOut:
     """Switch your own 08:30 Daily email on or off."""
     return UserOut.model_validate(

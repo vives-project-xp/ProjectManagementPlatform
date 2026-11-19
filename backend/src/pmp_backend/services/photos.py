@@ -85,6 +85,9 @@ def read_photo(
     Project they are a Member of, or of a Project Open for choice (their Top 3);
     Teachers and the Superuser see every photo."""
     project = get_project(session, project_id)
+    # Clients see the photos of the Projects they follow (from #134 on).
+    if viewer.role == Role.CLIENT.value:
+        raise PhotoForbiddenError("You don't have access to this.")
     if (
         viewer.role == Role.STUDENT.value
         and viewer.project_id != project_id

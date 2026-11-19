@@ -22,14 +22,19 @@ Email = Annotated[
 ]
 
 
+# A Client's Organisation (spec #132); empty means none.
+Organisation = Annotated[str, StringConstraints(strip_whitespace=True, max_length=120)]
+
+
 class UserCreateIn(BaseModel):
-    role: Literal["teacher", "student"]
+    role: Literal["teacher", "student", "client"]
     first_name: Name
     last_name: Name
     email: Email
     # No password: the platform generates the Temporary password (#56).
     programme: Name | None = None
     year: Year | None = None
+    organisation: Organisation | None = None
 
 
 class UserEditIn(BaseModel):
@@ -41,6 +46,7 @@ class UserEditIn(BaseModel):
     email: Email
     programme: Name | None = None
     year: Year | None = None
+    organisation: Organisation | None = None
 
 
 class TemporaryPasswordOut(BaseModel):
@@ -98,6 +104,7 @@ def create_user(
         email=body.email,
         programme=body.programme,
         year=body.year,
+        organisation=body.organisation,
     )
     return UserCreatedOut(
         **UserOut.model_validate(user).model_dump(), temporary_password=password
@@ -107,19 +114,25 @@ def create_user(
 @router.post("/import")
 def import_users(
     file: UploadFile,
-    role: Annotated[Literal["teacher", "student"], Form()],
+    role: Annotated[Literal["teacher", "student", "client"], Form()],
     session: SessionDep,
     superuser: SuperuserDep,
     programme: Annotated[str | None, Form()] = None,
     year: Annotated[Year | None, Form()] = None,
+    organisation: Annotated[str | None, Form()] = None,
 ) -> ImportOut:
-    """One User per `Firstname,Lastname,email` line, Role, Programme and Year
-    the same for the whole file (#56)."""
+    """One User per `Firstname,Lastname,email` line, Role, Programme, Year and
+    a Client's Organisation the same for the whole file (#56, #133)."""
     content = file.file.read(MAX_IMPORT_BYTES + 1)
     if len(content) > MAX_IMPORT_BYTES:
         raise users.UserError("The file is larger than 1 MB.")
     created, skipped = users.import_users(
-        session, content, role=Role(role), programme=programme, year=year
+        session,
+        content,
+        role=Role(role),
+        programme=programme,
+        year=year,
+        organisation=organisation,
     )
     return ImportOut(
         created=[

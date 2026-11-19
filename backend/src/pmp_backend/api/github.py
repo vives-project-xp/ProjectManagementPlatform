@@ -4,12 +4,12 @@ from fastapi import APIRouter
 from pydantic import BaseModel, StringConstraints
 
 from pmp_backend.api.deps import (
-    CurrentUserDep,
     GitHubDep,
     SessionDep,
     SettingsDep,
     StudentDep,
     TeacherOrSuperuserDep,
+    VivesUserDep,
 )
 from pmp_backend.api.schemas import UserOut
 from pmp_backend.services import github, repos, users
@@ -32,7 +32,7 @@ class GitHubUsernameIn(BaseModel):
 
 @router.get("/github/users/{username}")
 def find_account(
-    username: str, client: GitHubDep, user: CurrentUserDep
+    username: str, client: GitHubDep, user: VivesUserDep
 ) -> GitHubAccountOut:
     account = github.find_account(client, username)
     return GitHubAccountOut(
@@ -42,7 +42,7 @@ def find_account(
 
 @router.put("/me/github-username")
 def set_own_github_username(
-    body: GitHubUsernameIn, session: SessionDep, client: GitHubDep, user: CurrentUserDep
+    body: GitHubUsernameIn, session: SessionDep, client: GitHubDep, user: VivesUserDep
 ) -> UserOut:
     saved = users.set_github_username(session, client, user.id, body.github_username)
     return UserOut.model_validate(saved)

@@ -467,6 +467,9 @@ def read_medium(
     medium, update_ = _medium(session, medium_id)
     if user.role == Role.STUDENT and user.project_id != update_.project_id:
         raise SocialForbiddenError("Only the Project's Members can see its media.")
+    # The Clients of the Project see them from #135 on.
+    if user.role == Role.CLIENT:
+        raise SocialForbiddenError("Only the Project's Members can see its media.")
     if medium.state != "ready":
         raise SocialNotFoundError("This video isn't ready yet.")
     path = medium_path(media_dir, update_.project_id, medium)

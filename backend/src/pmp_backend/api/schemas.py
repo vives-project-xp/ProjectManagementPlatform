@@ -53,6 +53,8 @@ class UserOut(BaseModel):
     must_change_password: bool
     programme: str | None
     year: str | None
+    # A Client's company or institution (spec #132); null for other Roles.
+    organisation: str | None
     github_username: str | None
     daily_email: bool
     # A Student's Project; the Weekly update item only shows with one.

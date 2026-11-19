@@ -102,6 +102,21 @@ def _check_student_fields(role: Role, programme: str | None, year: Year | None) 
         raise UserError("Only Students have a Programme and a Year.")
 
 
+MAX_ORGANISATION_LENGTH = 120
+
+
+def _organisation(role: Role, organisation: str | None) -> str | None:
+    """A Client's Organisation, trimmed (empty means none); others have none."""
+    organisation = (organisation or "").strip() or None
+    if organisation is not None and role is not Role.CLIENT:
+        raise UserError("Only Clients have an Organisation.")
+    if organisation is not None and len(organisation) > MAX_ORGANISATION_LENGTH:
+        raise UserError(
+            f"The Organisation can be at most {MAX_ORGANISATION_LENGTH} characters."
+        )
+    return organisation
+
+
 def _student_programme(
     session: Session, role: Role, programme: str | None, year: Year | None
 ) -> str | None:
@@ -138,6 +153,7 @@ def new_user(
     temporary_password: str,
     programme: str | None = None,
     year: Year | None = None,
+    organisation: str | None = None,
 ) -> User:
     """An unsaved User who must replace `temporary_password` at their first login."""
     _check_student_fields(role, programme, year)
@@ -150,12 +166,13 @@ def new_user(
         must_change_password=True,
         programme=programme,
         year=year.value if year else None,
+        organisation=_organisation(role, organisation),
     )
 
 
 def _check_creatable(role: Role) -> None:
     if role is Role.SUPERUSER:
-        raise UserError("Only Teachers and Students can be created.")
+        raise UserError("Only Teachers, Students and Clients can be created.")
 
 
 def create_user(
@@ -167,9 +184,11 @@ def create_user(
     email: str,
     programme: str | None = None,
     year: Year | None = None,
+    organisation: str | None = None,
 ) -> tuple[User, str]:
-    """Create a Teacher or Student (the Superuser exists only as a starting
-    account), with a generated Temporary password; the User and that password."""
+    """Create a Teacher, Student or Client (the Superuser exists only as a
+    starting account), with a generated Temporary password; the User and that
+    password."""
     _check_creatable(role)
     programme = _student_programme(session, role, programme, year)
     password = generate_temporary_password()
@@ -181,6 +200,7 @@ def create_user(
         temporary_password=password,
         programme=programme,
         year=year,
+        organisation=organisation,
     )
     _check_email_free(session, user.email, None)
     session.add(user)
@@ -197,10 +217,12 @@ def update_user(
     email: str,
     programme: str | None = None,
     year: Year | None = None,
+    organisation: str | None = None,
 ) -> User:
     """Correct a User's details; the Role never changes after creation."""
     user = get_user(session, user_id)
     programme = _student_programme(session, Role(user.role), programme, year)
+    organisation = _organisation(Role(user.role), organisation)
     email = normalize_email(email)
     _check_email_free(session, email, user.id)
     user.first_name = first_name
@@ -208,6 +230,7 @@ def update_user(
     user.email = email
     user.programme = programme
     user.year = year.value if year else None
+    user.organisation = organisation
     _commit(session, email)
     return user
 
@@ -295,6 +318,8 @@ def set_github_username(
     """Save (as GitHub spells it) or clear a User's GitHub username; refused when
     GitHub has no such account or another User already has it."""
     user = get_user(session, user_id)
+    if username and user.role == Role.CLIENT:
+        raise UserError("Clients have no GitHub username.")
     if not username:
         user.github_username = None
         session.commit()
@@ -377,12 +402,15 @@ def import_users(
     role: Role,
     programme: str | None = None,
     year: Year | None = None,
+    organisation: str | None = None,
 ) -> tuple[list[ImportedUser], list[SkippedLine]]:
     """Create a User for every valid `Firstname,Lastname,email` line, each with
     its own generated Temporary password; the other lines are skipped with the
-    reason. Role, Programme and Year are the same for the whole file."""
+    reason. Role, Programme, Year and a Client's Organisation are the same for
+    the whole file."""
     _check_creatable(role)
     programme = _student_programme(session, role, programme, year)
+    organisation = _organisation(role, organisation)
     created: list[ImportedUser] = []
     skipped: list[SkippedLine] = []
     seen: set[str] = set()
@@ -407,6 +435,7 @@ def import_users(
             temporary_password=password,
             programme=programme,
             year=year,
+            organisation=organisation,
         )
         seen.add(user.email)
         session.add(user)
