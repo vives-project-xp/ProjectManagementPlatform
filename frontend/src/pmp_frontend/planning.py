@@ -437,9 +437,10 @@ async def planning_card(project: dict[str, Any], *, editable: bool) -> None:
         await content()
 
 
-async def my_planning_card() -> None:
-    """On My project: the Student's Project's planning, read-only."""
-    planning = await api.my_planning(token())
+async def my_planning_card(load: Callable[[], Awaitable[dict]] | None = None) -> None:
+    """On My project: the Student's Project's planning, read-only; `load`
+    fetches another Project's (a Client's followed Project)."""
+    planning = await (load() if load else api.my_planning(token()))
     with ui.card().classes("w-full").mark("my-planning"):
         ui.label("Planning").classes("text-h6")
         today_banner(planning["items"], show_project=False)

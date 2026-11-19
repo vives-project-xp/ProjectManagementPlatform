@@ -61,6 +61,8 @@ class ChoosableProjectOut(BaseModel):
     team_size_min: int
     team_size_max: int
     photo_version: int | None
+    # Whom the Project is for: its Clients' Organisations (spec #132).
+    client_organisations: list[str]
 
     @classmethod
     def of(cls, project: Project) -> "ChoosableProjectOut":
@@ -72,6 +74,13 @@ class ChoosableProjectOut(BaseModel):
             team_size_min=project.team_size_min,
             team_size_max=project.team_size_max,
             photo_version=project.photo_version,
+            client_organisations=sorted(
+                {
+                    link.client.organisation
+                    for link in project.clients
+                    if link.client.organisation
+                }
+            ),
         )
 
 

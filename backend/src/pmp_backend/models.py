@@ -170,6 +170,18 @@ class Project(Base):
         order_by=(User.last_name, User.first_name),
         lazy="selectin",
     )
+    # The Clients who follow it (spec #132), by name.
+    client_links: Mapped[list["ProjectClient"]] = relationship(
+        lazy="selectin",
+        viewonly=True,
+    )
+
+    @property
+    def clients(self) -> list["ProjectClient"]:
+        return sorted(
+            self.client_links,
+            key=lambda link: (link.client.last_name, link.client.first_name),
+        )
 
     @property
     def member_count(self) -> int:
@@ -179,6 +191,33 @@ class Project(Base):
     def team_size_label(self) -> str:
         """Members against the Team size, e.g. "3 / 4–6"."""
         return f"{self.member_count} / {self.team_size_min}–{self.team_size_max}"
+
+
+class ProjectClient(Base):
+    """A Client following a Project (spec #132, #134); at most one of a
+    Project's Clients carries the Client Product Owner label."""
+
+    __tablename__ = "project_clients"
+    __table_args__ = (
+        Index(
+            "uq_project_clients_one_client_product_owner",
+            "project_id",
+            unique=True,
+            postgresql_where=text("is_client_product_owner"),
+        ),
+    )
+
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), primary_key=True
+    )
+    client_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id"), primary_key=True, index=True
+    )
+    is_client_product_owner: Mapped[bool] = mapped_column(
+        default=False, server_default=false()
+    )
+
+    client: Mapped[User] = relationship(lazy="joined")
 
 
 class Top3Round(Base):

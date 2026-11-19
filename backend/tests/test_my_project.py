@@ -52,6 +52,7 @@ def test_student_sees_own_project_with_product_owner_and_fellow_members(
         "product_owner": "Teacher Account",
         "fellow_members": ["Lisa Peeters"],
         "photo_version": None,
+        "clients": [],
     }
 
 

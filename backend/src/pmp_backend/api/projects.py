@@ -4,6 +4,7 @@ from fastapi import APIRouter, Response, UploadFile, status
 from pydantic import BaseModel, Field, StringConstraints
 
 from pmp_backend.api.deps import (
+    ClientDep,
     CurrentUserDep,
     GitHubDep,
     SessionDep,
@@ -14,10 +15,11 @@ from pmp_backend.api.deps import (
 )
 from pmp_backend.api.schemas import PersonOut, StudentOut
 from pmp_backend.domain import ProjectStatus
-from pmp_backend.models import Project, User
+from pmp_backend.models import Project, ProjectClient, User
 from pmp_backend.services import (
     boards,
     chat,
+    clients,
     memberships,
     photos,
     projects,
@@ -47,6 +49,8 @@ class ProjectOut(BaseModel):
     repo_url: str | None
     # Its Trello board's URL once it exists (spec #61).
     trello_board_url: str | None
+    # The Clients who follow it (spec #132).
+    clients: list["ClientOut"]
 
     @classmethod
     def of(cls, project: Project) -> "ProjectOut":
@@ -64,6 +68,26 @@ class ProjectOut(BaseModel):
             repo_name=repos.repo_name(project),
             repo_url=project.github_repo_url,
             trello_board_url=project.trello_board_url,
+            clients=[ClientOut.of(link) for link in project.clients],
+        )
+
+
+class ClientOut(BaseModel):
+    """A Client following a Project, as staff, the team and Clients see them."""
+
+    id: int
+    # "Jan Peeters (Barco)"
+    name: str
+    organisation: str | None
+    is_client_product_owner: bool
+
+    @classmethod
+    def of(cls, link: ProjectClient) -> "ClientOut":
+        return cls(
+            id=link.client.id,
+            name=link.client.display_name,
+            organisation=link.client.organisation,
+            is_client_product_owner=link.is_client_product_owner,
         )
 
 
@@ -114,6 +138,7 @@ class MyProjectOut(BaseModel):
     product_owner: str
     fellow_members: list[str]
     photo_version: int | None
+    clients: list[ClientOut]
 
     @classmethod
     def of(cls, project: Project, student: User) -> "MyProjectOut":
@@ -128,6 +153,7 @@ class MyProjectOut(BaseModel):
                 if member.id != student.id
             ],
             photo_version=project.photo_version,
+            clients=[ClientOut.of(link) for link in project.clients],
         )
 
 
@@ -333,3 +359,114 @@ def remove_member(
 ) -> ProjectDetailsOut:
     project = memberships.remove_member(session, project_id, student_id)
     return ProjectDetailsOut.of(project)
+
+
+# Clients (spec #132, #134)
+
+
+class ClientChoiceOut(BaseModel):
+    id: int
+    name: str
+
+
+class ClientLinkIn(BaseModel):
+    client_id: int
+
+
+class ClientProductOwnerIn(BaseModel):
+    # None takes the label away.
+    client_id: int | None
+
+
+@router.get("/clients")
+def list_clients(
+    session: SessionDep, user: TeacherOrSuperuserDep
+) -> list[ClientChoiceOut]:
+    """The active Clients, to add one to a Project."""
+    return [
+        ClientChoiceOut(id=client.id, name=client.display_name)
+        for client in clients.active_clients(session)
+    ]
+
+
+@router.post("/projects/{project_id}/clients")
+def add_client(
+    project_id: int,
+    body: ClientLinkIn,
+    session: SessionDep,
+    user: TeacherOrSuperuserDep,
+) -> ProjectDetailsOut:
+    return ProjectDetailsOut.of(clients.add_client(session, project_id, body.client_id))
+
+
+@router.delete("/projects/{project_id}/clients/{client_id}")
+def remove_client(
+    project_id: int, client_id: int, session: SessionDep, user: TeacherOrSuperuserDep
+) -> ProjectDetailsOut:
+    return ProjectDetailsOut.of(clients.remove_client(session, project_id, client_id))
+
+
+@router.put("/projects/{project_id}/client-product-owner")
+def set_client_product_owner(
+    project_id: int,
+    body: ClientProductOwnerIn,
+    session: SessionDep,
+    user: TeacherOrSuperuserDep,
+) -> ProjectDetailsOut:
+    project = clients.set_client_product_owner(session, project_id, body.client_id)
+    return ProjectDetailsOut.of(project)
+
+
+class FollowedProjectOut(BaseModel):
+    """A Project on a Client's My projects."""
+
+    id: int
+    title: str
+    status: str
+    photo_version: int | None
+
+
+class ClientProjectOut(FollowedProjectOut):
+    """What a Client sees of a Project they follow: read-only, no email
+    addresses, no Trello, no Top 3."""
+
+    description: str | None
+    product_owner: str
+    members: list[str]
+    clients: list[ClientOut]
+    repo_url: str | None
+
+    @classmethod
+    def of(cls, project: Project) -> "ClientProjectOut":
+        return cls(
+            id=project.id,
+            title=project.title,
+            status=project.status,
+            photo_version=project.photo_version,
+            description=project.description,
+            product_owner=project.product_owner.full_name,
+            members=[member.full_name for member in project.members],
+            clients=[ClientOut.of(link) for link in project.clients],
+            repo_url=project.github_repo_url,
+        )
+
+
+@router.get("/my-projects")
+def my_projects(session: SessionDep, client: ClientDep) -> list[FollowedProjectOut]:
+    """The Projects the Client follows, Active ones first."""
+    return [
+        FollowedProjectOut(
+            id=project.id,
+            title=project.title,
+            status=project.status,
+            photo_version=project.photo_version,
+        )
+        for project in clients.followed_projects(session, client)
+    ]
+
+
+@router.get("/my-projects/{project_id}")
+def my_followed_project(
+    project_id: int, session: SessionDep, client: ClientDep
+) -> ClientProjectOut:
+    return ClientProjectOut.of(clients.followed_project(session, client, project_id))

@@ -8,6 +8,7 @@ from nicegui.elements.mixins.value_element import ValueElement
 from starlette.responses import Response
 
 from pmp_frontend import api
+from pmp_frontend.clients_section import clients_section
 from pmp_frontend.photos import THUMBNAIL_CELL, photo_card, photo_url
 from pmp_frontend.planning import planning_card
 from pmp_frontend.repos import github_buttons, repository_card
@@ -301,6 +302,8 @@ def register() -> None:
                     save_button.button.mark("save-project")
                 with ui.card().classes("w-full max-w-lg"):
                     await _members_section(project)
+            with ui.card().classes("w-full max-w-lg"):
+                await clients_section(project, editable=not archived)
             if project["makers"]:
                 with ui.card().classes("w-full max-w-lg"):
                     ui.label("Made by").classes("text-h6")

@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from pmp_backend.domain import Role
 from pmp_backend.errors import Forbidden, NotFound, Refused
 from pmp_backend.models import Project, User
-from pmp_backend.services import projects, top3
+from pmp_backend.services import clients, projects, top3
 from pmp_backend.services.projects import changeable_project, get_project
 
 MAX_BYTES = 5 * 1024 * 1024
@@ -85,8 +85,10 @@ def read_photo(
     Project they are a Member of, or of a Project Open for choice (their Top 3);
     Teachers and the Superuser see every photo."""
     project = get_project(session, project_id)
-    # Clients see the photos of the Projects they follow (from #134 on).
-    if viewer.role == Role.CLIENT.value:
+    # Clients see only the photos of the Projects they follow (#134).
+    if viewer.role == Role.CLIENT.value and not clients.follows(
+        session, viewer, project_id
+    ):
         raise PhotoForbiddenError("You don't have access to this.")
     if (
         viewer.role == Role.STUDENT.value
