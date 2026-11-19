@@ -26,7 +26,7 @@ from pmp_backend.models import (
     WeeklyMedium,
     WeeklyUpdate,
 )
-from pmp_backend.services import media, video
+from pmp_backend.services import clients, media, video
 from pmp_backend.services.projects import get_project
 
 BRUSSELS = ZoneInfo("Europe/Brussels")
@@ -462,13 +462,14 @@ def remove_medium(
 def read_medium(
     session: Session, media_dir: Path, user: User, medium_id: int
 ) -> tuple[WeeklyMedium, Path]:
-    """A photo or video (its posted copy) for the Project's Members, Teachers
-    and the Superuser."""
+    """A photo or video (its posted copy) for the Project's Members and
+    Clients (#135), Teachers and the Superuser."""
     medium, update_ = _medium(session, medium_id)
     if user.role == Role.STUDENT and user.project_id != update_.project_id:
         raise SocialForbiddenError("Only the Project's Members can see its media.")
-    # The Clients of the Project see them from #135 on.
-    if user.role == Role.CLIENT:
+    if user.role == Role.CLIENT and not clients.follows(
+        session, user, update_.project_id
+    ):
         raise SocialForbiddenError("Only the Project's Members can see its media.")
     if medium.state != "ready":
         raise SocialNotFoundError("This video isn't ready yet.")

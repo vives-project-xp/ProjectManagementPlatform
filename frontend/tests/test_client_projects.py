@@ -53,3 +53,54 @@ async def test_a_client_opens_a_followed_project(user: User):
     await user.should_see("Student Account")
     await user.should_see("Product Owner: Teacher Account")
     await eventually(lambda: bool(user.find(marker="my-planning").elements))
+
+
+async def test_a_client_reads_the_teams_weekly_updates(user: User):
+    from tests.test_social import WEDNESDAY_17
+
+    staff = await api_token("superuser")
+    await api.set_social_settings(staff, WEDNESDAY_17)
+    project = await drone_with_the_student(staff)
+    created = await api.create_user(staff, JAN)
+    await api.add_client(staff, project, created["id"])
+    student, _ = await api.login("student@pmp.local", "student-secret-1")
+    await api.change_password(student, "student-secret-1", "student-api-password")
+    await api.save_weekly_update(student, "We tested the motors.")
+    token, _ = await api.login("jan@barco.example", created["temporary_password"])
+    await api.change_password(token, created["temporary_password"], "client-password")
+
+    await user.open("/login")
+    user.find(marker="email").type("jan@barco.example")
+    user.find(marker="password").type("client-password")
+    user.find(marker="log-in").click()
+    await user.should_see(marker=f"followed-{project}", retries=30)
+    await user.open(f"/my-projects/{project}")
+
+    await user.should_see(marker="followed-week", retries=30)
+    await user.should_see("We tested the motors.")
+    await user.should_not_see("Post suggestion")
+
+
+async def test_a_client_chats_with_the_team(user: User):
+    from tests.test_chat import navigation_targets
+
+    staff = await api_token("superuser")
+    project = await drone_with_the_student(staff)
+    created = await api.create_user(staff, JAN)
+    await api.add_client(staff, project, created["id"])
+    token, _ = await api.login("jan@barco.example", created["temporary_password"])
+    await api.change_password(token, created["temporary_password"], "client-password")
+
+    await user.open("/login")
+    user.find(marker="email").type("jan@barco.example")
+    user.find(marker="password").type("client-password")
+    user.find(marker="log-in").click()
+    await user.should_see(marker=f"followed-{project}", retries=30)
+    await eventually(lambda: "/chat" in navigation_targets(user))
+    await user.open("/chat")
+    await user.should_see(marker="chat-input", retries=30)
+    user.find(marker="chat-input").type("Hello from Barco!")
+    user.find(marker="chat-send").click()
+
+    await user.should_see("Hello from Barco!", retries=30)
+    await user.should_see("Jan Peeters (Barco)")

@@ -11,7 +11,9 @@ from pmp_frontend.clients_section import client_label
 from pmp_frontend.photos import show_photo
 from pmp_frontend.planning import my_planning_card
 from pmp_frontend.shell import guard, no_access, page_frame, role_page, token
+from pmp_frontend.social_page import media_grid
 from pmp_frontend.theme import external_link
+from pmp_frontend.times import shown
 
 NOTHING_YET = "You don't follow any Projects yet."
 
@@ -56,6 +58,23 @@ def _followed_page(project: dict[str, Any]) -> None:
             ui.label(client_label(person))
 
 
+def _weekly_updates(weeks: list[dict[str, Any]]) -> None:
+    """The team's Weekly updates (#135), the open week first; no outcomes."""
+    ui.label("Weekly updates").classes("text-h6")
+    if not weeks:
+        ui.label("The team hasn't written a Weekly update yet.").mark("no-weeks")
+    for week in weeks:
+        with ui.card().classes("w-full max-w-2xl").mark("followed-week"):
+            state = "open, the team is still writing" if week["is_open"] else "closed"
+            ui.label(f"Upload week until {shown(week['closes_at'])} ({state})").classes(
+                "font-medium"
+            )
+            ui.label(week["text"] or "Nothing was written.").classes(
+                "whitespace-pre-wrap"
+            )
+            media_grid(week["media"])
+
+
 def register() -> None:
     @role_page("/my-projects", "My projects", {"client"})
     async def my_projects_page(user: api.CurrentUser) -> None:
@@ -95,4 +114,5 @@ def register() -> None:
                 await my_planning_card(
                     lambda: api.followed_planning(token(), project_id)
                 )
+            _weekly_updates(await api.followed_weekly_updates(token(), project_id))
         return None

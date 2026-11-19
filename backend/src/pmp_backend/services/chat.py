@@ -32,6 +32,7 @@ from pmp_backend.models import (
     ChatReaction,
     ChatRead,
     Project,
+    ProjectClient,
     User,
     chat_revision,
 )
@@ -126,6 +127,24 @@ def is_team(user: User, project: Project) -> bool:
     return user.project_id == project.id or user.id == project.product_owner_id
 
 
+def is_client_of(user: User, project: Project) -> bool:
+    """One of the Project's Clients (spec #132, #136)."""
+    return user.role == Role.CLIENT and any(
+        link.client_id == user.id for link in project.client_links
+    )
+
+
+def followed_project_ids(session: Session, user: User) -> set[int]:
+    """The Projects a Client follows; none for other Users."""
+    if user.role != Role.CLIENT:
+        return set()
+    return set(
+        session.scalars(
+            select(ProjectClient.project_id).where(ProjectClient.client_id == user.id)
+        )
+    )
+
+
 def guest_project_ids(session: Session, user: User) -> set[int]:
     """The Projects in whose Chat the User is a Guest."""
     return set(
@@ -140,11 +159,16 @@ def is_guest(session: Session, user: User, project: Project) -> bool:
 
 
 def is_chat_person(session: Session, user: User, project: Project) -> bool:
-    """A Member, the Product Owner or a Guest: whom the Chat is for. An Archived
-    Project's Chat is for nobody: only Teachers and the Superuser still read it."""
+    """A Member, the Product Owner, a Client or a Guest: whom the Chat is for.
+    An Archived Project's Chat is for nobody: only Teachers and the Superuser
+    still read it."""
     if project.status != ProjectStatus.ACTIVE.value:
         return False
-    return is_team(user, project) or is_guest(session, user, project)
+    return (
+        is_team(user, project)
+        or is_client_of(user, project)
+        or is_guest(session, user, project)
+    )
 
 
 def readable_project(session: Session, user: User, project_id: int) -> Project:
@@ -456,11 +480,13 @@ class ChatSummary:
 def _visible_projects(
     session: Session, user: User, guest_ids: set[int]
 ) -> list[Project]:
-    """Staff see every Active Project's Chat; Students their own Project's and
-    those where they are a Guest."""
+    """Staff see every Active Project's Chat; Students their own Project's,
+    Clients those of the Projects they follow, and both those where they are a
+    Guest."""
     query = select(Project).where(Project.status == ProjectStatus.ACTIVE.value)
     if not is_staff(user):
         own = {user.project_id} if user.project_id is not None else set()
+        own |= followed_project_ids(session, user)
         if not own | guest_ids:
             return []
         query = query.where(Project.id.in_(own | guest_ids))
@@ -512,7 +538,9 @@ def chats(session: Session, user: User, *, mine: bool = False) -> list[ChatSumma
             project.id,
             project.title,
             unread.get(project.id, (0, False))[0],
-            is_team(user, project) or project.id in guest_ids,
+            is_team(user, project)
+            or is_client_of(user, project)
+            or project.id in guest_ids,
             unread.get(project.id, (0, False))[1],
         )
         for project in projects
@@ -544,17 +572,19 @@ def unread_total(session: Session, user: User) -> UnreadTotal:
 # Who is in a Chat.
 
 MEMBER, PRODUCT_OWNER, GUEST = "Member", "Product Owner", "Guest"
+CLIENT, CLIENT_PRODUCT_OWNER = "Client", "Client Product Owner"
 
 
 @dataclass(frozen=True)
 class ChatPerson:
     user: User
-    # MEMBER, PRODUCT_OWNER or GUEST.
+    # MEMBER, PRODUCT_OWNER, CLIENT, CLIENT_PRODUCT_OWNER or GUEST.
     kind: str
 
 
 def people(session: Session, user: User, project_id: int) -> list[ChatPerson]:
-    """The Chat people: the Product Owner, the Members, then the Guests."""
+    """The Chat people: the Product Owner, the Members, the Clients, then the
+    Guests."""
     return _chat_people(session, readable_project(session, user, project_id))
 
 
@@ -562,6 +592,13 @@ def _chat_people(session: Session, project: Project) -> list[ChatPerson]:
     found = [ChatPerson(project.product_owner, PRODUCT_OWNER)]
     found += [ChatPerson(member, MEMBER) for member in project.members]
     if project.status == ProjectStatus.ACTIVE.value:
+        found += [
+            ChatPerson(
+                link.client,
+                CLIENT_PRODUCT_OWNER if link.is_client_product_owner else CLIENT,
+            )
+            for link in project.clients
+        ]
         found += [ChatPerson(guest.user, GUEST) for guest in _guests(session, project)]
     return found
 
@@ -603,7 +640,11 @@ def add_guest(session: Session, actor: User, project_id: int, user_id: int) -> U
     guest = get_user(session, user_id)
     if not guest.is_active:
         raise ChatError(f"{guest.full_name} is deactivated, so can't join a chat.")
-    if is_team(guest, project) or is_guest(session, guest, project):
+    if (
+        is_team(guest, project)
+        or is_client_of(guest, project)
+        or is_guest(session, guest, project)
+    ):
         raise ChatConflictError(f"{guest.full_name} is already in this chat.")
     session.add(ChatGuest(project_id=project.id, user_id=guest.id))
     session.commit()

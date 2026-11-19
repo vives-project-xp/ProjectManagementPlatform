@@ -1021,3 +1021,10 @@ async def followed_project(token: str, project_id: int) -> dict[str, Any]:
 
 async def followed_planning(token: str, project_id: int) -> dict[str, Any]:
     return await _request("GET", f"/api/my-projects/{project_id}/planning", token=token)
+
+
+async def followed_weekly_updates(token: str, project_id: int) -> list[dict[str, Any]]:
+    """A followed Project's Weekly updates (open week included), newest first."""
+    return await _request(
+        "GET", f"/api/my-projects/{project_id}/weekly-updates", token=token
+    )

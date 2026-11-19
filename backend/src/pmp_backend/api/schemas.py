@@ -11,7 +11,8 @@ class PersonOut(BaseModel):
 
     @classmethod
     def of(cls, user: User) -> "PersonOut":
-        return cls(id=user.id, name=user.full_name)
+        # A Client with their Organisation: "Jan Peeters (Barco)" (spec #132).
+        return cls(id=user.id, name=user.display_name)
 
 
 class ProjectRefOut(BaseModel):
