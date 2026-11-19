@@ -43,6 +43,18 @@ class Settings(DatabaseSettings):
     llm_base_url: str = "https://api.llm.mechatronics.be/v1"
     llm_model: str = "qwen3.8-27b"
     llm_api_key: SecretStr | None = None
+    # Automatic publishing on Instagram (#117, ADR 0010): the team's Instagram
+    # Business account (Instagram API with Instagram Login). INSTAGRAM_TOKEN is
+    # its long-lived token, only the first one: refreshed tokens live in the
+    # database. Without a token every post goes through To post today.
+    instagram_token: SecretStr | None = None
+    instagram_account_id: str = "me"
+    instagram_api_url: str = "https://graph.instagram.com/v23.0"
+    instagram_refresh_url: str = "https://graph.instagram.com/refresh_access_token"
+    # The public address Instagram downloads photos from (https://<host>), set
+    # only once the VM is reachable from the internet; without it photo posts
+    # go through To post today (Reels are uploaded directly).
+    public_media_url: str | None = None
     # The mailbox for the 08:30 daily email (spec #68); without SMTP_HOST no
     # email is sent. Only in /opt/pmp/.env.
     smtp_host: str | None = None

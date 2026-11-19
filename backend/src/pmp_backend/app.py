@@ -14,6 +14,7 @@ from pmp_backend.api import (
     planning,
     programmes,
     projects,
+    publish_links,
     social,
     students,
     top3,
@@ -26,6 +27,7 @@ from pmp_backend.services import daily_email, mail, posting, suggestions
 from pmp_backend.services.auth import LoginGuard
 from pmp_backend.services.chat import TypingBoard, clean_up_forever
 from pmp_backend.services.github import HttpGitHub
+from pmp_backend.services.instagram import HttpInstagram
 from pmp_backend.services.post_ai import HttpLLM, is_configured
 from pmp_backend.services.seeding import seed_starting_accounts
 from pmp_backend.services.social import clean_up_forever as clean_up_media_forever
@@ -68,7 +70,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 )
             )
         # Scheduled posts move to To post today at their Posting time (#116).
-        poster = asyncio.create_task(posting.run_forever(make_session))
+        poster = asyncio.create_task(
+            posting.run_forever(make_session, lambda: app.state.instagram, settings)
+        )
         # Never-posted Media go 4 months after their Upload week (#118).
         media_cleaner = asyncio.create_task(
             clean_up_media_forever(make_session, settings.social_media_dir)
@@ -95,6 +99,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.mailer = mail.SmtpMailer(settings)
     # The school's LLM (ADR 0009); tests replace it with testing.FakeLLM.
     app.state.llm = HttpLLM(settings)
+    # Instagram as a Channel (#117); tests replace it with testing.FakeInstagram.
+    app.state.instagram = HttpInstagram(settings)
     app.include_router(auth.router)
     app.include_router(users.router)
     app.include_router(programmes.router)
@@ -108,6 +114,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(social.router)
     if settings.dev_login:
         app.include_router(dev_login.router)
+    # Publish links only once the VM is reachable from the internet (ADR 0010).
+    if settings.public_media_url:
+        app.include_router(publish_links.router)
 
     @app.exception_handler(Refused)
     def refused(request: Request, error: Refused) -> JSONResponse:

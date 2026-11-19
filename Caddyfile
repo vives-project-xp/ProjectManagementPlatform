@@ -29,6 +29,16 @@
 	handle /api/* {
 		respond 404
 	}
+	# Publish links (ADR 0010, #117): Instagram downloads a Scheduled post's
+	# photo from /social/<random code>. Only that exact shape is forwarded; the
+	# backend has the route only while PUBLIC_MEDIA_URL is set, else 404.
+	@publish_link path_regexp ^/social/[A-Za-z0-9_-]{32,64}$
+	handle @publish_link {
+		reverse_proxy backend:8000
+	}
+	handle /social/* {
+		respond 404
+	}
 	handle {
 		reverse_proxy frontend:8080
 	}

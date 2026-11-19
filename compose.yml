@@ -42,6 +42,13 @@ services:
       LLM_BASE_URL: ${LLM_BASE_URL:-https://api.llm.mechatronics.be/v1}
       LLM_MODEL: ${LLM_MODEL:-qwen3.8-27b}
       LLM_API_KEY: ${LLM_API_KEY:-}
+      # Automatic publishing on Instagram (#117, ADR 0010): the team's first
+      # long-lived token (later ones live in the database) and, once the VM is
+      # reachable from the internet, its public address for photo posts.
+      # Without a token every post goes through To post today.
+      INSTAGRAM_TOKEN: ${INSTAGRAM_TOKEN:-}
+      INSTAGRAM_ACCOUNT_ID: ${INSTAGRAM_ACCOUNT_ID:-me}
+      PUBLIC_MEDIA_URL: ${PUBLIC_MEDIA_URL:-}
       # The 08:30 daily email (spec #68): the mailbox it is sent from. Without
       # SMTP_HOST no email is sent.
       SMTP_HOST: ${SMTP_HOST:-}

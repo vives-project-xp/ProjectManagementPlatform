@@ -1,8 +1,9 @@
 """Posting reviewed suggestions (spec #110, #116): Post puts a suggestion in
 Instagram's line; each gets the next free Posting time, in the order they were
 Posted, never the same Project twice in a row. At its Posting time it moves to
-the To post today list, where a person publishes it by hand (automatic
-publishing comes with #117)."""
+Instagram: with a token it is published automatically (services/publishing.py,
+#117), otherwise it moves to the To post today list, where a person publishes
+it by hand."""
 
 import asyncio
 import logging
@@ -14,12 +15,14 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from pmp_backend.models import PostSuggestion, User, WeeklyMedium, WeeklyUpdate
-from pmp_backend.services import social
+from pmp_backend.services import publishing, social
+from pmp_backend.services.instagram import Channel
 from pmp_backend.services.suggestions import (
     ReviewConflictError,
     locked,
     mark_reviewed,
 )
+from pmp_backend.settings import Settings
 
 log = logging.getLogger(__name__)
 
@@ -139,8 +142,17 @@ def mark_posted(session: Session, user: User, suggestion_id: int) -> PostSuggest
     return suggestion
 
 
-def run_once(session: Session, now: datetime) -> list[int]:
-    """Posts whose Posting time has come go to the To post today list."""
+def run_once(
+    session: Session,
+    now: datetime,
+    channel: Channel | None = None,
+    settings: Settings | None = None,
+) -> list[int]:
+    """Posts whose Posting time has come: published on the Channel when one is
+    given (the ids published), otherwise moved to the To post today list (the
+    ids moved)."""
+    if channel is not None and settings is not None:
+        return publishing.publish_due(session, channel, settings, now)
     due = session.scalars(
         select(PostSuggestion)
         .where(
@@ -155,17 +167,27 @@ def run_once(session: Session, now: datetime) -> list[int]:
     return [suggestion.id for suggestion in due]
 
 
-async def run_forever(make_session: Callable[[], Session]) -> None:
+async def run_forever(
+    make_session: Callable[[], Session],
+    channel_of: Callable[[], Channel],
+    settings: Settings,
+) -> None:
+    """Every minute: refresh the Channel's token when due, then publish (or
+    move) the due posts. `channel_of` so tests can swap in a FakeInstagram."""
+
     def run() -> None:
+        now = datetime.now(BRUSSELS)
         with make_session() as session:
-            run_once(session, datetime.now(BRUSSELS))
+            publishing.refresh_token(session, channel_of(), settings, now)
+        with make_session() as session:
+            run_once(session, now, channel_of(), settings)
 
     while True:
         try:
             await asyncio.to_thread(run)
         except Exception:
             # A failing round is logged; the next one tries again.
-            log.exception("Moving due posts failed")
+            log.exception("Publishing due posts failed")
         await asyncio.sleep(EVERY_SECONDS)
 
 
@@ -183,3 +205,18 @@ def lists(session: Session) -> tuple[list[int], list[int]]:
         .order_by(PostSuggestion.scheduled_for)
     ).all()
     return list(to_post), list(scheduled)
+
+
+RECENTLY_PUBLISHED = 10
+
+
+def recently_published(session: Session) -> list[int]:
+    """The ids of the last posts published automatically, newest first."""
+    return list(
+        session.scalars(
+            select(PostSuggestion.id)
+            .where(PostSuggestion.state == "published")
+            .order_by(PostSuggestion.posted_at.desc())
+            .limit(RECENTLY_PUBLISHED)
+        )
+    )
