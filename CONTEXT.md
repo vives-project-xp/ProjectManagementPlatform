@@ -11,7 +11,7 @@ Anyone with a login on the platform. Every User has exactly one Role.
 _Avoid_: Account, member (for people without a Project)
 
 **Role**:
-The platform-wide kind of User: Superuser, Teacher or Student.
+The platform-wide kind of User: Superuser, Teacher, Student or Client.
 _Avoid_: Permission level, user type
 
 **Superuser**:
@@ -25,6 +25,14 @@ _Avoid_: Coach, docent, lecturer
 **Student**:
 A User who can work in a Project, described by their Programme and Year.
 _Avoid_: Pupil, participant
+
+**Client**:
+A User from outside VIVES (a company, a lab, another department) who follows one or more Projects the teams build for them: they see those Projects read-only (including their Weekly updates and repository link) and talk in their Chats, but have no rights to change anything. Created only by the Superuser; linked to Projects by any Teacher or the Superuser. Never a Project's Product Owner on the platform. "Guest access" to the platform means Clients.
+_Avoid_: Customer, sponsor, external, guest (that is a Chat Guest)
+
+**Organisation**:
+The optional name of a Client's company or institution, shown next to their name (e.g. "Jan Peeters (Barco)"), also to Students choosing their Top 3.
+_Avoid_: Company (alone), employer
 
 **Deactivated User**:
 A User who can no longer log in but is kept, together with their links to Projects. The way to retire a User who is linked to a Project.
@@ -55,6 +63,10 @@ _Avoid_: Assignment, task
 **Product Owner**:
 The Teacher who owns a Project; every Project has exactly one, and one Teacher can be the Product Owner of many Projects.
 _Avoid_: PO (in UI text), coach, project lead
+
+**Client Product Owner**:
+A label staff can give one of a Project's Clients: the person the team treats as product owner in the Scrum sense. Only a label: the Teacher stays the Project's Product Owner with all its rights, and the Client still only watches and chats.
+_Avoid_: Product Owner (alone, for a Client), second Product Owner
 
 **Member**:
 A Student assigned to a Project. A Student is a Member of at most one Project at a time.
@@ -141,7 +153,7 @@ A Chat message removed by its author, or by a Teacher or the Superuser (moderati
 _Avoid_: Removed message, hidden message
 
 **Chat people**:
-Whom a Project's Chat is for: its Members, its Product Owner and its Guests. Only they count for the Unread badge; a Member who is removed or moved loses access to the Chat at once, and a new Member sees its whole history.
+Whom a Project's Chat is for: its Members, its Product Owner, its Clients and its Guests. Only they count for the Unread badge; a Member who is removed or moved loses access to the Chat at once, and a new Member sees its whole history.
 _Avoid_: Participants, chat members
 
 **Guest**:
@@ -183,7 +195,7 @@ The photos (at most 5) and video (at most 1) of a Weekly update. Photos: JPG, PN
 _Avoid_: Chat file, attachment, Project photo (that is the cover)
 
 **Consent tick**:
-The confirmation, at every upload, that everyone recognisable in the Media agrees to being posted on VIVES social media. Without it nothing is uploaded.
+The confirmation, at every upload, that everyone recognisable in the Media agrees to being shown to the Project's Clients and posted on VIVES social media. Without it nothing is uploaded.
 _Avoid_: Permission, GDPR checkbox
 
 **Quality check**:
