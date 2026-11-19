@@ -16,6 +16,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field, StringConstraints
 
 from pmp_backend.api.deps import (
+    ClientDep,
     CurrentUserDep,
     SessionDep,
     SettingsDep,
@@ -24,7 +25,14 @@ from pmp_backend.api.deps import (
     TeacherOrSuperuserDep,
 )
 from pmp_backend.api.schemas import ProjectRefOut
-from pmp_backend.services import post_ai, posting, publishing, social, suggestions
+from pmp_backend.services import (
+    clients,
+    post_ai,
+    posting,
+    publishing,
+    social,
+    suggestions,
+)
 from pmp_backend.services.social import MyWeeklyUpdate, WeekView
 
 router = APIRouter(prefix="/api", tags=["social"])
@@ -159,6 +167,38 @@ def save_weekly_update(
 ) -> MyWeeklyUpdateOut:
     found = social.save_weekly_update(session, student, body.text)
     return _mine(student, found)
+
+
+class ClientWeekOut(BaseModel):
+    """A Weekly update as a Client sees it (#135): the team's text and Media,
+    never the Post suggestion or its outcome."""
+
+    closes_at: datetime
+    text: str
+    edited_by: str | None
+    edited_at: datetime | None
+    is_open: bool
+    media: list[MediumOut]
+
+
+@router.get("/my-projects/{project_id}/weekly-updates")
+def followed_weekly_updates(
+    project_id: int, session: SessionDep, client: ClientDep
+) -> list[ClientWeekOut]:
+    """Every Weekly update of a followed Project, the open week included,
+    newest first."""
+    project = clients.followed_project(session, client, project_id)
+    return [
+        ClientWeekOut(
+            closes_at=week.closes_at,
+            text=week.text,
+            edited_by=week.edited_by,
+            edited_at=week.edited_at,
+            is_open=week.is_open,
+            media=[MediumOut(**vars(medium)) for medium in week.media],
+        )
+        for week in social.weekly_updates(session, project.id)
+    ]
 
 
 @router.get("/projects/{project_id}/weekly-updates")

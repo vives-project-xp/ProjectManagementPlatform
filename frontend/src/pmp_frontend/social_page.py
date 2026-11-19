@@ -29,8 +29,8 @@ PHOTO_TYPES = ".jpg,.jpeg,.png,.heic,.heif"
 MAX_VIDEO_BYTES = 200 * 1024 * 1024
 VIDEO_TYPES = ".mp4,.mov"
 CONSENT = (
-    "Everyone recognisable in these photos and videos agrees to them being posted "
-    "on VIVES social media."
+    "Everyone recognisable in these photos and videos agrees to them being shown "
+    "to the Project's Clients and posted on VIVES social media."
 )
 # How often the page looks again while a video is being processed.
 PROCESSING_SECONDS = 5.0
