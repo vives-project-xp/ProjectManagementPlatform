@@ -69,7 +69,7 @@ class FileOut(BaseModel):
 
 
 def _author_name(message: ChatMessage) -> str:
-    return message.author.full_name if message.author else "Deleted user"
+    return message.author.display_name if message.author else "Deleted user"
 
 
 class QuoteOut(BaseModel):
@@ -116,7 +116,7 @@ def _reactions(message: ChatMessage, user: User) -> list[ReactionOut]:
                 ReactionOut(
                     emoji=emoji,
                     count=len(given),
-                    names=[r.user.full_name for r in given],
+                    names=[r.user.display_name for r in given],
                     mine=any(r.user_id == user.id for r in given),
                 )
             )
@@ -162,7 +162,9 @@ class MessageOut(BaseModel):
         seen_by = None
         if mine and not deleted:
             seen_by = [
-                person.full_name for person, last in marks or [] if last >= message.id
+                person.display_name
+                for person, last in marks or []
+                if last >= message.id
             ]
         return cls(
             id=message.id,
@@ -329,7 +331,7 @@ def updates(
         messages=[MessageOut.of(message, user, marks) for message in found],
         typing=board.names(project_id, user),
         reads=[
-            ReadMarkOut(name=person.full_name, last_read_id=last)
+            ReadMarkOut(name=person.display_name, last_read_id=last)
             for person, last in marks
         ],
     )

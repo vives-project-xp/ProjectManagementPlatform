@@ -43,10 +43,10 @@ NAVIGATION: dict[str, list[tuple[str, str, str]]] = {
         ("Weekly update", "/weekly-update", "edit_note"),
         ("Chat", "/chat", "chat"),
     ],
-    # People outside VIVES who follow Projects (spec #132); their Chat item
-    # comes with #136.
+    # People outside VIVES who follow Projects (spec #132).
     "client": [
         ("My projects", "/my-projects", "visibility"),
+        ("Chat", "/chat", "chat"),
     ],
 }
 # The navigation items that show the Unread badge (spec #91), and how often it
@@ -105,8 +105,10 @@ def navigation(user: api.CurrentUser) -> None:
                     continue
                 link = _navigation_link(label, path, icon, current).mark("navigation")
                 if path in CHAT_PATHS:
-                    # A Student without any Chat doesn't get the item at all.
-                    _unread_badge(link, hide_without_chat=user.role == "student")
+                    # A Student or Client without any Chat doesn't get the item.
+                    _unread_badge(
+                        link, hide_without_chat=user.role in ("student", "client")
+                    )
         ui.space()
         ui.separator()
         if not user.must_change_password:

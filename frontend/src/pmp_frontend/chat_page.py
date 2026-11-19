@@ -864,7 +864,7 @@ def register() -> None:
             },
         )
 
-    @role_page("/chat", "Chat", {"student"})
+    @role_page("/chat", "Chat", {"student", "client"})
     async def student_chat(user: api.CurrentUser) -> None:
         found = await api.chats(token())
         if len(found) == 1:
@@ -872,9 +872,14 @@ def register() -> None:
             return
         ui.label("Chat").classes("text-h4")
         if not found:
-            ui.label("You'll have a chat once you're a Member of a Project.")
+            ui.label(
+                "You'll have a chat once you follow a Project."
+                if user.role == "client"
+                else "You'll have a chat once you're a Member of a Project."
+            )
             return
-        # Their own Project's Chat and those where they are a Guest.
+        # Their own Project's (or followed Projects') Chats and those where they
+        # are a Guest.
         _chats_table(found)
 
     @role_page("/chats", "Chats", STAFF)
