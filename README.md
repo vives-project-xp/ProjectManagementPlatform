@@ -4,6 +4,8 @@ A central web application for managing and following up student projects within 
 
 **Product owner:** Ronny Mees
 
+> **Taking over the platform (VIVES IT)?** Start with [`docs/handover.md`](docs/handover.md): every account and setting the team used for testing, and how to replace it with VIVES' own.
+
 ## Why
 
 Running student projects today means many separate steps and tools: creating teams and projects, setting up repositories, granting students access, tracking tasks, following up progress — and a lot of valuable photo and video material gets lost along the way.
