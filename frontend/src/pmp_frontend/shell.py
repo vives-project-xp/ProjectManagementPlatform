@@ -43,6 +43,11 @@ NAVIGATION: dict[str, list[tuple[str, str, str]]] = {
         ("Weekly update", "/weekly-update", "edit_note"),
         ("Chat", "/chat", "chat"),
     ],
+    # People outside VIVES who follow Projects (spec #132); their Chat item
+    # comes with #136.
+    "client": [
+        ("My projects", "/my-projects", "visibility"),
+    ],
 }
 # The navigation items that show the Unread badge (spec #91), and how often it
 # is refreshed.

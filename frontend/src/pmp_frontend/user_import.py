@@ -11,7 +11,7 @@ from nicegui import events, ui
 from pmp_frontend import api
 from pmp_frontend.shell import ErrorMessage, token
 
-ROLES = {"teacher": "Teacher", "student": "Student"}
+ROLES = {"teacher": "Teacher", "student": "Student", "client": "Client"}
 YEARS = ["1", "2", "3", "International"]
 
 
@@ -92,6 +92,7 @@ def import_button(programmes: list[str], after: Callable[[], Awaitable[None]]) -
                 role=role.value,
                 programme=programme.value if role.value == "student" else None,
                 year=year.value if role.value == "student" else None,
+                organisation=(organisation.value if role.value == "client" else None),
             )
         except api.ApiError as problem:
             error.show(problem.message)
@@ -120,6 +121,13 @@ def import_button(programmes: list[str], after: Callable[[], Awaitable[None]]) -
             )
             year = ui.select(YEARS, label="Year").classes("w-full").mark("import-year")
         student_fields.bind_visibility_from(role, "value", value="student")
+        # One Organisation for the whole file, e.g. a company's contacts.
+        organisation = (
+            ui.input("Organisation (optional)")
+            .classes("w-full")
+            .mark("import-organisation")
+        )
+        organisation.bind_visibility_from(role, "value", value="client")
         error = ErrorMessage()
         uploader = (
             ui.upload(label="Choose the CSV file", auto_upload=True, on_upload=upload)

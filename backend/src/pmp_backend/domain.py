@@ -7,6 +7,8 @@ class Role(StrEnum):
     SUPERUSER = "superuser"
     TEACHER = "teacher"
     STUDENT = "student"
+    # Someone outside VIVES who follows Projects (spec #132).
+    CLIENT = "client"
 
 
 class ProjectStatus(StrEnum):

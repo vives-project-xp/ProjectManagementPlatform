@@ -32,7 +32,13 @@ class User(Base):
     __tablename__ = "users"
     __table_args__ = (
         CheckConstraint(
-            "role IN ('superuser', 'teacher', 'student')", name="ck_users_role"
+            "role IN ('superuser', 'teacher', 'student', 'client')",
+            name="ck_users_role",
+        ),
+        # Only Clients have an Organisation (spec #132).
+        CheckConstraint(
+            "organisation IS NULL OR role = 'client'",
+            name="ck_users_organisation_client",
         ),
         # Emails are stored lower-cased so uniqueness is case-insensitive.
         CheckConstraint("email = lower(email)", name="ck_users_email_lowercase"),
@@ -68,6 +74,8 @@ class User(Base):
     must_change_password: Mapped[bool] = mapped_column(default=True)
     programme: Mapped[str | None] = mapped_column(String(100))
     year: Mapped[str | None] = mapped_column(String(20))
+    # A Client's company or institution, optional (spec #132).
+    organisation: Mapped[str | None] = mapped_column(String(120))
     # The Project this Student is a Member of (Students only; see #9).
     project_id: Mapped[int | None] = mapped_column(ForeignKey("projects.id"))
     created_at: Mapped[datetime] = mapped_column(
@@ -84,6 +92,13 @@ class User(Base):
     @property
     def full_name(self) -> str:
         return f"{self.first_name} {self.last_name}"
+
+    @property
+    def display_name(self) -> str:
+        """The name with a Client's Organisation: "Jan Peeters (Barco)"."""
+        if self.organisation:
+            return f"{self.full_name} ({self.organisation})"
+        return self.full_name
 
 
 class Programme(Base):

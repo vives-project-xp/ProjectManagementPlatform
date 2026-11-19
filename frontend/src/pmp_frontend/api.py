@@ -262,7 +262,8 @@ async def get_user(token: str, user_id: int) -> dict[str, Any]:
 async def update_user(
     token: str, user_id: int, fields: dict[str, Any]
 ) -> dict[str, Any]:
-    """`fields`: first_name, last_name, email, programme, year (never the Role)."""
+    """`fields`: first_name, last_name, email, programme, year, organisation
+    (never the Role)."""
     return await _request("PUT", f"/api/users/{user_id}", token=token, json=fields)
 
 
@@ -292,6 +293,7 @@ async def import_users(
     role: str,
     programme: str | None = None,
     year: str | None = None,
+    organisation: str | None = None,
 ) -> dict[str, Any]:
     """Import a `Firstname,Lastname,email` CSV file: `created` (each with its
     temporary_password) and `skipped` (line, email, reason)."""
@@ -300,6 +302,8 @@ async def import_users(
         form["programme"] = programme
     if year:
         form["year"] = year
+    if organisation:
+        form["organisation"] = organisation
     return await _request(
         "POST",
         "/api/users/import",
@@ -310,7 +314,8 @@ async def import_users(
 
 
 async def create_user(token: str, new_user: dict[str, Any]) -> dict[str, Any]:
-    """Create a Teacher or Student; `new_user` matches the backend's create body.
+    """Create a Teacher, Student or Client; `new_user` matches the backend's
+    create body.
     The result includes the generated `temporary_password`, shown once."""
     return await _request("POST", "/api/users", token=token, json=new_user)
 
