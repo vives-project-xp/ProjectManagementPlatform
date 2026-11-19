@@ -49,6 +49,9 @@ class Settings(DatabaseSettings):
     # database. Without a token every post goes through To post today.
     instagram_token: SecretStr | None = None
     instagram_account_id: str = "me"
+    # Apps made since 2026 get "Unified login": a token for graph.facebook.com
+    # that never expires, with the account's id (1784…) as INSTAGRAM_ACCOUNT_ID
+    # and INSTAGRAM_REFRESH_URL empty (no refresh); see docs/instagram.md.
     instagram_api_url: str = "https://graph.instagram.com/v23.0"
     instagram_refresh_url: str = "https://graph.instagram.com/refresh_access_token"
     # The public address Instagram downloads photos from (https://<host>), set

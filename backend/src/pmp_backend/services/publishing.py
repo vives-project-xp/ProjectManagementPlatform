@@ -65,9 +65,11 @@ def refresh_token(
     session: Session, channel: Channel, settings: Settings, now: datetime
 ) -> bool:
     """Refresh the token when it expires within a week (or its expiry is still
-    unknown); a failure is kept for the notice. Whether it was refreshed."""
+    unknown); a failure is kept for the notice. Whether it was refreshed. A
+    token that never expires (INSTAGRAM_REFRESH_URL empty) is left alone."""
     row = channel_token(session, settings)
-    if row is None:
+    if row is None or not settings.instagram_refresh_url:
+        session.commit()
         return False
     if row.expires_at is not None and row.expires_at - now > REFRESH_BEFORE:
         session.commit()
