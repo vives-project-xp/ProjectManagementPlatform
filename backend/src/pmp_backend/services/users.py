@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from pmp_backend.domain import Role, Year
 from pmp_backend.errors import Conflict, NotFound, Refused
-from pmp_backend.models import User
+from pmp_backend.models import Project, ProjectClient, User
 from pmp_backend.security import generate_temporary_password, hash_password
 from pmp_backend.services import github, programmes
 from pmp_backend.services.projects import (
@@ -269,6 +269,14 @@ def _why_not_deletable(session: Session, user: User) -> str | None:
     owned = titles_owned_by(session, user.id)
     if owned:
         return f"is the Product Owner of {', '.join(owned)}"
+    followed = session.scalars(
+        select(Project.title)
+        .join(ProjectClient, ProjectClient.project_id == Project.id)
+        .where(ProjectClient.client_id == user.id)
+        .order_by(Project.title)
+    ).all()
+    if followed:
+        return f"follows {', '.join(followed)}"
     return None
 
 

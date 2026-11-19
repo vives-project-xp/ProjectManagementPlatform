@@ -5,6 +5,7 @@ from fastapi import APIRouter, Response, status
 from pydantic import AwareDatetime, BaseModel, Field, StringConstraints
 
 from pmp_backend.api.deps import (
+    ClientDep,
     SessionDep,
     StudentDep,
     TeacherOrSuperuserDep,
@@ -12,7 +13,7 @@ from pmp_backend.api.deps import (
 )
 from pmp_backend.api.schemas import UserOut
 from pmp_backend.models import Deadline, WeeklySlot
-from pmp_backend.services import planning, users
+from pmp_backend.services import clients, planning, users
 from pmp_backend.services.planning import (
     AgendaItem,
     DeadlineFields,
@@ -231,6 +232,15 @@ def my_planning(session: SessionDep, student: StudentDep) -> ProjectPlanningOut:
     if student.project is None:
         return ProjectPlanningOut(items=[], weekly_slot=None)
     return ProjectPlanningOut.of(planning.project_agenda(session, student.project))
+
+
+@router.get("/my-projects/{project_id}/planning")
+def followed_planning(
+    project_id: int, session: SessionDep, client: ClientDep
+) -> ProjectPlanningOut:
+    """A followed Project's planning, for its Clients (spec #132)."""
+    project = clients.followed_project(session, client, project_id)
+    return ProjectPlanningOut.of(planning.project_agenda(session, project))
 
 
 @router.post("/projects/{project_id}/meetings", status_code=status.HTTP_201_CREATED)

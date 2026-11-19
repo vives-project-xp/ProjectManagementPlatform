@@ -6,6 +6,7 @@ from typing import Any
 from nicegui import ui
 
 from pmp_frontend import api
+from pmp_frontend.clients_section import client_label
 from pmp_frontend.github_username import github_username_card
 from pmp_frontend.photos import show_photo
 from pmp_frontend.planning import my_planning_card
@@ -74,6 +75,11 @@ def _top3_card(top3: dict[str, Any]) -> None:
             if project["description"]:
                 ui.label(project["description"])
             ui.label(f"Product Owner: {project['product_owner']}")
+            if project["client_organisations"]:
+                # Whom the Project is for (spec #132).
+                ui.label(f"For: {', '.join(project['client_organisations'])}").mark(
+                    "client-organisations"
+                )
             ui.label(
                 f"Team size: {project['team_size_min']}–{project['team_size_max']}"
             )
@@ -101,6 +107,11 @@ def register() -> None:
         await my_planning_card()
         await my_repository_card()
         await my_trello_card()
+        if project["clients"]:
+            with ui.card().classes("w-full").mark("my-clients"):
+                ui.label("Clients").classes("text-h6")
+                for person in project["clients"]:
+                    ui.label(client_label(person))
         with ui.card().classes("w-full"):
             ui.label("Fellow Members").classes("text-h6")
             if project["fellow_members"]:

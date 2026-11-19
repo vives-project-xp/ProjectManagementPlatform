@@ -972,3 +972,52 @@ async def mark_posted(token: str, suggestion_id: int) -> dict[str, Any]:
 async def scheduled_posts(token: str) -> dict[str, Any]:
     """`to_post` (due, to publish by hand) and `scheduled` (the line)."""
     return await _request("GET", "/api/scheduled-posts", token=token)
+
+
+# Clients (spec #132, #134)
+
+
+async def clients(token: str) -> list[dict[str, Any]]:
+    """The active Clients (id and name with Organisation), to add one."""
+    return await _request("GET", "/api/clients", token=token)
+
+
+async def add_client(token: str, project_id: int, client_id: int) -> dict[str, Any]:
+    return await _request(
+        "POST",
+        f"/api/projects/{project_id}/clients",
+        token=token,
+        json={"client_id": client_id},
+    )
+
+
+async def remove_client(token: str, project_id: int, client_id: int) -> dict[str, Any]:
+    return await _request(
+        "DELETE", f"/api/projects/{project_id}/clients/{client_id}", token=token
+    )
+
+
+async def set_client_product_owner(
+    token: str, project_id: int, client_id: int | None
+) -> dict[str, Any]:
+    """Give one Client the Client Product Owner label; None takes it away."""
+    return await _request(
+        "PUT",
+        f"/api/projects/{project_id}/client-product-owner",
+        token=token,
+        json={"client_id": client_id},
+    )
+
+
+async def my_projects(token: str) -> list[dict[str, Any]]:
+    """The Projects a Client follows (id, title, status, photo_version)."""
+    return await _request("GET", "/api/my-projects", token=token)
+
+
+async def followed_project(token: str, project_id: int) -> dict[str, Any]:
+    """A followed Project, read-only, for its Client."""
+    return await _request("GET", f"/api/my-projects/{project_id}", token=token)
+
+
+async def followed_planning(token: str, project_id: int) -> dict[str, Any]:
+    return await _request("GET", f"/api/my-projects/{project_id}/planning", token=token)
