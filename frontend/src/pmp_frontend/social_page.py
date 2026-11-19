@@ -127,6 +127,10 @@ def _outcome(week: dict[str, Any]) -> None:
     with ui.row().classes("items-center gap-2").mark(marker):
         ui.icon("campaign", color="dark")
         ui.label(outcome_text(week))
+        if week.get("published_url"):
+            ui.link("View on Instagram", week["published_url"], new_tab=True).mark(
+                "instagram-link"
+            )
 
 
 def disk_warning(storage: dict[str, Any]) -> None:

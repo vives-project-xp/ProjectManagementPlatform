@@ -76,18 +76,25 @@ def llm() -> testing.FakeLLM:
 
 
 @pytest.fixture
+def instagram() -> testing.FakeInstagram:
+    return testing.FakeInstagram()
+
+
+@pytest.fixture
 def client(
     settings: Settings,
     github: testing.FakeGitHub,
     trello: testing.FakeTrello,
     mailer: testing.FakeMailer,
     llm: testing.FakeLLM,
+    instagram: testing.FakeInstagram,
 ) -> Iterator[TestClient]:
     app = create_app(settings)
     app.state.github = github
     app.state.trello = trello
     app.state.mailer = mailer
     app.state.llm = llm
+    app.state.instagram = instagram
     # Entering the client runs the app's startup, which creates the starting accounts.
     with TestClient(app) as client:
         yield client

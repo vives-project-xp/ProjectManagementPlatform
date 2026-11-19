@@ -3,7 +3,9 @@
 import json
 import os
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from alembic import command
@@ -19,6 +21,7 @@ from pmp_backend.services.github import (
     RepoInfo,
     repo_exists_error,
 )
+from pmp_backend.services.instagram import ChannelError, Published, RefreshedToken
 from pmp_backend.services.post_ai import AiAnswer, AiError, AiRequest
 from pmp_backend.services.trello import (
     BoardInfo,
@@ -49,7 +52,7 @@ def reset(database_url: str = TEST_DATABASE_URL) -> None:
         connection.execute(
             text(
                 "TRUNCATE projects, users, programmes, top3_round, deadlines, "
-                "social_settings "
+                "social_settings, channel_tokens "
                 "RESTART IDENTITY CASCADE"
             )
         )
@@ -378,4 +381,55 @@ class FakeLLM:
                 }
             ),
             "stop",
+        )
+
+
+@dataclass(frozen=True)
+class FakePost:
+    kind: str
+    # The Publish link of a photo, the video file of a Reel.
+    source: str
+    caption: str
+    token: str
+
+
+class FakeInstagram:
+    """Instagram for tests (#117): records every post and refresh. `failures`
+    makes the next publish calls fail; `refresh_failing` makes refreshes fail;
+    `fetch` (if set) is called with a photo's Publish link while publishing,
+    the way Instagram downloads it."""
+
+    def __init__(self) -> None:
+        self.posts: list[FakePost] = []
+        self.refreshes: list[str] = []
+        self.failures = 0
+        self.refresh_failing = False
+        self.fetch: Callable[[str], None] | None = None
+
+    def _published(self, post: FakePost) -> Published:
+        if self.failures > 0:
+            self.failures -= 1
+            raise ChannelError("Instagram answered 500: Fake failure")
+        self.posts.append(post)
+        number = len(self.posts)
+        return Published(
+            media_id=str(number), url=f"https://www.instagram.com/p/fake{number}/"
+        )
+
+    def publish_photo(self, token: str, image_url: str, caption: str) -> Published:
+        if self.fetch is not None:
+            self.fetch(image_url)
+        return self._published(FakePost("photo", image_url, caption, token))
+
+    def publish_reel(self, token: str, video: Path, caption: str) -> Published:
+        assert video.is_file(), video
+        return self._published(FakePost("reel", str(video), caption, token))
+
+    def refresh(self, token: str, now: datetime) -> RefreshedToken:
+        self.refreshes.append(token)
+        if self.refresh_failing:
+            raise ChannelError("Instagram answered 400: Fake refresh failure")
+        return RefreshedToken(
+            token=f"refreshed-{len(self.refreshes)}",
+            expires_at=now + timedelta(days=60),
         )

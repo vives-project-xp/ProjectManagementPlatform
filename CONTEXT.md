@@ -225,3 +225,7 @@ _Avoid_: Carousel, compilation
 **To post today**:
 The list of posts staff publish by hand (Download media, Copy caption, then "Posted"): every post until automatic publishing is live, and afterwards any post whose publishing failed.
 _Avoid_: Manual queue, backlog
+
+**Publish link**:
+A short-lived public address (`/social/<random code>`) to one Medium of one Scheduled post, from which the Channel downloads a photo while publishing (ADR 0010). It works for 1 hour or until that post is published, whichever comes first; Reels are uploaded directly and need none.
+_Avoid_: Share link, public URL

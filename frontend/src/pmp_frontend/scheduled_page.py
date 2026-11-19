@@ -1,5 +1,6 @@
-"""Scheduled posts (spec #110, #116): the posts whose Posting time has come,
-to publish by hand (To post today), and Instagram's line of Scheduled posts."""
+"""Scheduled posts (spec #110, #116, #117): the posts whose Posting time has
+come and that weren't published automatically, to publish by hand (To post
+today); Instagram's line of Scheduled posts; and the last posts published."""
 
 from typing import Any
 
@@ -51,6 +52,11 @@ def _to_post_card(post: dict[str, Any], reload) -> None:
             with ui.column().classes("gap-1 min-w-0"):
                 ui.label(post["title"]).classes("font-medium")
                 ui.label(post["caption"]).classes("whitespace-pre-wrap")
+        if post["publish_error"]:
+            # Why automatic publishing didn't do it (#117).
+            with ui.row().classes("items-center gap-2 no-wrap").mark("publish-error"):
+                ui.icon("warning", color="primary")
+                ui.label(post["publish_error"])
         error = ErrorMessage()
         with ui.row().classes("items-center gap-2"):
             if post["chosen"]:
@@ -67,17 +73,63 @@ def _to_post_card(post: dict[str, Any], reload) -> None:
             ui.button("Posted", icon="done", on_click=posted).mark("mark-posted")
 
 
+def channel_notice(channel: dict[str, Any]) -> str | None:
+    """What staff should know about automatic publishing, if anything."""
+    if not channel["automatic"]:
+        return (
+            "Automatic publishing on Instagram isn't set up: publish the posts "
+            "yourself: download the photo or video, copy the caption, then press "
+            "Posted."
+        )
+    if channel["refresh_error"]:
+        until = (
+            f" It stops working on {shown(channel['expires_at'])}."
+            if channel["expires_at"]
+            else ""
+        )
+        return (
+            f"Instagram's token couldn't be refreshed: {channel['refresh_error']}."
+            f"{until}"
+        )
+    if not channel["photos_automatic"]:
+        return (
+            "Reels are published automatically; photo posts come here until the "
+            "site is reachable from the internet."
+        )
+    return None
+
+
+def _published_row(post: dict[str, Any]) -> None:
+    with ui.row().classes("items-center gap-2").mark(f"published-{post['id']}"):
+        ui.icon("check_circle", color="dark")
+        ui.label(f"{post['project']['title']}: {post['title']}").classes("font-medium")
+        ui.label(shown(post["posted_at"])).classes("text-caption")
+        if post["published_url"]:
+            ui.link("View on Instagram", post["published_url"], new_tab=True).mark(
+                "instagram-link"
+            )
+
+
 def register() -> None:
     @role_page("/scheduled-posts", "Scheduled posts", {"superuser", "teacher"})
     async def scheduled_page(user: api.CurrentUser) -> None:
         @ui.refreshable
         async def lists() -> None:
             found = await api.scheduled_posts(token())
+            notice = channel_notice(found["channel"])
+            if notice:
+                with (
+                    ui.row()
+                    .classes("items-center gap-2 no-wrap")
+                    .mark("channel-notice")
+                ):
+                    ui.icon("info", color="dark")
+                    ui.label(notice)
             ui.label("To post today").classes("text-h6")
             ui.label(
-                "Posts whose Posting time has come. Until automatic publishing is "
-                "set up, publish them on Instagram yourself: download the photo or "
-                "video, copy the caption, then press Posted."
+                "Posts whose Posting time has come that weren't published "
+                "automatically: download the photo or video, copy the caption, "
+                "post it on Instagram, then press Posted."
             ).classes("text-caption")
             if not found["to_post"]:
                 ui.label("Nothing to post right now.").mark("nothing-to-post")
@@ -88,5 +140,9 @@ def register() -> None:
                 ui.label("No Scheduled posts.")
             for post in found["scheduled"]:
                 SuggestionCard(post, lists.refresh)
+            if found["published"]:
+                ui.label("Published").classes("text-h6")
+                for post in found["published"]:
+                    _published_row(post)
 
         await lists()

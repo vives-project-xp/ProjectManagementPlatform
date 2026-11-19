@@ -608,6 +608,13 @@ class PostSuggestion(Base):
         ForeignKey("users.id", ondelete="SET NULL")
     )
     posted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Automatic publishing (#117): failed tries, when the retry is due, the
+    # last error, and the post's Instagram link once published (posted_at is
+    # then the moment it was published).
+    publish_attempts: Mapped[int] = mapped_column(default=0, server_default="0")
+    publish_retry_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    publish_error: Mapped[str | None] = mapped_column(String(500))
+    published_url: Mapped[str | None] = mapped_column(String(500))
 
     weekly_update: Mapped[WeeklyUpdate] = relationship(lazy="joined")
     reviewed_by: Mapped[User | None] = relationship(
@@ -616,3 +623,35 @@ class PostSuggestion(Base):
     posted_by: Mapped[User | None] = relationship(
         lazy="joined", foreign_keys=[posted_by_id]
     )
+
+
+class PublishLink(Base):
+    """A short-lived public link to one Medium of one Scheduled post, for the
+    Channel to download it from (ADR 0010): valid until `expires_at` or until
+    that post is published (the link is then deleted)."""
+
+    __tablename__ = "publish_links"
+
+    # Random, at least 128 bits (secrets.token_urlsafe).
+    code: Mapped[str] = mapped_column(String(64), primary_key=True)
+    suggestion_id: Mapped[int] = mapped_column(
+        ForeignKey("post_suggestions.id", ondelete="CASCADE"), index=True
+    )
+    medium_id: Mapped[int] = mapped_column(
+        ForeignKey("weekly_media.id", ondelete="CASCADE")
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class ChannelToken(Base):
+    """A Channel's long-lived access token (#117), refreshed before it expires;
+    never returned by the API. First taken from the settings (INSTAGRAM_TOKEN)."""
+
+    __tablename__ = "channel_tokens"
+
+    channel: Mapped[str] = mapped_column(String(20), primary_key=True)
+    token: Mapped[str] = mapped_column(Text)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    refreshed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Why the last refresh failed; null after a successful one.
+    refresh_error: Mapped[str | None] = mapped_column(String(500))

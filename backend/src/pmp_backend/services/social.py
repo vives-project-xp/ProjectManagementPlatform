@@ -12,7 +12,7 @@ from datetime import datetime, time, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -20,6 +20,7 @@ from pmp_backend.domain import Role
 from pmp_backend.errors import Forbidden, NotFound, Refused
 from pmp_backend.models import (
     PostSuggestion,
+    PublishLink,
     SocialSettings,
     User,
     WeeklyMedium,
@@ -196,9 +197,11 @@ class WeekView:
     # The Post suggestion's state once there is one, and why it was refused.
     suggestion_state: str | None = None
     refusal_reason: str | None = None
-    # Its Posting time once Posted, and when it was posted by hand (#118).
+    # Its Posting time once Posted, and when it was posted by hand (#118) or
+    # published, with the post on Instagram (#117).
     scheduled_for: datetime | None = None
     posted_at: datetime | None = None
+    published_url: str | None = None
     # When the never-posted Media were deleted, 4 months after the week (#118).
     media_removed_at: datetime | None = None
 
@@ -232,6 +235,7 @@ def week_view(update_: WeeklyUpdate, now: datetime) -> WeekView:
         refusal_reason=suggestion.refusal_reason if suggestion else None,
         scheduled_for=suggestion.scheduled_for if suggestion else None,
         posted_at=suggestion.posted_at if suggestion else None,
+        published_url=suggestion.published_url if suggestion else None,
         media_removed_at=update_.media_removed_at,
     )
 
@@ -488,7 +492,9 @@ _STILL_TO_POST = ("scheduled", "to_post_by_hand")
 def clean_up(session: Session, media_dir: Path, now: datetime) -> list[int]:
     """Delete the never-posted Media of Upload weeks that closed more than
     KEEP_MEDIA before `now`; posted Media stay. The week keeps its text and
-    outcome and remembers when its Media went. The ids of the cleaned weeks."""
+    outcome and remembers when its Media went. Expired Publish links (#117) go
+    too. The ids of the cleaned weeks."""
+    session.execute(delete(PublishLink).where(PublishLink.expires_at <= now))
     expired = session.scalars(
         select(WeeklyUpdate)
         .where(

@@ -24,7 +24,7 @@ from pmp_backend.api.deps import (
     TeacherOrSuperuserDep,
 )
 from pmp_backend.api.schemas import ProjectRefOut
-from pmp_backend.services import post_ai, posting, social, suggestions
+from pmp_backend.services import post_ai, posting, publishing, social, suggestions
 from pmp_backend.services.social import MyWeeklyUpdate, WeekView
 
 router = APIRouter(prefix="/api", tags=["social"])
@@ -111,9 +111,11 @@ class WeeklyUpdateOut(BaseModel):
     # The Post suggestion's state once there is one (e.g. "refused"), and why.
     suggestion_state: str | None
     refusal_reason: str | None
-    # Its Posting time once Posted; when it was posted by hand.
+    # Its Posting time once Posted; when it was posted by hand or published.
     scheduled_for: datetime | None
     posted_at: datetime | None
+    # The post on Instagram once published automatically (#117).
+    published_url: str | None
     # Set once the never-posted Media were deleted, 4 months after the week.
     media_removed_at: datetime | None
 
@@ -294,10 +296,15 @@ class SuggestionOut(BaseModel):
     reviewed_by: str | None
     reviewed_at: datetime | None
     refusal_reason: str | None
-    # Its Posting time once Posted ("scheduled"); who posted it by hand, when.
+    # Its Posting time once Posted ("scheduled"); who posted it by hand, when
+    # (or when it was published automatically).
     scheduled_for: datetime | None
     posted_by: str | None
     posted_at: datetime | None
+    # Automatic publishing (#117): why the last try failed (on To post today
+    # when it gave up), and the post on Instagram once "published".
+    publish_error: str | None
+    published_url: str | None
 
 
 @router.get("/post-suggestions")
@@ -344,14 +351,17 @@ def _suggestions_out(views: list[suggestions.SuggestionView]) -> list[Suggestion
                 reviewed_at=suggestion.reviewed_at,
                 refusal_reason=suggestion.refusal_reason,
                 scheduled_for=suggestion.scheduled_for,
+                # Published automatically: nobody posted it by hand.
                 posted_by=(
                     suggestion.posted_by.full_name
                     if suggestion.posted_by
                     else "Deleted user"
                 )
-                if suggestion.posted_at
+                if suggestion.state == "posted_by_hand"
                 else None,
                 posted_at=suggestion.posted_at,
+                publish_error=suggestion.publish_error,
+                published_url=suggestion.published_url,
             )
         )
     return found
@@ -454,20 +464,37 @@ def mark_posted(
     return _one(session, suggestion_id)
 
 
+class ChannelOut(BaseModel):
+    # Automatic publishing on Instagram (#117); never the token itself.
+    automatic: bool
+    # Photo posts need the site reachable from the internet (PUBLIC_MEDIA_URL).
+    photos_automatic: bool
+    expires_at: datetime | None
+    # Why the last token refresh failed; null after a successful one.
+    refresh_error: str | None
+
+
 class ScheduledPostsOut(BaseModel):
     # Due posts to publish by hand (oldest first), and the line (soonest first).
     to_post: list[SuggestionOut]
     scheduled: list[SuggestionOut]
+    # The last posts published automatically, newest first (#117).
+    published: list[SuggestionOut]
+    channel: ChannelOut
 
 
 @router.get("/scheduled-posts")
 def scheduled_posts(
-    session: SessionDep, user: TeacherOrSuperuserDep
+    session: SessionDep, settings: SettingsDep, user: TeacherOrSuperuserDep
 ) -> ScheduledPostsOut:
     to_post, scheduled = posting.lists(session)
+    published = posting.recently_published(session)
     by_id = {
         found.id: found for found in _suggestions_out(suggestions.suggestions(session))
     }
     return ScheduledPostsOut(
-        to_post=[by_id[i] for i in to_post], scheduled=[by_id[i] for i in scheduled]
+        to_post=[by_id[i] for i in to_post],
+        scheduled=[by_id[i] for i in scheduled],
+        published=[by_id[i] for i in published],
+        channel=ChannelOut(**vars(publishing.status(session, settings))),
     )
