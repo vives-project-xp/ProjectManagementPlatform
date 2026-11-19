@@ -92,17 +92,41 @@ def _earlier_weeks(weeks: list[dict[str, Any]]) -> None:
             )
             ui.label(_week_text(week)).classes("whitespace-pre-wrap")
             media_grid(week["media"])
+            if week["media_removed_at"]:
+                ui.label(MEDIA_REMOVED).classes("text-caption").mark("media-removed")
             ui.label(_edited(week)).classes("text-caption")
             _outcome(week)
 
 
-def _outcome(week: dict[str, Any]) -> None:
+MEDIA_REMOVED = (
+    "The photos and video that weren't posted were removed 4 months after this week."
+)
+
+
+def outcome_text(week: dict[str, Any]) -> str:
     """What happened to the week's Post suggestion, as far as the team sees it."""
-    if week["suggestion_state"] == "refused":
+    state = week["suggestion_state"]
+    if state == "refused":
         reason = week["refusal_reason"]
-        ui.label(
-            "Not posted on social media this week" + (f": {reason}" if reason else ".")
-        ).mark("refused-outcome")
+        return "Not posted on social media this week" + (
+            f": {reason}" if reason else "."
+        )
+    if state in ("generating", "waiting"):
+        return "Post suggestion waiting for Review."
+    if state in ("scheduled", "to_post_by_hand"):
+        return f"Scheduled to be posted on {shown(week['scheduled_for'])}."
+    if state == "published":
+        return "Published on Instagram."
+    if state == "posted_by_hand":
+        return f"Posted on social media on {shown(week['posted_at'])}."
+    return "No Post suggestion this week."
+
+
+def _outcome(week: dict[str, Any]) -> None:
+    marker = "refused-outcome" if week["suggestion_state"] == "refused" else "outcome"
+    with ui.row().classes("items-center gap-2").mark(marker):
+        ui.icon("campaign", color="dark")
+        ui.label(outcome_text(week))
 
 
 def disk_warning(storage: dict[str, Any]) -> None:

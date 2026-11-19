@@ -111,6 +111,11 @@ class WeeklyUpdateOut(BaseModel):
     # The Post suggestion's state once there is one (e.g. "refused"), and why.
     suggestion_state: str | None
     refusal_reason: str | None
+    # Its Posting time once Posted; when it was posted by hand.
+    scheduled_for: datetime | None
+    posted_at: datetime | None
+    # Set once the never-posted Media were deleted, 4 months after the week.
+    media_removed_at: datetime | None
 
     @classmethod
     def of(cls, week: WeekView) -> "WeeklyUpdateOut":

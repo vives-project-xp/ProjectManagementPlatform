@@ -1,6 +1,7 @@
 """Social media (spec #110): the Superuser's settings and the Weekly updates
 that teams write each Upload week."""
 
+import asyncio
 import logging
 import re
 import shutil
@@ -17,7 +18,13 @@ from sqlalchemy.orm import Session
 
 from pmp_backend.domain import Role
 from pmp_backend.errors import Forbidden, NotFound, Refused
-from pmp_backend.models import SocialSettings, User, WeeklyMedium, WeeklyUpdate
+from pmp_backend.models import (
+    PostSuggestion,
+    SocialSettings,
+    User,
+    WeeklyMedium,
+    WeeklyUpdate,
+)
 from pmp_backend.services import media, video
 from pmp_backend.services.projects import get_project
 
@@ -189,6 +196,11 @@ class WeekView:
     # The Post suggestion's state once there is one, and why it was refused.
     suggestion_state: str | None = None
     refusal_reason: str | None = None
+    # Its Posting time once Posted, and when it was posted by hand (#118).
+    scheduled_for: datetime | None = None
+    posted_at: datetime | None = None
+    # When the never-posted Media were deleted, 4 months after the week (#118).
+    media_removed_at: datetime | None = None
 
 
 def _name(user: User | None) -> str:
@@ -196,6 +208,7 @@ def _name(user: User | None) -> str:
 
 
 def week_view(update_: WeeklyUpdate, now: datetime) -> WeekView:
+    suggestion = update_.suggestion
     return WeekView(
         closes_at=update_.closes_at,
         text=update_.text,
@@ -215,10 +228,11 @@ def week_view(update_: WeeklyUpdate, now: datetime) -> WeekView:
             )
             for medium in update_.media
         ],
-        suggestion_state=update_.suggestion.state if update_.suggestion else None,
-        refusal_reason=update_.suggestion.refusal_reason
-        if update_.suggestion
-        else None,
+        suggestion_state=suggestion.state if suggestion else None,
+        refusal_reason=suggestion.refusal_reason if suggestion else None,
+        scheduled_for=suggestion.scheduled_for if suggestion else None,
+        posted_at=suggestion.posted_at if suggestion else None,
+        media_removed_at=update_.media_removed_at,
     )
 
 
@@ -460,6 +474,72 @@ def read_medium(
 def discard_media(media_dir: Path, project_id: int) -> None:
     """Delete the media files of a deleted Project."""
     shutil.rmtree(media_dir / str(project_id), ignore_errors=True)
+
+
+# The 4-month clean-up (#118)
+
+# About 4 months, like the Chat's 182 days for 6.
+KEEP_MEDIA = timedelta(days=122)
+CLEAN_UP_EVERY_SECONDS = 24 * 60 * 60
+# A post still on its way to Instagram keeps its week's Media.
+_STILL_TO_POST = ("scheduled", "to_post_by_hand")
+
+
+def clean_up(session: Session, media_dir: Path, now: datetime) -> list[int]:
+    """Delete the never-posted Media of Upload weeks that closed more than
+    KEEP_MEDIA before `now`; posted Media stay. The week keeps its text and
+    outcome and remembers when its Media went. The ids of the cleaned weeks."""
+    expired = session.scalars(
+        select(WeeklyUpdate)
+        .where(
+            WeeklyUpdate.closes_at < now - KEEP_MEDIA,
+            select(WeeklyMedium.id)
+            .where(
+                WeeklyMedium.weekly_update_id == WeeklyUpdate.id,
+                WeeklyMedium.posted.is_(False),
+            )
+            .exists(),
+            ~select(PostSuggestion.id)
+            .where(
+                PostSuggestion.weekly_update_id == WeeklyUpdate.id,
+                PostSuggestion.state.in_(_STILL_TO_POST),
+            )
+            .exists(),
+        )
+        .with_for_update(of=WeeklyUpdate, skip_locked=True)
+        .execution_options(populate_existing=True)
+    ).all()
+    paths: list[Path] = []
+    for update_ in expired:
+        for medium in update_.media:
+            if not medium.posted:
+                paths += _all_files(media_dir, update_.project_id, medium)
+                session.delete(medium)
+        update_.media_removed_at = now
+    session.commit()
+    # Files go after the commit, so a failed commit never loses a kept medium.
+    for path in paths:
+        path.unlink(missing_ok=True)
+    return [update_.id for update_ in expired]
+
+
+async def clean_up_forever(
+    make_session: Callable[[], Session], media_dir: Path
+) -> None:
+    """Once a day, the 4-month clean-up; never crashes the backend."""
+
+    def run_once() -> None:
+        with make_session() as session:
+            cleaned = clean_up(session, media_dir, _now(session))
+        if cleaned:
+            log.info("Removed the never-posted media of Weekly updates %s", cleaned)
+
+    while True:
+        try:
+            await asyncio.to_thread(run_once)
+        except Exception:
+            log.exception("The social media clean-up failed")
+        await asyncio.sleep(CLEAN_UP_EVERY_SECONDS)
 
 
 def upload_video(
