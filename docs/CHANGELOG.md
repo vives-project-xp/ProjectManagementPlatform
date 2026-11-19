@@ -293,7 +293,8 @@ Newest first. "Live" means deployed to the VIVES VM by the Deploy workflow. "Mig
 
 | | What | Issue | PR |
 |---|---|---|---|
-| Changed | Navigation as a menu on the left with a hamburger button (R17) | – | |
+| Changed | Navigation as a menu on the left with a hamburger button (R17) | – | #129 |
+| New | **4-month clean-up and outcomes for the team:** once a day, the photos and videos that were never posted are deleted from Upload weeks that closed more than 4 months ago (122 days); posted ones stay, and so do the Media of a post still Scheduled or To post today; the week keeps its text and outcome and says the media were removed; the Students' **Weekly update** page shows each earlier week's outcome: waiting for Review, scheduled on a date, published, posted by hand on a date, not posted with the reason, or no Post suggestion; migration `0026` | #118 | |
 
 ### 2026-11-12: Social media posts (spec #110)
 

@@ -28,6 +28,7 @@ from pmp_backend.services.chat import TypingBoard, clean_up_forever
 from pmp_backend.services.github import HttpGitHub
 from pmp_backend.services.post_ai import HttpLLM, is_configured
 from pmp_backend.services.seeding import seed_starting_accounts
+from pmp_backend.services.social import clean_up_forever as clean_up_media_forever
 from pmp_backend.services.social import resume_processing
 from pmp_backend.services.trello import HttpTrello
 from pmp_backend.settings import Settings
@@ -68,8 +69,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             )
         # Scheduled posts move to To post today at their Posting time (#116).
         poster = asyncio.create_task(posting.run_forever(make_session))
+        # Never-posted Media go 4 months after their Upload week (#118).
+        media_cleaner = asyncio.create_task(
+            clean_up_media_forever(make_session, settings.social_media_dir)
+        )
         yield
-        for task in (sender, cleaner, resumer, writer, poster):
+        for task in (sender, cleaner, resumer, writer, poster, media_cleaner):
             if task is not None:
                 task.cancel()
                 with suppress(asyncio.CancelledError):

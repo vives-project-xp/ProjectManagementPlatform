@@ -509,6 +509,8 @@ class WeeklyUpdate(Base):
     edited_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+    # When the never-posted Media were deleted, 4 months after the week (#118).
+    media_removed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     edited_by: Mapped[User | None] = relationship(lazy="joined")
     media: Mapped[list["WeeklyMedium"]] = relationship(
