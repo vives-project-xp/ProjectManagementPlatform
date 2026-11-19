@@ -16,6 +16,21 @@ Numbers like #24 are GitHub issues or pull requests on [vives-project-xp/Project
 
 Newest first. Each request has the same four parts: **Before**, **Asked**, **Changed**, **Where**.
 
+### R17. Navigation as a menu on the left (2026-11-19)
+
+**Before.** Every screen, **My account**, the User's name and **Log out** stood in one long row in the header next to the logo. For the Superuser that row was full: eleven items plus the name and Log out.
+
+**Asked.** *"can we first fix the icons & text on top of the site? maybe make a hamburger style on the left side of the site so its all vertical not horizontal"* (with a screenshot of the Superuser's header).
+
+**Changed.**
+- The screens are now a white **menu on the left**, one under the other, each with its icon. The screen you're on, or one of its details pages (such as a Project), has a sand background and a red bar.
+- **My account**, your name and **Log out** sit at the bottom of the menu.
+- A **hamburger button** left of the logo opens and closes the menu. On a wide screen the menu starts open beside the page; on a phone it starts closed and opens over the page.
+- The Unread badge and the red @ stay on the **Chat** / **Chats** item.
+- During the forced password change, the menu holds only your name and Log out, as before.
+
+**Where.** `frontend/src/pmp_frontend/theme.py` (`frame` takes `navigation`), `shell.py` (`navigation`, `_navigation_link`).
+
 ### R16. Short, centered GitHub and Trello links (2026-11-12)
 
 **Before.** The GitHub repository card showed the whole URL (`https://github.com/ProjectManagementVives/ProjectManagmentPlatform`) against the left edge, and a long one ran outside the card. The Trello card showed the board's whole URL the same way.
@@ -274,6 +289,12 @@ After the MVP went live, the team tried it and listed what bothered them. The li
 
 Newest first. "Live" means deployed to the VIVES VM by the Deploy workflow. "Migration" is the Alembic database version after that change.
 
+### 2026-11-19
+
+| | What | Issue | PR |
+|---|---|---|---|
+| Changed | Navigation as a menu on the left with a hamburger button (R17) | – | |
+
 ### 2026-11-12: Social media posts (spec #110)
 
 | | What | Issue | PR |
@@ -287,7 +308,7 @@ Newest first. "Live" means deployed to the VIVES VM by the Deploy workflow. "Mig
 | Changed | Short, centered GitHub and Trello links (R16) | – | #125 |
 | New | **AI Post suggestions:** at 07:00 on the Upload deadline's weekday, a week after an Upload week closed, the school's LLM (`qwen3.8-27b`, ADR 0009) writes a suggestion for every Active Project with a Weekly update and a usable photo or video: a Dutch title and caption with the Fixed hashtags, the chosen medium with a ranking, and a "why"; it gets only the Project title, the update text, the 3 best photos (1600 px) and the video's small copy, through a strict JSON schema, and every answer is checked (lengths, hashtags, emoji, media) before it is stored; 3 tries 20 minutes apart, then "The AI couldn't make a suggestion"; read-only **Post suggestions** screen for Teachers and the Superuser; settings `LLM_BASE_URL`, `LLM_MODEL`, `LLM_API_KEY`; migration `0023` | #114 | #126 |
 | New | **Review of Post suggestions:** on **Post suggestions** ("Only my Projects" on for Teachers), staff edit the title and caption (same rules as the AI: at most 80 characters, the Fixed hashtags plus 1–3, at most 2 emoji), pick another photo or the video, **Refuse** with an optional reason (no post for that Project that week; the team sees the reason under its earlier weeks), **Generate again** (the AI answers within a minute or two), or write the post themselves when the AI couldn't; who reviewed last and when is shown; migration `0024` | #115 | #127 |
-| New | **Post, Scheduled posts, To post today:** **Post** on a reviewed suggestion (only with everything saved) puts it in Instagram's line: it gets the next free Posting time at least 10 minutes away, in the order posts were Posted, never the same Project twice in a row; the new **Scheduled posts** screen shows the line with **Pull back** (back to Review, the others move up) and, on top, **To post today**: posts whose Posting time has come, with **Download media**, **Copy caption** (title as first line) and **Posted** (who and when; the medium is kept as posted); archiving a Project doesn't cancel its post; migration `0025` | #116 | |
+| New | **Post, Scheduled posts, To post today:** **Post** on a reviewed suggestion (only with everything saved) puts it in Instagram's line: it gets the next free Posting time at least 10 minutes away, in the order posts were Posted, never the same Project twice in a row; the new **Scheduled posts** screen shows the line with **Pull back** (back to Review, the others move up) and, on top, **To post today**: posts whose Posting time has come, with **Download media**, **Copy caption** (title as first line) and **Posted** (who and when; the medium is kept as posted); archiving a Project doesn't cancel its post; migration `0025` | #116 | #128 |
 
 ### 2026-10-29: Project chat, continued (spec #91)
 

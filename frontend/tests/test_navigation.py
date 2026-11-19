@@ -73,6 +73,31 @@ async def test_navigation_items_have_icons(user: User, role: str, icons: set[str
     assert icons <= navigation_icons(user)
 
 
+async def test_navigation_is_a_left_menu_marking_the_current_screen(user: User):
+    await ready_to_work(user, "teacher")
+    await user.open("/members")
+    await user.should_see(marker="navigation", retries=30)
+
+    menu = user.find(marker="menu").elements.pop()
+    assert isinstance(menu, ui.left_drawer)
+    user.find(marker="menu-button")
+    current = {
+        link.props["href"]
+        for link in user.find(marker="navigation").elements
+        if "border-l-4" in link.classes
+    }
+    assert current == {"/members"}
+    await user.should_see("Log out")
+
+
+async def test_no_menu_before_logging_in(user: User):
+    await user.open("/login")
+    await user.should_see(marker="log-in")
+
+    await user.should_not_see(marker="menu")
+    await user.should_not_see(marker="menu-button")
+
+
 async def test_every_page_has_the_vives_footer(user: User):
     await user.open("/login")
     await user.should_see(marker="footer", retries=30)

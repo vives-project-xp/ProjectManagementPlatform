@@ -54,17 +54,37 @@ def register_static_files() -> None:
 
 @contextmanager
 def frame(
-    title: str, header: Callable[[], None] | None = None, home: str | None = None
+    title: str,
+    navigation: Callable[[], None] | None = None,
+    home: str | None = None,
 ):
     """Page layout: white header with the VIVES logo, content on a sand background.
 
-    `header` adds content (navigation, the User's name) to the right of the logo;
-    with `home`, the logo is a link to that page.
+    `navigation` fills a white menu on the left (R17), opened and closed with the
+    hamburger button left of the logo; it starts open on a wide screen and
+    closed on a phone. With `home`, the logo is a link to that page.
     """
     ui.colors(primary=VIVES_RED, dark=BLACK)
     ui.add_head_html(_HEAD_HTML)
     ui.page_title(f"{title} | VIVES")
-    with ui.header().classes("bg-white text-dark items-center px-6 py-3 shadow-sm"):
+    drawer = None
+    if navigation is not None:
+        # value=None: Quasar shows it beside the page above 1023 px, else hidden.
+        # bottom_corner: it runs down to the bottom, so the footer never covers
+        # Log out.
+        drawer = (
+            ui.left_drawer(value=None, bordered=True, bottom_corner=True)
+            .props("width=240")
+            .classes("bg-white p-0")
+            .mark("menu")
+        )
+        with drawer:
+            navigation()
+    with ui.header().classes("bg-white text-dark items-center px-4 py-3 shadow-sm"):
+        if drawer is not None:
+            ui.button(icon="menu", on_click=drawer.toggle).props(
+                "flat round color=dark"
+            ).mark("menu-button")
         with ui.link(target=home) if home else nullcontext() as link:
             # The guide asks for clear space of one smile height around the logo.
             ui.image("/static/vives-logo.png").props("fit=contain no-spinner").classes(
@@ -72,9 +92,6 @@ def frame(
             ).mark("logo")
         if link is not None:
             link.mark("logo")
-        if header is not None:
-            ui.space()
-            header()
     with ui.column().classes(f"w-full {CONTENT_WIDTH} mx-auto p-6 gap-6"):
         yield
     footer()
