@@ -569,6 +569,70 @@ def unread_total(session: Session, user: User) -> UnreadTotal:
     )
 
 
+# Browser notifications (#148).
+
+NOTIFICATION_TEXT = 100
+MAX_NOTIFICATIONS = 20
+
+
+@dataclass(frozen=True)
+class Notification:
+    message_id: int
+    project_id: int
+    project_title: str
+    author: str
+    # The first 100 characters ("Sent a file." for a message with files only).
+    text: str
+    mentions_me: bool
+
+
+def latest_message_id(session: Session) -> int:
+    return session.scalar(select(func.max(ChatMessage.id))) or 0
+
+
+def notifications(session: Session, user: User, since: int) -> list[Notification]:
+    """New messages of others after message `since` in the User's own Chats
+    (the ones the Unread badge counts); none when the User switched them off.
+    Deleted ones never notify."""
+    if not user.chat_notifications:
+        return []
+    own = {
+        summary.project_id: summary.title for summary in chats(session, user, mine=True)
+    }
+    if not own:
+        return []
+    found = session.scalars(
+        select(ChatMessage)
+        .where(
+            ChatMessage.id > since,
+            ChatMessage.project_id.in_(own),
+            ChatMessage.deleted_at.is_(None),
+            or_(ChatMessage.author_id.is_(None), ChatMessage.author_id != user.id),
+        )
+        .order_by(ChatMessage.id)
+        .limit(MAX_NOTIFICATIONS)
+    ).all()
+    mentioned = set(
+        session.scalars(
+            select(ChatMention.message_id).where(
+                ChatMention.user_id == user.id,
+                ChatMention.message_id.in_([message.id for message in found]),
+            )
+        )
+    )
+    return [
+        Notification(
+            message_id=message.id,
+            project_id=message.project_id,
+            project_title=own[message.project_id],
+            author=message.author.display_name if message.author else "Deleted user",
+            text=(message.body.strip() or "Sent a file.")[:NOTIFICATION_TEXT],
+            mentions_me=message.id in mentioned,
+        )
+        for message in found
+    ]
+
+
 # Who is in a Chat.
 
 MEMBER, PRODUCT_OWNER, GUEST = "Member", "Product Owner", "Guest"

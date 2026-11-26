@@ -69,6 +69,12 @@ class User(Base):
     github_username: Mapped[str | None] = mapped_column(String(39))
     # The 08:30 Daily email on days with deadlines or meetings (spec #68).
     daily_email: Mapped[bool] = mapped_column(default=True, server_default=true())
+    # Browser notifications (spec #145): for new Chat messages (#148), and the
+    # staff's TikTok alerts (#151).
+    chat_notifications: Mapped[bool] = mapped_column(
+        default=True, server_default=true()
+    )
+    tiktok_alerts: Mapped[bool] = mapped_column(default=True, server_default=true())
     role: Mapped[str] = mapped_column(String(20))
     is_active: Mapped[bool] = mapped_column(default=True)
     must_change_password: Mapped[bool] = mapped_column(default=True)

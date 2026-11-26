@@ -120,6 +120,9 @@ class CurrentUser:
     must_change_password: bool
     github_username: str | None = None
     daily_email: bool = True
+    # Browser notifications (#148): Chat messages, TikTok alerts (staff).
+    chat_notifications: bool = True
+    tiktok_alerts: bool = True
     # A Student's Project, if any.
     project_id: int | None = None
 
@@ -133,6 +136,8 @@ class CurrentUser:
             must_change_password=body["must_change_password"],
             github_username=body.get("github_username"),
             daily_email=body.get("daily_email", True),
+            chat_notifications=body.get("chat_notifications", True),
+            tiktok_alerts=body.get("tiktok_alerts", True),
             project_id=body.get("project_id"),
         )
 
@@ -191,6 +196,21 @@ async def set_github_username(
         token=token,
         json={"github_username": username},
     )
+
+
+async def notifications(token: str, since: int | None) -> dict[str, Any]:
+    """What to show as browser notifications (#148): `latest` (the next
+    `since`) and `chat`, the new messages of others in the User's own Chats
+    after `since` (message_id, project_id, project_title, author, text,
+    mentions_me); nothing on the first call (`since` None)."""
+    query = "" if since is None else f"?since={since}"
+    return await _request("GET", f"/api/notifications{query}", token=token)
+
+
+async def set_notifications(token: str, **switches: bool) -> CurrentUser:
+    """Switch chat_notifications and/or tiktok_alerts on or off."""
+    body = await _request("PUT", "/api/me/notifications", token=token, json=switches)
+    return CurrentUser.of(body)
 
 
 async def set_daily_email(token: str, on: bool) -> CurrentUser:

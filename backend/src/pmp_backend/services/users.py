@@ -459,6 +459,24 @@ def import_users(
     return created, skipped
 
 
+def set_notifications(
+    session: Session,
+    user_id: int,
+    *,
+    chat: bool | None = None,
+    tiktok: bool | None = None,
+) -> User:
+    """Switch the User's browser notifications for Chat messages and (staff)
+    TikTok alerts on or off (#148); None leaves one as it is."""
+    user = get_user(session, user_id)
+    if chat is not None:
+        user.chat_notifications = chat
+    if tiktok is not None:
+        user.tiktok_alerts = tiktok
+    session.commit()
+    return user
+
+
 def set_daily_email(session: Session, user_id: int, value: bool) -> User:
     """Switch the User's 08:30 Daily email on or off (spec #68)."""
     user = get_user(session, user_id)

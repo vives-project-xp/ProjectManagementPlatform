@@ -326,6 +326,8 @@ def typing_line(names: list[str]) -> str:
 
 
 async def chat_view(project_id: int) -> None:
+    # No browser notification for this Chat while it is open (#148).
+    ui.add_body_html(f"<script>window.pmpOpenChat = {int(project_id)};</script>")
     """A Chat: its messages, new ones appearing within seconds, and the send box."""
     try:
         chat = await api.chat(token(), project_id)

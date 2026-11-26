@@ -58,5 +58,8 @@ class UserOut(BaseModel):
     organisation: str | None
     github_username: str | None
     daily_email: bool
+    # Browser notifications (#148): new Chat messages, TikTok alerts (staff).
+    chat_notifications: bool
+    tiktok_alerts: bool
     # A Student's Project; the Weekly update item only shows with one.
     project_id: int | None
