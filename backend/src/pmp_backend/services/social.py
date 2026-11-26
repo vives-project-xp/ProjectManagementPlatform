@@ -22,6 +22,7 @@ from pmp_backend.models import (
     PostSuggestion,
     PublishLink,
     SocialSettings,
+    TikTokPost,
     User,
     WeeklyMedium,
     WeeklyUpdate,
@@ -256,6 +257,11 @@ class WeekView:
     scheduled_for: datetime | None = None
     posted_at: datetime | None = None
     published_url: str | None = None
+    # Its video on TikTok (#147): the state, and the Posting time or when it
+    # was posted.
+    tiktok_state: str | None = None
+    tiktok_scheduled_for: datetime | None = None
+    tiktok_posted_at: datetime | None = None
     # When the never-posted Media were deleted, 4 months after the week (#118).
     media_removed_at: datetime | None = None
 
@@ -266,6 +272,7 @@ def _name(user: User | None) -> str:
 
 def week_view(update_: WeeklyUpdate, now: datetime) -> WeekView:
     suggestion = update_.suggestion
+    tiktok = suggestion.tiktok_post if suggestion else None
     return WeekView(
         closes_at=update_.closes_at,
         text=update_.text,
@@ -290,6 +297,9 @@ def week_view(update_: WeeklyUpdate, now: datetime) -> WeekView:
         scheduled_for=suggestion.scheduled_for if suggestion else None,
         posted_at=suggestion.posted_at if suggestion else None,
         published_url=suggestion.published_url if suggestion else None,
+        tiktok_state=tiktok.state if tiktok else None,
+        tiktok_scheduled_for=tiktok.scheduled_for if tiktok else None,
+        tiktok_posted_at=tiktok.posted_at if tiktok else None,
         media_removed_at=update_.media_removed_at,
     )
 
@@ -567,6 +577,14 @@ def clean_up(session: Session, media_dir: Path, now: datetime) -> list[int]:
             .where(
                 PostSuggestion.weekly_update_id == WeeklyUpdate.id,
                 PostSuggestion.state.in_(_STILL_TO_POST),
+            )
+            .exists(),
+            # Nor while its video still waits for TikTok (#147).
+            ~select(TikTokPost.id)
+            .join(PostSuggestion, PostSuggestion.id == TikTokPost.suggestion_id)
+            .where(
+                PostSuggestion.weekly_update_id == WeeklyUpdate.id,
+                TikTokPost.state.in_(_STILL_TO_POST),
             )
             .exists(),
         )

@@ -15,7 +15,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from pmp_backend.models import PostSuggestion, User, WeeklyMedium, WeeklyUpdate
-from pmp_backend.services import publishing, social, tiktok_connection
+from pmp_backend.services import publishing, social, tiktok_connection, tiktok_posts
 from pmp_backend.services.instagram import Channel
 from pmp_backend.services.suggestions import (
     ReviewConflictError,
@@ -106,15 +106,25 @@ def plan(session: Session) -> None:
     session.flush()
 
 
-def post(session: Session, reviewer: User, suggestion_id: int) -> PostSuggestion:
-    """Accept a reviewed suggestion: it joins the end of Instagram's line."""
+def post(
+    session: Session,
+    reviewer: User,
+    suggestion_id: int,
+    tiktok: "tiktok_posts.Choice | None" = None,
+) -> PostSuggestion:
+    """Accept a reviewed suggestion: it joins the end of Instagram's line, and
+    with Also on TikTok ticked its video joins TikTok's line too (#147)."""
     suggestion = locked(session, suggestion_id, {"waiting"})
     if suggestion.chosen_medium_id is None:
         raise ReviewConflictError("Choose the photo or video to post first.")
+    if tiktok is not None:
+        tiktok_posts.add(session, suggestion, tiktok)
     suggestion.state = "scheduled"
     suggestion.queued_at = _now(session)
     mark_reviewed(session, suggestion, reviewer)
     plan(session)
+    if tiktok is not None:
+        tiktok_posts.plan(session)
     session.commit()
     return suggestion
 
@@ -187,6 +197,9 @@ async def run_forever(
                 tiktok_connection.refresh_due(session, tiktok_of(), settings, now)
         with make_session() as session:
             run_once(session, now, channel_of(), settings)
+        if tiktok_of is not None:
+            with make_session() as session:
+                tiktok_posts.publish_due(session, tiktok_of(), settings, now)
 
     while True:
         try:

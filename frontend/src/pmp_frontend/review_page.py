@@ -22,6 +22,21 @@ STATES = {
 }
 # How often the page looks again while the AI is writing.
 GENERATING_SECONDS = 5.0
+TIKTOK_STATES = {
+    "scheduled": "scheduled for {when}",
+    "published": "published on {posted}",
+    "to_post_by_hand": "to post by hand (its Posting time has come)",
+    "posted_by_hand": "posted by hand on {posted}",
+}
+MUSIC_USAGE = "https://www.tiktok.com/legal/page/global/music-usage-confirmation/en"
+
+
+def tiktok_text(post: dict[str, Any]) -> str:
+    """Where the suggestion's TikTok video stands, e.g. "scheduled for …"."""
+    return TIKTOK_STATES.get(post["state"], post["state"]).format(
+        when=shown(post["scheduled_for"]) if post["scheduled_for"] else "",
+        posted=shown(post["posted_at"]) if post["posted_at"] else "",
+    )
 
 
 def _medium_options(suggestion: dict[str, Any]) -> dict[int, str]:
@@ -44,9 +59,17 @@ def _numbered(media: list[dict[str, Any]]) -> None:
 class SuggestionCard:
     """One Post suggestion and the Review actions its state allows."""
 
-    def __init__(self, suggestion: dict[str, Any], reload) -> None:
+    def __init__(
+        self,
+        suggestion: dict[str, Any],
+        reload,
+        creator: dict[str, Any] | None = None,
+    ) -> None:
         self.suggestion = suggestion
         self.reload = reload
+        # TikTok's choices for this account (#147); no tick without them.
+        self.creator = creator
+        self.tiktok: dict[str, Any] | None = None
         label, colour = STATES.get(
             suggestion["state"], (suggestion["state"].capitalize(), "grey-7")
         )
@@ -62,6 +85,81 @@ class SuggestionCard:
                 ui.badge(label, color=colour).mark("suggestion-state")
             self.error = ErrorMessage()
             getattr(self, f"_{suggestion['state']}", self._other)()
+            if suggestion["tiktok"]:
+                self._tiktok_line(suggestion["tiktok"])
+
+    def _tiktok_line(self, post: dict[str, Any]) -> None:
+        with ui.row().classes("items-center gap-2").mark("tiktok-line"):
+            ui.icon("music_note", color="dark")
+            ui.label(f"Also on TikTok: {tiktok_text(post)}.").mark("tiktok-state")
+            if post["state"] == "scheduled":
+                ui.button(
+                    "Pull back from TikTok",
+                    icon="undo",
+                    on_click=self._pull_back_tiktok,
+                ).props("flat dense color=dark").mark("pull-back-tiktok")
+
+    async def _pull_back_tiktok(self) -> None:
+        try:
+            await api.pull_back_tiktok(token(), self._id)
+        except api.ApiError as problem:
+            self.error.show(problem.message)
+            return
+        ui.notify("The video was taken off TikTok's line.")
+        await self.reload()
+
+    def _tiktok_choices(self) -> None:
+        """Also on TikTok (#147): the tick, and then who can see it (TikTok's
+        options, no default), the interaction switches and TikTok's notice."""
+        creator = self.creator
+        tick = ui.checkbox("Also on TikTok (the video)").mark("also-on-tiktok")
+        with ui.column().classes("gap-1 pl-8").bind_visibility_from(tick, "value"):
+            if not creator["connected"]:
+                ui.label(
+                    "TikTok isn't connected: the video will come to To post today."
+                ).classes("text-caption")
+            privacy = (
+                ui.select(creator["privacy_levels"], label="Who can see it")
+                .classes("w-64")
+                .mark("tiktok-privacy")
+            )
+            comment = ui.switch("Allow comments", value=not creator["comment_disabled"])
+            comment.mark("tiktok-comment")
+            duet = ui.switch("Allow Duet", value=False).mark("tiktok-duet")
+            stitch = ui.switch("Allow Stitch", value=False).mark("tiktok-stitch")
+            for switch, off in (
+                (comment, creator["comment_disabled"]),
+                (duet, creator["duet_disabled"]),
+                (stitch, creator["stitch_disabled"]),
+            ):
+                if off:
+                    switch.set_value(False)
+                    switch.disable()
+            with ui.row().classes("items-center gap-1 text-caption"):
+                ui.label("By posting, you agree to TikTok's")
+                ui.link("Music Usage Confirmation", MUSIC_USAGE, new_tab=True)
+        self.tiktok = {
+            "tick": tick,
+            "privacy": privacy,
+            "comment": comment,
+            "duet": duet,
+            "stitch": stitch,
+        }
+
+    def _tiktok_body(self) -> dict[str, Any] | None:
+        """The Post's TikTok part, or None without the tick; raises ValueError
+        when who can see it wasn't chosen."""
+        if self.tiktok is None or not self.tiktok["tick"].value:
+            return None
+        if not self.tiktok["privacy"].value:
+            raise ValueError("Choose who can see the video on TikTok.")
+        return {
+            "also_on_tiktok": True,
+            "privacy_level": self.tiktok["privacy"].value,
+            "allow_comment": bool(self.tiktok["comment"].value),
+            "allow_duet": bool(self.tiktok["duet"].value),
+            "allow_stitch": bool(self.tiktok["stitch"].value),
+        }
 
     @property
     def _id(self) -> int:
@@ -145,18 +243,27 @@ class SuggestionCard:
                 )
 
     async def _post(self) -> None:
+        try:
+            tiktok = self._tiktok_body()
+        except ValueError as problem:
+            self.error.show(str(problem))
+            return
         question = (
-            "Post this? It gets Instagram's next free Posting time; you can pull "
-            "it back until then."
+            "Post this? It gets Instagram's next free Posting time"
+            + (" and the video TikTok's" if tiktok else "")
+            + "; you can pull it back until then."
         )
         if not await confirm(question, "Post"):
             return
         try:
-            done = await api.post_suggestion(token(), self._id)
+            done = await api.post_suggestion(token(), self._id, tiktok)
         except api.ApiError as problem:
             self.error.show(problem.message)
             return
-        ui.notify(f"Scheduled for {shown(done['scheduled_for'])}.")
+        message = f"Scheduled for {shown(done['scheduled_for'])}."
+        if done["tiktok"]:
+            message += f" On TikTok: {shown(done['tiktok']['scheduled_for'])}."
+        ui.notify(message)
         await self.reload()
 
     async def _pull_back(self) -> None:
@@ -216,6 +323,13 @@ class SuggestionCard:
             await self.reload()
 
         self._reviewed()
+        if (
+            suggestion["state"] == "waiting"
+            and suggestion["has_video"]
+            and not suggestion["tiktok"]
+            and self.creator is not None
+        ):
+            self._tiktok_choices()
         with ui.row().classes("items-center gap-2"):
             save_button = SaveButton([medium, title, caption], save)
             save_button.button.mark("save-suggestion")
@@ -281,8 +395,11 @@ def register() -> None:
             found = await api.post_suggestions(token(), mine=bool(only_mine.value))
             if not found:
                 ui.label("No Post suggestions yet.")
+            creator = None
+            if any(s["has_video"] and s["state"] == "waiting" for s in found):
+                creator = await api.tiktok_creator_info(token())
             for suggestion in found:
-                SuggestionCard(suggestion, found_list.refresh)
+                SuggestionCard(suggestion, found_list.refresh, creator)
             # Look again while the AI is writing one.
             checker.active = any(s["state"] == "generating" for s in found)
 
