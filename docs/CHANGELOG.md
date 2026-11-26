@@ -294,7 +294,7 @@ Newest first. "Live" means deployed to the VIVES VM by the Deploy workflow. "Mig
 | | What | Issue | PR |
 |---|---|---|---|
 | New | Spec #145 (grilling Q1-Q35): **TikTok** (Also on TikTok videos, the Weekly slideshow through the TikTok inbox with a Song check, TikTok alerts) and **browser notifications** for Chat messages; `CONTEXT.md` terms Also on TikTok, Slideshow cut-off, TikTok inbox, Song check, TikTok alert, Browser notification | #145 | #144 |
-| New | **Connect TikTok:** on **Social media** the Superuser clicks Connect TikTok, logs in on TikTok and pastes the address TikTok opens; the account's tokens are kept in the database (never shown) and refreshed before the 24-hour access token runs out, a failed refresh or an expired connection shows a notice; new settings for TikTok's Posting times (videos Mon–Fri 17:00), the Weekly slideshow (Fri 18:00) and its cut-off (Fri 12:00); settings `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET`, `TIKTOK_REDIRECT_URI` (see `docs/tiktok.md`); migration `0030` | #146 | |
+| New | **Connect TikTok:** on **Social media** the Superuser clicks Connect TikTok, logs in on TikTok and pastes the address TikTok opens; the account's tokens are kept in the database (never shown) and refreshed before the 24-hour access token runs out, a failed refresh or an expired connection shows a notice; new settings for TikTok's Posting times (videos Mon–Fri 17:00), the Weekly slideshow (Fri 18:00) and its cut-off (Fri 12:00); settings `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET`, `TIKTOK_REDIRECT_URI` (see `docs/tiktok.md`); migration `0030` | #146 | #153 |
 
 ### 2026-11-19
 
