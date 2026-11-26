@@ -538,6 +538,14 @@ class SocialSettings(Base):
     instagram_weekdays: Mapped[list[int]] = mapped_column(JSONB)
     instagram_times: Mapped[list[str]] = mapped_column(JSONB)
     fixed_hashtags: Mapped[str] = mapped_column(String(500))
+    # TikTok (spec #145): the videos' Posting times, the Weekly slideshow's
+    # Posting time and its cut-off.
+    tiktok_weekdays: Mapped[list[int]] = mapped_column(JSONB)
+    tiktok_times: Mapped[list[str]] = mapped_column(JSONB)
+    slideshow_weekday: Mapped[int] = mapped_column(SmallInteger)
+    slideshow_time: Mapped[time] = mapped_column(Time)
+    slideshow_cutoff_weekday: Mapped[int] = mapped_column(SmallInteger)
+    slideshow_cutoff_time: Mapped[time] = mapped_column(Time)
 
 
 class WeeklyUpdate(Base):
@@ -709,3 +717,9 @@ class ChannelToken(Base):
     refreshed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # Why the last refresh failed; null after a successful one.
     refresh_error: Mapped[str | None] = mapped_column(String(500))
+    # TikTok (#146): the refresh token and its expiry, the connected account's
+    # name and when the Superuser connected it; null for Instagram.
+    refresh_token: Mapped[str | None] = mapped_column(Text)
+    refresh_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    account_name: Mapped[str | None] = mapped_column(String(200))
+    connected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

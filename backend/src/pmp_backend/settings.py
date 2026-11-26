@@ -58,6 +58,19 @@ class Settings(DatabaseSettings):
     # only once the VM is reachable from the internet; without it photo posts
     # go through To post today (Reels are uploaded directly).
     public_media_url: str | None = None
+    # TikTok as a Channel (spec #145): the developer app's client key and
+    # secret (developers.tiktok.com) and the redirect URI registered for Login
+    # Kit. The Superuser connects the account on the Social media screen and
+    # pastes the address TikTok redirects to; the account's tokens then live
+    # in the database. Without a key and secret TikTok is off. See
+    # docs/tiktok.md.
+    tiktok_client_key: str | None = None
+    tiktok_client_secret: SecretStr | None = None
+    tiktok_redirect_uri: str = (
+        "https://github.com/vives-project-xp/ProjectManagementPlatform"
+    )
+    tiktok_api_url: str = "https://open.tiktokapis.com"
+    tiktok_auth_url: str = "https://www.tiktok.com/v2/auth/authorize/"
     # The mailbox for the 08:30 daily email (spec #68); without SMTP_HOST no
     # email is sent. Only in /opt/pmp/.env.
     smtp_host: str | None = None

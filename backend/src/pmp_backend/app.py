@@ -32,6 +32,7 @@ from pmp_backend.services.post_ai import HttpLLM, is_configured
 from pmp_backend.services.seeding import seed_starting_accounts
 from pmp_backend.services.social import clean_up_forever as clean_up_media_forever
 from pmp_backend.services.social import resume_processing
+from pmp_backend.services.tiktok import HttpTikTok
 from pmp_backend.services.trello import HttpTrello
 from pmp_backend.settings import Settings
 
@@ -71,7 +72,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             )
         # Scheduled posts move to To post today at their Posting time (#116).
         poster = asyncio.create_task(
-            posting.run_forever(make_session, lambda: app.state.instagram, settings)
+            posting.run_forever(
+                make_session,
+                lambda: app.state.instagram,
+                settings,
+                tiktok_of=lambda: app.state.tiktok,
+            )
         )
         # Never-posted Media go 4 months after their Upload week (#118).
         media_cleaner = asyncio.create_task(
@@ -101,6 +107,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.llm = HttpLLM(settings)
     # Instagram as a Channel (#117); tests replace it with testing.FakeInstagram.
     app.state.instagram = HttpInstagram(settings)
+    # TikTok as a Channel (spec #145); tests replace it with testing.FakeTikTok.
+    app.state.tiktok = HttpTikTok(settings)
     app.include_router(auth.router)
     app.include_router(users.router)
     app.include_router(programmes.router)

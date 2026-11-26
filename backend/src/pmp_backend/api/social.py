@@ -32,6 +32,8 @@ from pmp_backend.services import (
     publishing,
     social,
     suggestions,
+    tiktok,
+    tiktok_connection,
 )
 from pmp_backend.services.social import MyWeeklyUpdate, WeekView
 
@@ -49,6 +51,14 @@ class SocialSettingsOut(BaseModel):
     instagram_weekdays: list[int]
     instagram_times: list[str]
     fixed_hashtags: str
+    # TikTok (spec #145): the videos' Posting times, the Weekly slideshow's
+    # Posting time and its cut-off.
+    tiktok_weekdays: list[int]
+    tiktok_times: list[str]
+    slideshow_weekday: int
+    slideshow_time: str
+    slideshow_cutoff_weekday: int
+    slideshow_cutoff_time: str
 
     @classmethod
     def of(cls, settings: social.Settings) -> "SocialSettingsOut":
@@ -60,6 +70,12 @@ class SocialSettingsOut(BaseModel):
             instagram_weekdays=settings.instagram_weekdays,
             instagram_times=settings.instagram_times,
             fixed_hashtags=settings.fixed_hashtags,
+            tiktok_weekdays=settings.tiktok_weekdays,
+            tiktok_times=settings.tiktok_times,
+            slideshow_weekday=settings.slideshow_weekday,
+            slideshow_time=settings.slideshow_time.strftime("%H:%M"),
+            slideshow_cutoff_weekday=settings.slideshow_cutoff_weekday,
+            slideshow_cutoff_time=settings.slideshow_cutoff_time.strftime("%H:%M"),
         )
 
 
@@ -69,6 +85,21 @@ class SocialSettingsIn(BaseModel):
     instagram_weekdays: list[Weekday]
     instagram_times: list[ClockTime]
     fixed_hashtags: str
+    # Left out: kept as they are.
+    tiktok_weekdays: list[Weekday] | None = None
+    tiktok_times: list[ClockTime] | None = None
+    slideshow_weekday: Weekday | None = None
+    slideshow_time: ClockTime | None = None
+    slideshow_cutoff_weekday: Weekday | None = None
+    slideshow_cutoff_time: ClockTime | None = None
+
+
+def _moment(weekday: int | None, at: str | None) -> tuple[int, time] | None:
+    if weekday is None and at is None:
+        return None
+    if weekday is None or at is None:
+        raise social.SocialError("Give the weekday and the time together.")
+    return weekday, time.fromisoformat(at)
 
 
 @router.get("/social/settings")
@@ -90,8 +121,83 @@ def set_settings(
             instagram_weekdays=body.instagram_weekdays,
             instagram_times=body.instagram_times,
             fixed_hashtags=body.fixed_hashtags,
+            tiktok_weekdays=body.tiktok_weekdays,
+            tiktok_times=body.tiktok_times,
+            slideshow=_moment(body.slideshow_weekday, body.slideshow_time),
+            slideshow_cutoff=_moment(
+                body.slideshow_cutoff_weekday, body.slideshow_cutoff_time
+            ),
         )
     )
+
+
+class TikTokStatusOut(BaseModel):
+    # Whether TIKTOK_CLIENT_KEY and TIKTOK_CLIENT_SECRET are set.
+    configured: bool
+    # Whether the platform has a valid token for the account.
+    connected: bool
+    account_name: str | None
+    connected_at: datetime | None
+    # When the access token runs out (refreshed before then) and when the
+    # refresh token does (then connect again).
+    expires_at: datetime | None
+    refresh_expires_at: datetime | None
+    # Why the connection doesn't work (a failed refresh, an expired one).
+    error: str | None
+    # TikTok's login page, with a fresh `state`; null when not configured.
+    connect_url: str | None
+
+
+def _tiktok_status(session, settings, user_id: int) -> TikTokStatusOut:
+    now = datetime.now(posting.BRUSSELS)
+    found = tiktok_connection.status(session, settings, now)
+    session.commit()
+    url = None
+    if found.configured:
+        url = tiktok.authorize_url(
+            settings, tiktok_connection.make_state(settings, user_id, now)
+        )
+    return TikTokStatusOut(
+        configured=found.configured,
+        connected=found.connected,
+        account_name=found.account_name,
+        connected_at=found.connected_at,
+        expires_at=found.expires_at,
+        refresh_expires_at=found.refresh_expires_at,
+        error=found.error,
+        connect_url=url,
+    )
+
+
+@router.get("/social/tiktok")
+def get_tiktok(
+    session: SessionDep, settings: SettingsDep, user: SuperuserDep
+) -> TikTokStatusOut:
+    return _tiktok_status(session, settings, user.id)
+
+
+class TikTokConnectIn(BaseModel):
+    # The address TikTok sent the Superuser to (or just its code).
+    pasted: Annotated[str, StringConstraints(max_length=4000)]
+
+
+@router.post("/social/tiktok/connect")
+def connect_tiktok(
+    body: TikTokConnectIn,
+    request: Request,
+    session: SessionDep,
+    settings: SettingsDep,
+    user: SuperuserDep,
+) -> TikTokStatusOut:
+    tiktok_connection.connect(
+        session,
+        request.app.state.tiktok,
+        settings,
+        user.id,
+        body.pasted,
+        datetime.now(posting.BRUSSELS),
+    )
+    return _tiktok_status(session, settings, user.id)
 
 
 class MediumOut(BaseModel):

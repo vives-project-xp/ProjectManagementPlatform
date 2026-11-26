@@ -169,6 +169,12 @@ def _settings_form(settings: dict[str, Any]) -> None:
             "instagram_weekdays": sorted(posting_days.value or []),
             "instagram_times": [t for t in (first.value, second.value) if t],
             "fixed_hashtags": hashtags.value or "",
+            "tiktok_weekdays": sorted(tiktok_days.value or []),
+            "tiktok_times": [t for t in (tiktok_first.value, tiktok_second.value) if t],
+            "slideshow_weekday": slideshow_day.value,
+            "slideshow_time": slideshow_time.value or None,
+            "slideshow_cutoff_weekday": cutoff_day.value,
+            "slideshow_cutoff_time": cutoff_time.value or None,
         }
         try:
             await api.set_social_settings(token(), body)
@@ -212,11 +218,131 @@ def _settings_form(settings: dict[str, Any]) -> None:
         ui.label("Every caption carries these.").classes("text-caption")
         hashtags = ui.input("Hashtags", value=settings["fixed_hashtags"])
         hashtags.classes("w-full").mark("fixed-hashtags")
+    with ui.card().classes("w-full max-w-lg"):
+        ui.label("TikTok Posting times").classes("text-h6")
+        ui.label("Videos ticked Also on TikTok go out at these times.").classes(
+            "text-caption"
+        )
+        tiktok_days = (
+            ui.select(
+                days, value=settings["tiktok_weekdays"], label="Weekdays", multiple=True
+            )
+            .classes("w-full")
+            .mark("tiktok-weekdays")
+        )
+        tiktok_clock = settings["tiktok_times"] + ["", ""]
+        with ui.row():
+            tiktok_first = ui.input("Time 1 (HH:MM)", value=tiktok_clock[0])
+            tiktok_first.mark("tiktok-time-1")
+            tiktok_second = ui.input("Time 2 (HH:MM)", value=tiktok_clock[1])
+            tiktok_second.mark("tiktok-time-2")
+    with ui.card().classes("w-full max-w-lg"):
+        ui.label("Weekly slideshow").classes("text-h6")
+        ui.label(
+            "The slideshow is put together at the cut-off from the Projects "
+            "Posted that week, and goes to TikTok at its Posting time."
+        ).classes("text-caption")
+        with ui.row():
+            cutoff_day = ui.select(
+                days, value=settings["slideshow_cutoff_weekday"], label="Cut-off day"
+            ).mark("slideshow-cutoff-weekday")
+            cutoff_time = ui.input(
+                "Cut-off time (HH:MM)", value=settings["slideshow_cutoff_time"]
+            ).mark("slideshow-cutoff-time")
+        with ui.row():
+            slideshow_day = ui.select(
+                days, value=settings["slideshow_weekday"], label="Posting day"
+            ).mark("slideshow-weekday")
+            slideshow_time = ui.input(
+                "Posting time (HH:MM)", value=settings["slideshow_time"]
+            ).mark("slideshow-time")
     error = ErrorMessage()
     save_button = SaveButton(
-        [weekday, deadline_time, posting_days, first, second, hashtags], save
+        [
+            weekday,
+            deadline_time,
+            posting_days,
+            first,
+            second,
+            hashtags,
+            tiktok_days,
+            tiktok_first,
+            tiktok_second,
+            cutoff_day,
+            cutoff_time,
+            slideshow_day,
+            slideshow_time,
+        ],
+        save,
     )
     save_button.button.mark("save-social-settings")
+
+
+TIKTOK_STEPS = [
+    "Click Connect TikTok and log in with the VIVES TikTok account.",
+    "TikTok then opens this project's GitHub page: copy the whole address "
+    "from the address bar.",
+    "Paste it below and click Connect, within a few minutes.",
+]
+
+
+def _tiktok_card(status: dict[str, Any]) -> None:
+    """Connect the TikTok account (#146): TikTok's login, then paste the
+    address it redirects to."""
+
+    @ui.refreshable
+    def card(status: dict[str, Any]) -> None:
+        with ui.card().classes("w-full max-w-lg").mark("tiktok-card"):
+            ui.label("TikTok").classes("text-h6")
+            if not status["configured"]:
+                ui.label(
+                    "TikTok isn't set up on the server yet (TIKTOK_CLIENT_KEY and "
+                    "TIKTOK_CLIENT_SECRET), so TikTok posts go to To post today."
+                ).mark("tiktok-not-configured")
+                return
+            if status["connected"]:
+                ui.label(
+                    f"Connected as {status['account_name']} since "
+                    f"{shown(status['connected_at'])}."
+                ).mark("tiktok-connected")
+            else:
+                ui.label("Not connected: TikTok posts go to To post today.").mark(
+                    "tiktok-not-connected"
+                )
+            if status["error"]:
+                with ui.row().classes("items-center gap-2").mark("tiktok-error"):
+                    ui.icon("warning", color="primary")
+                    ui.label(status["error"])
+            with ui.column().classes("gap-1"):
+                for number, step in enumerate(TIKTOK_STEPS, start=1):
+                    ui.label(f"{number}. {step}").classes("text-caption")
+            label = "Connect again" if status["account_name"] else "Connect TikTok"
+            ui.button(
+                label,
+                icon="open_in_new",
+                on_click=lambda: ui.navigate.to(status["connect_url"], new_tab=True),
+            ).props("color=dark").mark("connect-tiktok")
+            pasted = ui.input("The address TikTok opened").classes("w-full")
+            pasted.mark("tiktok-pasted")
+            error = ErrorMessage()
+
+            async def send() -> None:
+                if not (pasted.value or "").strip():
+                    error.show("Paste the address TikTok sent you to.")
+                    return
+                try:
+                    new = await api.connect_tiktok(token(), pasted.value)
+                except api.ApiError as problem:
+                    error.show(problem.message)
+                    return
+                ui.notify("TikTok is connected.")
+                card.refresh(new)
+
+            ui.button("Connect", on_click=send).props("color=dark").mark(
+                "send-tiktok-code"
+            )
+
+    card(status)
 
 
 def _media_card(media: list[dict[str, Any]]) -> None:
@@ -398,6 +524,7 @@ def register() -> None:
                     "The AI isn't set up yet (LLM_API_KEY on the server), so no "
                     "Post suggestions are made."
                 )
+        _tiktok_card(await api.tiktok_status(token()))
         storage = await api.social_storage(token())
         with ui.card().classes("w-full max-w-lg").mark("storage-card"):
             ui.label("Storage").classes("text-h6")

@@ -96,7 +96,11 @@ The TikTok part (Weekly slideshow, Project videos) is the next spec. What exists
 1. A TikTok developer **organisation** for VIVES, with an app (type **Other**): products **Login Kit** and **Content Posting API** (Direct Post), scopes `user.info.basic`, `video.upload`, `video.publish`.
 2. Terms of Service and Privacy Policy: [`legal/terms-of-service.md`](legal/terms-of-service.md) and [`legal/privacy-policy.md`](legal/privacy-policy.md) (adapt the contact to VIVES). TikTok wants **verified URLs** (URL properties) for production. Put them on the VIVES domain, or verify a GitHub Pages address.
 3. Until TikTok's **audit** is approved, everything an app posts is visible only to the account itself. The audit needs a demo video of the working flow.
-4. The settings (client key, client secret, the account's token) get their names when the TikTok spec is built. They'll be listed here and in `.env.example`.
+4. **Settings** in `/opt/pmp/.env` (see [`tiktok.md`](tiktok.md)):
+   - `TIKTOK_CLIENT_KEY` and `TIKTOK_CLIENT_SECRET`: the VIVES app's **Client key** and **Client secret** (app page, "Credentials");
+   - `TIKTOK_REDIRECT_URI`: the redirect URI registered under Login Kit. Today it's the GitHub repo's address; with a hostname it can be any page of the VIVES site. The value in `.env` must match the registered one exactly.
+
+   Recreate the backend, then the Superuser clicks **Connect TikTok** on the **Social media** screen, logs in with the VIVES TikTok account and pastes the address TikTok opens. The platform keeps the account's tokens in the database and refreshes them every day. The connection lasts a year without use; the screen says when to connect again.
 5. **Clean up:** invite VIVES into the team's TikTok organisation and hand over ownership, or delete the team's app once VIVES has its own.
 
 ## 10. Logins and test data
@@ -125,6 +129,7 @@ Empty or missing optional settings switch that feature off (the platform keeps w
 | `LLM_BASE_URL`, `LLM_MODEL`, `LLM_API_KEY` | | Section 7 |
 | `INSTAGRAM_TOKEN`, `INSTAGRAM_API_URL`, `INSTAGRAM_ACCOUNT_ID`, `INSTAGRAM_REFRESH_URL` | | Section 8 |
 | `PUBLIC_MEDIA_URL` | | Section 2: the public address Instagram/TikTok download photos from |
+| `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET`, `TIKTOK_REDIRECT_URI` | | Section 9 |
 | `FOOTER_INSTAGRAM`, `FOOTER_TIKTOK`, `FOOTER_YOUTUBE`, `FOOTER_LINKEDIN`, `FOOTER_PRIVACY_URL`, `FOOTER_ADDRESS` | | The footer links; empty keeps the VIVES default, `none` hides one |
 | `BACKUP_PATH` | | Where backups go, default `/opt/pmp/backups` |
 

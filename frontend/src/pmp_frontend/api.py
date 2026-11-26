@@ -834,7 +834,9 @@ async def leave_chat(token: str, project_id: int) -> None:
 async def social_settings(token: str) -> dict[str, Any]:
     """The social media settings (Superuser): upload_weekday (0 = Monday) and
     upload_time ("HH:MM"), both None until set; instagram_weekdays,
-    instagram_times and fixed_hashtags."""
+    instagram_times and fixed_hashtags; tiktok_weekdays, tiktok_times,
+    slideshow_weekday/slideshow_time and slideshow_cutoff_weekday/
+    slideshow_cutoff_time."""
     return await _request("GET", "/api/social/settings", token=token)
 
 
@@ -913,6 +915,21 @@ async def social_storage(token: str) -> dict[str, Any]:
 async def social_status(token: str) -> dict[str, Any]:
     """Whether the AI is configured (ai_configured); Superuser only."""
     return await _request("GET", "/api/social/status", token=token)
+
+
+async def tiktok_status(token: str) -> dict[str, Any]:
+    """The TikTok connection (Superuser): configured, connected, account_name,
+    connected_at, expires_at, refresh_expires_at, error and connect_url
+    (TikTok's login page)."""
+    return await _request("GET", "/api/social/tiktok", token=token)
+
+
+async def connect_tiktok(token: str, pasted: str) -> dict[str, Any]:
+    """Connect the account with the address TikTok redirected to (or its
+    code); the new status."""
+    return await _request(
+        "POST", "/api/social/tiktok/connect", token=token, json={"pasted": pasted}
+    )
 
 
 async def post_suggestions(token: str, *, mine: bool = False) -> list[dict[str, Any]]:
