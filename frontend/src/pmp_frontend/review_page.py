@@ -8,6 +8,7 @@ from nicegui import ui
 
 from pmp_frontend import api
 from pmp_frontend.shell import ErrorMessage, SaveButton, confirm, role_page, token
+from pmp_frontend.slideshow_card import SlideshowCard
 from pmp_frontend.social_page import media_grid
 from pmp_frontend.times import shown
 
@@ -390,6 +391,18 @@ class SuggestionCard:
 def register() -> None:
     @role_page("/post-suggestions", "Post suggestions", {"superuser", "teacher"})
     async def suggestions_page(user: api.CurrentUser) -> None:
+        @ui.refreshable
+        async def slideshow() -> None:
+            found = await api.latest_slideshow(token())
+            if found is not None:
+                SlideshowCard(found, slideshow.refresh)
+            slideshow_checker.active = bool(found) and found["state"] == "generating"
+
+        slideshow_checker = ui.timer(
+            GENERATING_SECONDS, lambda: slideshow.refresh(), active=False
+        )
+        await slideshow()
+
         @ui.refreshable
         async def found_list() -> None:
             found = await api.post_suggestions(token(), mine=bool(only_mine.value))

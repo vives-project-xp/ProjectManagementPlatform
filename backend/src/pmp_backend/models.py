@@ -744,6 +744,64 @@ class TikTokPost(Base):
     posted_by: Mapped[User | None] = relationship(lazy="joined")
 
 
+class WeeklySlideshow(Base):
+    """TikTok's photo post of one Upload week (spec #145, #149): put together
+    at the Slideshow cut-off from the Projects Posted that week, with a title
+    and caption the AI writes, reviewed by any Teacher or the Superuser.
+    `closes_at` is the Upload week's closing moment."""
+
+    __tablename__ = "weekly_slideshows"
+    __table_args__ = (
+        CheckConstraint(
+            "state IN ('generating', 'waiting', 'failed', 'refused', 'none')",
+            name="ck_weekly_slideshows_state",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    closes_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), unique=True)
+    # "generating" (the AI is writing), "waiting" (for Review), "failed" (the
+    # AI couldn't), "refused", or "none" (no Posted Project had a photo).
+    state: Mapped[str] = mapped_column(String(20))
+    title: Mapped[str | None] = mapped_column(String(200))
+    caption: Mapped[str | None] = mapped_column(Text)
+    attempts: Mapped[int] = mapped_column(default=0)
+    last_error: Mapped[str | None] = mapped_column(String(500))
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    reviewed_by_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    refusal_reason: Mapped[str | None] = mapped_column(String(500))
+
+    photos: Mapped[list["WeeklySlideshowPhoto"]] = relationship(
+        lazy="selectin",
+        order_by="WeeklySlideshowPhoto.position",
+        viewonly=True,
+    )
+    reviewed_by: Mapped[User | None] = relationship(lazy="joined")
+
+
+class WeeklySlideshowPhoto(Base):
+    """One photo of a Weekly slideshow, in order (#149)."""
+
+    __tablename__ = "weekly_slideshow_photos"
+
+    slideshow_id: Mapped[int] = mapped_column(
+        ForeignKey("weekly_slideshows.id", ondelete="CASCADE"), primary_key=True
+    )
+    medium_id: Mapped[int] = mapped_column(
+        ForeignKey("weekly_media.id", ondelete="CASCADE"), primary_key=True
+    )
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), index=True
+    )
+    position: Mapped[int] = mapped_column()
+
+
 class PublishLink(Base):
     """A short-lived public link to one Medium of one Scheduled post, for the
     Channel to download it from (ADR 0010): valid until `expires_at` or until

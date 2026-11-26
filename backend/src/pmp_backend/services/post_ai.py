@@ -159,12 +159,15 @@ def check(answer: AiAnswer, request: AiRequest, fixed_hashtags: str) -> Suggesti
     )
 
 
-def text_problems(title: str, caption: str, fixed_hashtags: str) -> list[str]:
+def text_problems(
+    title: str, caption: str, fixed_hashtags: str, max_title: int = MAX_TITLE
+) -> list[str]:
     """What a title and caption need and don't have: the same rules for the
-    AI's answer and for a reviewer's edit."""
+    AI's answer and for a reviewer's edit (the Weekly slideshow's title may
+    be longer, #149)."""
     problems = []
-    if not title or len(title) > MAX_TITLE:
-        problems.append(f"a title of 1-{MAX_TITLE} characters")
+    if not title or len(title) > max_title:
+        problems.append(f"a title of 1-{max_title} characters")
     if not caption or len(caption) > MAX_CAPTION:
         problems.append(f"a caption of at most {MAX_CAPTION} characters")
     tags = {tag.lower() for tag in _HASHTAG.findall(caption)}

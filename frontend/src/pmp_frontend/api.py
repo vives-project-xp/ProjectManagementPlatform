@@ -1014,6 +1014,53 @@ async def mark_tiktok_posted(token: str, suggestion_id: int) -> dict[str, Any]:
     )
 
 
+async def latest_slideshow(token: str) -> dict[str, Any] | None:
+    """The newest Weekly slideshow (#149), or None: id, closes_at, state
+    ("generating", "waiting", "failed", "refused", "none"), title, caption,
+    last_error, reviewed_by/at, refusal_reason, photos (project, medium) in
+    order, and projects (project, photos) to swap with."""
+    return await _request("GET", "/api/slideshows/latest", token=token)
+
+
+async def edit_slideshow(
+    token: str, slideshow_id: int, title: str, caption: str
+) -> dict[str, Any]:
+    return await _request(
+        "PUT",
+        f"/api/slideshows/{slideshow_id}",
+        token=token,
+        json={"title": title, "caption": caption},
+    )
+
+
+async def set_slideshow_photos(
+    token: str, slideshow_id: int, medium_ids: list[int]
+) -> dict[str, Any]:
+    return await _request(
+        "PUT",
+        f"/api/slideshows/{slideshow_id}/photos",
+        token=token,
+        json={"medium_ids": medium_ids},
+    )
+
+
+async def generate_slideshow(token: str, slideshow_id: int) -> dict[str, Any]:
+    return await _request(
+        "POST", f"/api/slideshows/{slideshow_id}/generate", token=token
+    )
+
+
+async def refuse_slideshow(
+    token: str, slideshow_id: int, reason: str | None
+) -> dict[str, Any]:
+    return await _request(
+        "POST",
+        f"/api/slideshows/{slideshow_id}/refuse",
+        token=token,
+        json={"reason": reason},
+    )
+
+
 async def tiktok_creator_info(token: str) -> dict[str, Any]:
     """What the TikTok account may post (Teachers, Superuser): connected,
     nickname, privacy_levels ({TikTok name: shown}), comment_disabled,
