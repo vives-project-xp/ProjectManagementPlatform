@@ -164,6 +164,10 @@ _Avoid_: Visitor, external member, invitee
 The messages of others in a Chat after the last one a User has seen; opening the Chat reads them. The Chat item in the navigation shows how many there are in the User's own Chats (for a Teacher: those where they are one of the Chat people).
 _Avoid_: New messages, notifications
 
+**Browser notification**:
+A Windows/Mac notification the platform shows through the browser after a one-time "Allow notifications", while a tab of the site is open (also minimised or in the background). For every new message of others in the User's own Chats (the ones the Unread badge counts), except while that Chat is open in a visible tab: "<name> in <Project title>: <first 100 characters>", "@ " in front when it mentions them; clicking it opens the Chat. Switched off per User on My account ("Chat notifications", on by default); there are never chat emails. TikTok alerts use it too.
+_Avoid_: Push notification, notification (alone)
+
 **Makers**:
 The permanent record of the Students (name, Programme, Year) who were Members of a Project when it was archived. Nobody is ever removed from it: archiving a restored Project again only adds the new Members (a Student already listed is not added twice). Shown as "Made by".
 _Avoid_: History, former members, credits
@@ -211,33 +215,53 @@ The hashtags every caption carries (`#VIVEShogeschool #ElektronicaICT`), editabl
 _Avoid_: Default tags
 
 **Review**:
-A Teacher or the Superuser (usually the Project's Product Owner) checking a Post suggestion: they can edit the title and caption and pick another medium, then Post or Refuse it. A Refused suggestion means no post for that Project that Upload week; the reason, if given, is shown to the team, as is the outcome.
+A Teacher or the Superuser (usually the Project's Product Owner) checking a Post suggestion: they can edit the title and caption and pick another medium, tick Also on TikTok, then Post or Refuse it. A Refused suggestion means no post for that Project that Upload week; the reason, if given, is shown to the team, as is the outcome. The Weekly slideshow has its own Review, by any Teacher or the Superuser.
 _Avoid_: Approval, moderation
 
 **Post** (the action):
-Accepting a reviewed Post suggestion: it becomes a Scheduled post at the next free Posting time of its Channel. There is no "post right now".
+Accepting a reviewed Post suggestion (or the Weekly slideshow): it becomes a Scheduled post at the next free Posting time of its Channel. There is no "post right now", except for a Weekly slideshow Posted after its Posting time, which goes out within a minute.
 _Avoid_: Publish (for the reviewer's click), approve
 
 **Scheduled post**:
-An accepted Post suggestion waiting for its Posting time; staff can pull it back until it is published. Publishing is tried again once 10 minutes later; if that fails too, it moves to the To post today list. Archiving the Project doesn't cancel it.
+An accepted Post suggestion (on Instagram, and on TikTok when Also on TikTok is ticked) or Weekly slideshow waiting for its Posting time. Each Channel's post has its own time and state: staff can pull it back until it is published, without touching the other Channel's. Publishing is tried again once 10 minutes later; if that fails too, it moves to the To post today list. Archiving the Project doesn't cancel it.
 _Avoid_: Queue item, planned post
 
 **Channel**:
-A VIVES social media account the platform publishes to: Instagram (a photo post or a Reel per Project), later TikTok (the Weekly slideshow, and a Project's video when its reviewer ticked "Also on TikTok"). Each Channel has its own Posting times and order.
+A VIVES social media account the platform publishes to: Instagram (a photo post or a Reel per Project) and TikTok (the Weekly slideshow, and a Project's video when Also on TikTok is ticked). Each Channel has its own Posting times and order. One photo is never used twice on the same Channel; the same photo may appear on both.
 _Avoid_: Platform, network, account (alone)
 
 **Posting time**:
-A moment at which a Channel publishes at most one Scheduled post, in Belgian time and set by the Superuser: Instagram 12:00 and 19:00 Monday–Friday; TikTok the Weekly slideshow on Friday 18:00 and at most one video a day at 17:00. Scheduled posts go out oldest first, never the same Project twice in a row.
+A moment at which a Channel publishes at most one Scheduled post, in Belgian time and set by the Superuser: Instagram 12:00 and 19:00 Monday–Friday; TikTok videos 17:00 Monday–Friday; the Weekly slideshow Friday 18:00. Scheduled posts go out oldest first, never the same Project twice in a row.
 _Avoid_: Slot (that is a Weekly slot's meeting), timetable
 
+**Also on TikTok**:
+The tick in Review that also posts a Project's video on TikTok, with the same title and caption as Instagram; shown only when the Weekly update has a video, unticked by default. The reviewer then chooses who can see it (from TikTok's options, no default; only "Only me" until the TikTok audit) and whether comments (on by default), Duet and Stitch (off by default) are allowed.
+_Avoid_: Cross-post, share to TikTok
+
 **Weekly slideshow**:
-TikTok's one photo post per Upload week: the best photo of each Project's posted suggestion, with a short caption the AI writes from the Projects' titles, reviewed by any Teacher or the Superuser.
+TikTok's one photo post every Upload week, put together at the Slideshow cut-off from every Project whose Post suggestion was Posted (Also on TikTok plays no part): per Project a different photo than its Instagram post when it has one; more photos of the same Projects, in their ranking, until there are at least 4 (never one photo twice); at most 35; with what there is when fewer exist, and none only when there are no photos. The AI writes a title (at most 90 characters) and a Dutch caption from the Projects' titles; any Teacher or the Superuser reviews it (swap a photo, remove a Project, change the order, edit, Generate again, Write it yourself, Refuse). One not Posted by the next Slideshow cut-off is dropped ("Not posted in time"). It goes to the TikTok inbox, never straight online.
 _Avoid_: Carousel, compilation
 
+**Slideshow cut-off**:
+The moment the Weekly slideshow is put together, set by the Superuser: Friday 12:00 Belgian time. Projects Posted later join only when staff click Generate again before Posting it.
+_Avoid_: Deadline, Upload deadline (that is the Weekly update's)
+
+**TikTok inbox**:
+Where the platform sends the Weekly slideshow at its Posting time instead of posting it: a person opens the TikTok app, picks and listens to the song, and posts it there. In the platform it then shows "In the TikTok app: choose the song", and "Posted" only becomes clickable after the Song check.
+_Avoid_: Drafts, upload queue
+
+**Song check**:
+The tick "I listened to the song and posted it in the TikTok app" that must be ticked before a Weekly slideshow can be marked Posted (from the TikTok inbox or To post today).
+_Avoid_: Music approval
+
 **To post today**:
-The list of posts staff publish by hand (Download media, Copy caption, then "Posted"): every post until automatic publishing is live, and afterwards any post whose publishing failed.
+The list of posts staff publish by hand (Download media, Copy caption, then "Posted"; for the Weekly slideshow, Download photos as one zip in order and the Song check), in three lines: Instagram, TikTok videos and the Weekly slideshow. It holds every post that can't be published automatically yet and any post whose publishing failed.
 _Avoid_: Manual queue, backlog
 
 **Publish link**:
-A short-lived public address (`/social/<random code>`) to one Medium of one Scheduled post, from which the Channel downloads a photo while publishing (ADR 0010). It works for 1 hour or until that post is published, whichever comes first; Reels are uploaded directly and need none.
+A short-lived public address (`/social/<random code>`) to one Medium of one Scheduled post, from which the Channel downloads a photo while publishing (ADR 0010). It works for 1 hour or until that post is published, whichever comes first; videos (Reels, TikTok videos) are uploaded directly and need none.
 _Avoid_: Share link, public URL
+
+**TikTok alert**:
+What staff get when the Weekly slideshow needs them: ready for Review (after the Slideshow cut-off), and waiting in the TikTok inbox or on To post today. A red count on Review in the navigation, a banner on Today and a Browser notification, until someone has done the step; email instead when browser notifications can't work. Every Teacher and the Superuser, switched off per User on My account (on by default).
+_Avoid_: Reminder, Daily email (that is the planning's)
