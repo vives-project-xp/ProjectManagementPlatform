@@ -14,6 +14,7 @@ from pmp_frontend import (
     projects_page,
     review_page,
     scheduled_page,
+    slideshow_card,
     social_page,
     top3_page,
     users_page,
@@ -260,4 +261,5 @@ def register_pages() -> None:
     social_page.register()
     review_page.register()
     scheduled_page.register()
+    slideshow_card.register()
     chat_page.register()

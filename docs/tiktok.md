@@ -59,5 +59,18 @@ At the **Slideshow cut-off** (Friday 12:00 by default, Social media screen) the 
 
 The AI (ADR 0009) then writes a title (at most 90 characters) and a Dutch caption from the Projects' titles only, with the Fixed hashtags; it gets no photos and no names. After 3 failed tries staff write it themselves.
 
-Any Teacher or the Superuser reviews it in the **Weekly slideshow** card at the top of **Post suggestions**: move photos earlier or later, swap one for another photo of the same Project, remove one, edit the title and caption, **Generate again** (puts it together again, also with Projects Posted after the cut-off) or **Refuse** (no slideshow that week). Posting it comes with #150.
+Any Teacher or the Superuser reviews it in the **Weekly slideshow** card at the top of **Post suggestions**: move photos earlier or later, swap one for another photo of the same Project, remove one, edit the title and caption, **Generate again** (puts it together again, also with Projects Posted after the cut-off) or **Refuse** (no slideshow that week). Then **Post** it (below).
+
+## Weekly slideshow: posting
+
+**Post** on the card: posted before its Posting time (Friday 18:00 by default) it waits for that time; posted after it, it goes out within a minute. Until then **Pull back** takes it back to Review. A slideshow that still isn't Posted when the next one is put together (the next cut-off) is dropped: "Not posted in time".
+
+At its Posting time:
+
+- **Automatically**, once the site is reachable from the internet (`PUBLIC_MEDIA_URL`) and TikTok is connected: the platform makes a Publish link per photo and sends the slideshow to the account's **TikTok inbox** (upload mode, with TikTok's automatic music). It shows **"In the TikTok app: choose the song"**: open TikTok on the account, find it in the inbox, pick and listen to a song, choose who can see it, post it. A failure is tried once more 10 minutes later, then it goes to To post today.
+- **By hand** until then: it appears on **Scheduled posts** under *To post today: Weekly slideshow* with **Download photos** (one zip in order, `01-<project>.jpg` …) and **Copy caption**: make the photo post in the TikTok app with a song.
+
+Either way, **Posted** only works after ticking *"I listened to the song and posted it in the TikTok app"* (the Song check). The team's Weekly update then says "In the Weekly slideshow of <date>", and its photos are kept by the 4-month clean-up.
+
+**Verified URL prefix.** TikTok only downloads photos from a verified address. Once `PUBLIC_MEDIA_URL` is set, add the URL prefix `<PUBLIC_MEDIA_URL>/social/` in the developer portal (Content Posting API), and put the file name and content TikTok gives in `TIKTOK_VERIFICATION_FILE` and `TIKTOK_VERIFICATION_CONTENT`; the backend serves it at that prefix. Recreate the backend, then press Verify.
 

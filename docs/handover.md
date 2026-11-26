@@ -100,6 +100,8 @@ The TikTok part (Weekly slideshow, Project videos) is the next spec. What exists
    - `TIKTOK_CLIENT_KEY` and `TIKTOK_CLIENT_SECRET`: the VIVES app's **Client key** and **Client secret** (app page, "Credentials");
    - `TIKTOK_REDIRECT_URI`: the redirect URI registered under Login Kit. Today it's the GitHub repo's address; with a hostname it can be any page of the VIVES site. The value in `.env` must match the registered one exactly.
 
+   - once the VM is public (`PUBLIC_MEDIA_URL`): in the developer portal, add the URL prefix `<PUBLIC_MEDIA_URL>/social/` for the Content Posting API; TikTok gives a file name and content to put at that prefix: set them as `TIKTOK_VERIFICATION_FILE` and `TIKTOK_VERIFICATION_CONTENT`, recreate the backend, then press Verify. Until then the Weekly slideshow is posted by hand from To post today.
+
    Recreate the backend, then the Superuser clicks **Connect TikTok** on the **Social media** screen, logs in with the VIVES TikTok account and pastes the address TikTok opens. The platform keeps the account's tokens in the database and refreshes them every day. The connection lasts a year without use; the screen says when to connect again.
 5. **Clean up:** invite VIVES into the team's TikTok organisation and hand over ownership, or delete the team's app once VIVES has its own.
 
@@ -130,6 +132,7 @@ Empty or missing optional settings switch that feature off (the platform keeps w
 | `INSTAGRAM_TOKEN`, `INSTAGRAM_API_URL`, `INSTAGRAM_ACCOUNT_ID`, `INSTAGRAM_REFRESH_URL` | | Section 8 |
 | `PUBLIC_MEDIA_URL` | | Section 2: the public address Instagram/TikTok download photos from |
 | `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET`, `TIKTOK_REDIRECT_URI` | | Section 9 |
+| `TIKTOK_VERIFICATION_FILE`, `TIKTOK_VERIFICATION_CONTENT` | | Section 9: TikTok's URL-prefix verification of `PUBLIC_MEDIA_URL/social/` |
 | `FOOTER_INSTAGRAM`, `FOOTER_TIKTOK`, `FOOTER_YOUTUBE`, `FOOTER_LINKEDIN`, `FOOTER_PRIVACY_URL`, `FOOTER_ADDRESS` | | The footer links; empty keeps the VIVES default, `none` hides one |
 | `BACKUP_PATH` | | Where backups go, default `/opt/pmp/backups` |
 

@@ -9,6 +9,7 @@ from nicegui import ui
 from pmp_frontend import api
 from pmp_frontend.review_page import SuggestionCard, tiktok_text
 from pmp_frontend.shell import ErrorMessage, confirm, role_page, token
+from pmp_frontend.slideshow_card import SlideshowCard
 from pmp_frontend.social_page import media_grid, medium_url
 from pmp_frontend.times import shown
 
@@ -226,6 +227,33 @@ def _tiktok_lists(found: dict[str, Any], reload) -> None:
                     )
 
 
+async def _slideshow_lists(reload) -> None:
+    """The Weekly slideshow (#150): to finish (in the TikTok app, or by hand),
+    Scheduled, and lately posted."""
+    found = await api.slideshow_lists(token())
+    ui.label("Weekly slideshow").classes("text-h5")
+    ui.label("To post today: Weekly slideshow").classes("text-h6")
+    if not found["to_finish"]:
+        ui.label("No slideshow to post right now.").mark("no-slideshow-to-post")
+    for slideshow in found["to_finish"]:
+        SlideshowCard(slideshow, reload)
+    if found["scheduled"]:
+        ui.label("Scheduled: Weekly slideshow").classes("text-h6")
+        for slideshow in found["scheduled"]:
+            SlideshowCard(slideshow, reload)
+    if found["posted"]:
+        ui.label("Posted: Weekly slideshow").classes("text-h6")
+        for slideshow in found["posted"]:
+            with (
+                ui.row()
+                .classes("items-center gap-2")
+                .mark(f"slideshow-posted-{slideshow['id']}")
+            ):
+                ui.icon("check_circle", color="dark")
+                ui.label(slideshow["title"] or "").classes("font-medium")
+                ui.label(shown(slideshow["posted_at"])).classes("text-caption")
+
+
 def register() -> None:
     @role_page("/scheduled-posts", "Scheduled posts", {"superuser", "teacher"})
     async def scheduled_page(user: api.CurrentUser) -> None:
@@ -261,5 +289,6 @@ def register() -> None:
                 for post in found["published"]:
                     _published_row(post)
             _tiktok_lists(found, lists.refresh)
+            await _slideshow_lists(lists.refresh)
 
         await lists()

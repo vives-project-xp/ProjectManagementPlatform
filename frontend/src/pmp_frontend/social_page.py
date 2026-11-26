@@ -131,6 +131,10 @@ def _outcome(week: dict[str, Any]) -> None:
             ui.link("View on Instagram", week["published_url"], new_tab=True).mark(
                 "instagram-link"
             )
+    if week.get("slideshow_at"):
+        with ui.row().classes("items-center gap-2").mark("slideshow-outcome"):
+            ui.icon("collections", color="dark")
+            ui.label(f"In the Weekly slideshow of {shown(week['slideshow_at'])}.")
     if week.get("tiktok_state"):
         with ui.row().classes("items-center gap-2").mark("tiktok-outcome"):
             ui.icon("music_note", color="dark")

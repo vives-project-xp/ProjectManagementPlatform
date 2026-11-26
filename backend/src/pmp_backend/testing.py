@@ -477,6 +477,10 @@ class FakeTikTok:
         self.refresh_failing = False
         self.name = "VIVES test"
         self.posts: list[FakeTikTokPost] = []
+        # Slideshows sent to the inbox (#150): photo links, title, caption;
+        # `fetch` (if set) gets each photo link, the way TikTok downloads it.
+        self.inbox: list[tuple[list[str], str, str]] = []
+        self.fetch: Callable[[str], None] | None = None
         self.publish_failures = 0
         self.info = CreatorInfo(
             nickname="VIVES test",
@@ -528,3 +532,17 @@ class FakeTikTok:
             raise ChannelError("TikTok answered 500: Fake failure")
         self.posts.append(FakeTikTokPost(access_token, str(video), post))
         return ""
+
+    def send_photos_to_inbox(
+        self, access_token: str, photo_urls: list[str], title: str, caption: str
+    ) -> str:
+        if self.fetch is not None:
+            for url in photo_urls:
+                self.fetch(url)
+        if self.failing:
+            raise ChannelError("TikTok can't be reached: fake")
+        if self.publish_failures > 0:
+            self.publish_failures -= 1
+            raise ChannelError("TikTok answered 500: Fake failure")
+        self.inbox.append((photo_urls, title, caption))
+        return f"inbox-{len(self.inbox)}"

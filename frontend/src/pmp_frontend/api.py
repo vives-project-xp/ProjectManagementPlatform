@@ -1061,6 +1061,43 @@ async def refuse_slideshow(
     )
 
 
+async def post_slideshow(token: str, slideshow_id: int) -> dict[str, Any]:
+    """Accept it (#150): it waits for its Posting time (scheduled_for), or
+    goes out within a minute when that has passed."""
+    return await _request("POST", f"/api/slideshows/{slideshow_id}/post", token=token)
+
+
+async def pull_back_slideshow(token: str, slideshow_id: int) -> dict[str, Any]:
+    return await _request(
+        "POST", f"/api/slideshows/{slideshow_id}/pull-back", token=token
+    )
+
+
+async def mark_slideshow_posted(
+    token: str, slideshow_id: int, song_checked: bool
+) -> dict[str, Any]:
+    """Posted in the TikTok app; refused without the Song check."""
+    return await _request(
+        "POST",
+        f"/api/slideshows/{slideshow_id}/posted",
+        token=token,
+        json={"song_checked": song_checked},
+    )
+
+
+async def slideshow_lists(token: str) -> dict[str, Any]:
+    """Slideshows to finish (in the TikTok inbox or to post by hand),
+    Scheduled, and lately posted (#150)."""
+    return await _request("GET", "/api/slideshows", token=token)
+
+
+async def slideshow_zip(token: str, slideshow_id: int) -> httpx.Response:
+    """The slideshow's photos in order as one zip: the backend's answer."""
+    return await _response(
+        "GET", f"/api/slideshows/{slideshow_id}/photos.zip", token=token
+    )
+
+
 async def tiktok_creator_info(token: str) -> dict[str, Any]:
     """What the TikTok account may post (Teachers, Superuser): connected,
     nickname, privacy_levels ({TikTok name: shown}), comment_disabled,

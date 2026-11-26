@@ -19,7 +19,14 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from pmp_backend.errors import NotFound
-from pmp_backend.models import ChannelToken, PostSuggestion, PublishLink, WeeklyMedium
+from pmp_backend.models import (
+    ChannelToken,
+    PostSuggestion,
+    PublishLink,
+    WeeklyMedium,
+    WeeklySlideshow,
+    WeeklyUpdate,
+)
 from pmp_backend.services import instagram, social
 from pmp_backend.services.instagram import Channel, ChannelError
 from pmp_backend.settings import Settings
@@ -143,11 +150,28 @@ def linked_medium(
     link = session.get(PublishLink, code)
     if link is None or link.expires_at <= now:
         raise NotFound(NO_LINK)
+    if link.slideshow_id is not None:
+        return _slideshow_medium(session, media_dir, link)
     suggestion = session.get(PostSuggestion, link.suggestion_id)
     medium = session.get(WeeklyMedium, link.medium_id)
     if suggestion is None or suggestion.state != "scheduled" or medium is None:
         raise NotFound(NO_LINK)
     path = social.medium_path(media_dir, suggestion.weekly_update.project_id, medium)
+    if not path.is_file():
+        raise NotFound(NO_LINK)
+    return medium, path
+
+
+def _slideshow_medium(
+    session: Session, media_dir: Path, link: PublishLink
+) -> tuple[WeeklyMedium, Path]:
+    """A Weekly slideshow's photo (#150), only while it is being sent."""
+    slideshow = session.get(WeeklySlideshow, link.slideshow_id)
+    medium = session.get(WeeklyMedium, link.medium_id)
+    if slideshow is None or slideshow.state != "scheduled" or medium is None:
+        raise NotFound(NO_LINK)
+    update = session.get(WeeklyUpdate, medium.weekly_update_id)
+    path = social.medium_path(media_dir, update.project_id, medium)
     if not path.is_file():
         raise NotFound(NO_LINK)
     return medium, path

@@ -25,6 +25,8 @@ from pmp_backend.models import (
     TikTokPost,
     User,
     WeeklyMedium,
+    WeeklySlideshow,
+    WeeklySlideshowPhoto,
     WeeklyUpdate,
 )
 from pmp_backend.services import clients, media, video
@@ -262,6 +264,9 @@ class WeekView:
     tiktok_state: str | None = None
     tiktok_scheduled_for: datetime | None = None
     tiktok_posted_at: datetime | None = None
+    # The Posting time of the Weekly slideshow with one of its photos, once
+    # that slideshow was Posted (#150).
+    slideshow_at: datetime | None = None
     # When the never-posted Media were deleted, 4 months after the week (#118).
     media_removed_at: datetime | None = None
 
@@ -300,6 +305,15 @@ def week_view(update_: WeeklyUpdate, now: datetime) -> WeekView:
         tiktok_state=tiktok.state if tiktok else None,
         tiktok_scheduled_for=tiktok.scheduled_for if tiktok else None,
         tiktok_posted_at=tiktok.posted_at if tiktok else None,
+        slideshow_at=next(
+            (
+                photo.slideshow.scheduled_for
+                for medium in update_.media
+                for photo in medium.slideshow_photos
+                if photo.slideshow.state in _SLIDESHOW_POSTED
+            ),
+            None,
+        ),
         media_removed_at=update_.media_removed_at,
     )
 
@@ -555,6 +569,7 @@ KEEP_MEDIA = timedelta(days=122)
 CLEAN_UP_EVERY_SECONDS = 24 * 60 * 60
 # A post still on its way to Instagram keeps its week's Media.
 _STILL_TO_POST = ("scheduled", "to_post_by_hand")
+_SLIDESHOW_POSTED = ("scheduled", "in_inbox", "to_post_by_hand", "posted")
 
 
 def clean_up(session: Session, media_dir: Path, now: datetime) -> list[int]:
@@ -577,6 +592,18 @@ def clean_up(session: Session, media_dir: Path, now: datetime) -> list[int]:
             .where(
                 PostSuggestion.weekly_update_id == WeeklyUpdate.id,
                 PostSuggestion.state.in_(_STILL_TO_POST),
+            )
+            .exists(),
+            # Nor while a photo waits in a Weekly slideshow (#150).
+            ~select(WeeklySlideshowPhoto.medium_id)
+            .join(WeeklyMedium, WeeklyMedium.id == WeeklySlideshowPhoto.medium_id)
+            .join(
+                WeeklySlideshow,
+                WeeklySlideshow.id == WeeklySlideshowPhoto.slideshow_id,
+            )
+            .where(
+                WeeklyMedium.weekly_update_id == WeeklyUpdate.id,
+                WeeklySlideshow.state.in_(("scheduled", "in_inbox", "to_post_by_hand")),
             )
             .exists(),
             # Nor while its video still waits for TikTok (#147).

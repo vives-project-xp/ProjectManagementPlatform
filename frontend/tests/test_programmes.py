@@ -25,7 +25,7 @@ async def test_superuser_adds_renames_and_removes_a_programme(user: User):
 
     user.find(marker="new-programme").type("Chemistry")
     user.find(marker="add-programme").click()
-    await user.should_see("Programme Chemistry was added.")
+    await user.should_see("Programme Chemistry was added.", retries=30)
     await eventually(
         lambda: listed_programmes(user) == ["Chemistry", "Electronics-ICT"]
     )
@@ -62,7 +62,8 @@ async def test_a_new_programme_can_be_picked_for_a_student(user: User):
     await open_programmes(user)
     user.find(marker="new-programme").type("Chemistry")
     user.find(marker="add-programme").click()
-    await user.should_see("Programme Chemistry was added.")
+    # CI can be slow: wait longer for the notice (failed main CI on 4fff508).
+    await user.should_see("Programme Chemistry was added.", retries=30)
 
     await user.open("/users")
     await user.should_see(marker="new-user", retries=30)
