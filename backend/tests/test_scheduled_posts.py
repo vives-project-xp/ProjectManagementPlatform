@@ -92,6 +92,7 @@ def test_posting_gives_the_next_free_posting_times_in_order(
     client: TestClient, llm: FakeLLM, settings: Settings
 ):
     teams, found = three_projects(client, llm, settings)
+    before = datetime.now(BRUSSELS)
     for title in ("Bravo", "Alpha", "Charlie"):
         response = act(client, teams.staff, found[title][0], "post")
         assert response.status_code == 200, response.text
@@ -102,16 +103,17 @@ def test_posting_gives_the_next_free_posting_times_in_order(
     assert [title for title, _ in line] == ["Bravo", "Alpha", "Charlie"]
     moments = [moment for _, moment in line]
     assert moments == sorted(set(moments))
-    now = datetime.now(BRUSSELS)
-    assert moments[0] >= now + timedelta(minutes=10)
+    # Never a Posting time closer than the 10-minute margin: the first one is
+    # the first after "Posted + 10 minutes" (also when the test runs just
+    # before 12:00 or 19:00), and the others follow it.
+    margin = before + posting.MARGIN
+    assert moments[0] > margin
     for moment in moments:
         local = moment.astimezone(BRUSSELS)
         assert local.weekday() < 5
         assert local.strftime("%H:%M") in ("12:00", "19:00")
-    assert (
-        list(posting.posting_times([0, 1, 2, 3, 4], ["12:00", "19:00"], now))[:3]
-        == moments
-    )
+    expected = posting.posting_times([0, 1, 2, 3, 4], ["12:00", "19:00"], margin)
+    assert list(expected)[:3] == moments
 
 
 def test_never_the_same_project_twice_in_a_row(

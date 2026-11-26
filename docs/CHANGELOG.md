@@ -16,6 +16,16 @@ Numbers like #24 are GitHub issues or pull requests on [vives-project-xp/Project
 
 Newest first. Each request has the same four parts: **Before**, **Asked**, **Changed**, **Where**.
 
+### R18. The VIVES favicon (2026-11-26)
+
+**Before.** The browser tab showed NiceGUI's default icon.
+
+**Asked.** *"can u also change the favicon to a vives logo"*.
+
+**Changed.** The tab now shows VIVES' own favicon: the red smile from the logo, the same icon vives.be uses (16, 32 and 48 pixels). The full logo with its text is unreadable at that size, and the brand guide doesn't allow changing the logo, so the official icon is used as it is.
+
+**Where.** `frontend/src/pmp_frontend/static/favicon.ico`, set in `main.py`.
+
 ### R17. Navigation as a menu on the left (2026-11-19)
 
 **Before.** Every screen, **My account**, the User's name and **Log out** stood in one long row in the header next to the logo. For the Superuser that row was full: eleven items plus the name and Log out.
@@ -297,6 +307,7 @@ Newest first. "Live" means deployed to the VIVES VM by the Deploy workflow. "Mig
 | New | **Connect TikTok:** on **Social media** the Superuser clicks Connect TikTok, logs in on TikTok and pastes the address TikTok opens; the account's tokens are kept in the database (never shown) and refreshed before the 24-hour access token runs out, a failed refresh or an expired connection shows a notice; new settings for TikTok's Posting times (videos Mon–Fri 17:00), the Weekly slideshow (Fri 18:00) and its cut-off (Fri 12:00); settings `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET`, `TIKTOK_REDIRECT_URI` (see `docs/tiktok.md`); migration `0030` | #146 | #153 |
 | New | **Also on TikTok:** in Review, a suggestion with a video gets the tick **Also on TikTok** with TikTok's own choices (who can see it, without a default; comments, Duet, Stitch; the Music Usage Confirmation); Post then also puts the video in TikTok's line (Mon–Fri 17:00, never the same Project twice in a row) with the same text; at its Posting time the video is uploaded to TikTok (Direct Post), tried again once after 10 minutes, then moved to **To post today** (TikTok videos: download video, copy caption, Posted); each Channel is pulled back on its own; Scheduled posts shows TikTok's lines; the team's Weekly update shows "Also on TikTok"; before TikTok's audit the account must be private (see `docs/tiktok.md`); migration `0031` | #147 | #154 |
 | New | **Browser notifications for Chat messages:** every logged-in page looks once a minute for new messages of others in the User's own Chats (the ones the Unread badge counts) and shows them as a Windows/Mac notification, "<name> in <Project>: <first 100 characters>" ("@ " in front when it mentions them), never for the Chat open in a visible tab and never twice across tabs; clicking it opens the Chat; **My account** gets **Allow notifications in this browser** and the switch **Chat notifications** (on by default); works on the VM's own certificate (checked in the user's browser); migration `0032` | #148 | #155 |
+| Changed | The browser tab shows the VIVES favicon (the red smile, R18); fixed a test of the Instagram line that failed when it ran in the 10 minutes before 12:00 or 19:00 | – | |
 
 ### 2026-11-19
 
