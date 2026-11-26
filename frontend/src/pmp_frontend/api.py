@@ -154,6 +154,28 @@ async def login(email: str, password: str) -> tuple[str, CurrentUser]:
     return body["access_token"], CurrentUser.of(body["user"])
 
 
+async def vives_start() -> dict[str, Any] | None:
+    """What sending the browser to VIVES login needs (configured,
+    authorization_endpoint, client_id, scope, redirect_uri); None when the
+    backend or Authentik can't be reached."""
+    try:
+        return await _request("GET", "/api/auth/vives/start")
+    except ApiError:
+        return None
+
+
+async def vives_login(
+    code: str, code_verifier: str, nonce: str
+) -> tuple[str, CurrentUser]:
+    """Finish a VIVES login: the token and the logged-in User."""
+    body = await _request(
+        "POST",
+        "/api/auth/vives",
+        json={"code": code, "code_verifier": code_verifier, "nonce": nonce},
+    )
+    return body["access_token"], CurrentUser.of(body["user"])
+
+
 async def dev_login_users() -> list[dict[str, Any]] | None:
     """The Users the test login offers (id, name, role), or None when it is off
     (or the backend cannot be reached)."""

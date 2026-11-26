@@ -18,6 +18,7 @@ from pmp_frontend import (
     social_page,
     top3_page,
     users_page,
+    vives_login,
 )
 from pmp_frontend.github_username import github_username_card
 from pmp_frontend.shell import (
@@ -135,12 +136,14 @@ def register_pages() -> None:
             enter(new_token, user)
 
         dev_users = await api.dev_login_users()
+        vives = await api.vives_start()
 
         # Everything centered on the page (#108).
         with frame("Log in"), ui.column().classes("w-full items-center gap-6 pt-8"):
             with ui.column().classes("items-center gap-1 text-center"):
                 ui.label("Project Management Platform").classes("text-h4")
                 ui.label("VIVES Project Experience").classes("text-subtitle1")
+            vives_login.login_card(vives)
             with ui.card().classes("w-full max-w-md"):
                 ui.label("Log in").classes("text-h6")
                 if expired:
@@ -250,6 +253,7 @@ def register_pages() -> None:
         return None
 
     users_page.register()
+    vives_login.register()
     my_projects_page.register()
     projects_page.register()
     members_page.register()

@@ -91,6 +91,9 @@ async def backend_in_process(
             trello_token="test-trello-token",
             tiktok_client_key="test-tiktok-key",
             tiktok_client_secret="test-tiktok-secret",
+            authentik_issuer_url=testing.FakeAuthentik.ISSUER,
+            authentik_client_id=testing.FakeAuthentik.CLIENT_ID,
+            authentik_client_secret=testing.FakeAuthentik.CLIENT_SECRET,
             dev_login=request.node.get_closest_marker("dev_login") is not None,
         )
     )
@@ -98,6 +101,7 @@ async def backend_in_process(
     backend.state.trello = trello
     backend.state.mailer = testing.FakeMailer()
     backend.state.tiktok = testing.FakeTikTok()
+    backend.state.oidc = testing.FakeAuthentik()
     # ASGITransport does not run the backend's startup, so seed here.
     with backend.state.sessionmaker() as session:
         seed_starting_accounts(session, logins_file)

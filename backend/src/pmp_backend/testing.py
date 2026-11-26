@@ -546,3 +546,109 @@ class FakeTikTok:
             raise ChannelError("TikTok answered 500: Fake failure")
         self.inbox.append((photo_urls, title, caption))
         return f"inbox-{len(self.inbox)}"
+
+
+_AUTHENTIK_KEYS: dict[str, object] = {}
+
+
+def _rsa_key(name: str):
+    """A test RSA key, made once per name (making one takes a moment)."""
+    from cryptography.hazmat.primitives.asymmetric import rsa
+
+    if name not in _AUTHENTIK_KEYS:
+        _AUTHENTIK_KEYS[name] = rsa.generate_private_key(
+            public_exponent=65537, key_size=2048
+        )
+    return _AUTHENTIK_KEYS[name]
+
+
+class FakeAuthentik:
+    """VIVES' Authentik for tests (#161): discovery, keys and the token
+    endpoint. `issue(claims, nonce)` prepares a login and returns its code;
+    the token endpoint answers it once with an ID token signed by the test
+    key (or by `sign_with` another key). `unreachable` makes every call fail
+    like a network error; `token_requests` records what was sent."""
+
+    ISSUER = "https://auth.example.org/application/o/pmp/"
+    CLIENT_ID = "pmp-test-client"
+    CLIENT_SECRET = "pmp-test-secret"
+
+    def __init__(self) -> None:
+        self.codes: dict[str, tuple[dict, str]] = {}
+        self.token_requests: list[dict[str, str]] = []
+        self.unreachable = False
+        self.sign_with = "authentik"
+
+    def _check(self) -> None:
+        from pmp_backend.services.vives_login import VivesLoginUnavailableError
+
+        if self.unreachable:
+            raise VivesLoginUnavailableError(
+                "VIVES login can't be reached right now (fake)."
+            )
+
+    def discovery(self, issuer: str) -> dict:
+        self._check()
+        base = self.ISSUER.rstrip("/")
+        return {
+            "issuer": self.ISSUER,
+            "authorization_endpoint": "https://auth.example.org/application/o/authorize/",
+            "token_endpoint": "https://auth.example.org/application/o/token/",
+            "jwks_uri": f"{base}/jwks/",
+            "id_token_signing_alg_values_supported": ["RS256"],
+        }
+
+    def jwks(self, uri: str) -> dict:
+        import jwt
+
+        self._check()
+        public = jwt.algorithms.RSAAlgorithm.to_jwk(
+            _rsa_key("authentik").public_key(), as_dict=True
+        )
+        return {"keys": [public | {"kid": "test-key", "use": "sig", "alg": "RS256"}]}
+
+    def claims(self, **extra) -> dict:
+        """Usual claims of a person, changed by `extra` (None removes one)."""
+        now = int(datetime.now().timestamp())
+        found = {
+            "iss": self.ISSUER,
+            "aud": self.CLIENT_ID,
+            "sub": "sub-1",
+            "iat": now,
+            "exp": now + 300,
+            "email": "an.student@student.vives.be",
+            "email_verified": True,
+            "given_name": "An",
+            "family_name": "Student",
+            "name": "An Student",
+            "groups": ["pmp-students"],
+            "programme": "Electronics-ICT",
+            "year": "2",
+        } | extra
+        return {key: value for key, value in found.items() if value is not None}
+
+    def issue(self, claims: dict, nonce: str = "nonce-1") -> str:
+        code = f"code-{len(self.codes) + 1}"
+        self.codes[code] = (claims, nonce)
+        return code
+
+    def token(self, endpoint: str, form: dict[str, str]) -> dict:
+        import jwt
+
+        from pmp_backend.services.vives_login import VivesLoginError
+
+        self._check()
+        self.token_requests.append(form)
+        found = self.codes.pop(form.get("code", ""), None)
+        if found is None:
+            raise VivesLoginError(
+                "VIVES login refused the login (invalid_grant). Try again."
+            )
+        claims, nonce = found
+        token = jwt.encode(
+            claims | {"nonce": nonce},
+            _rsa_key(self.sign_with),
+            algorithm="RS256",
+            headers={"kid": "test-key"},
+        )
+        return {"access_token": "at", "token_type": "Bearer", "id_token": token}
