@@ -52,6 +52,8 @@ def settings(logins_file: Path, tmp_path: Path) -> Settings:
         github_token="test-token",
         trello_api_key="test-key",
         trello_token="test-trello-token",
+        tiktok_client_key="test-tiktok-key",
+        tiktok_client_secret="test-tiktok-secret",
     )
 
 
@@ -81,6 +83,11 @@ def instagram() -> testing.FakeInstagram:
 
 
 @pytest.fixture
+def tiktok() -> testing.FakeTikTok:
+    return testing.FakeTikTok()
+
+
+@pytest.fixture
 def client(
     settings: Settings,
     github: testing.FakeGitHub,
@@ -88,6 +95,7 @@ def client(
     mailer: testing.FakeMailer,
     llm: testing.FakeLLM,
     instagram: testing.FakeInstagram,
+    tiktok: testing.FakeTikTok,
 ) -> Iterator[TestClient]:
     app = create_app(settings)
     app.state.github = github
@@ -95,6 +103,7 @@ def client(
     app.state.mailer = mailer
     app.state.llm = llm
     app.state.instagram = instagram
+    app.state.tiktok = tiktok
     # Entering the client runs the app's startup, which creates the starting accounts.
     with TestClient(app) as client:
         yield client

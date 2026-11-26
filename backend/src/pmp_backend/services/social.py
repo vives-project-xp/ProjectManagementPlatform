@@ -34,6 +34,12 @@ BRUSSELS = ZoneInfo("Europe/Brussels")
 DEFAULT_INSTAGRAM_WEEKDAYS = [0, 1, 2, 3, 4]
 DEFAULT_INSTAGRAM_TIMES = ["12:00", "19:00"]
 DEFAULT_FIXED_HASHTAGS = "#VIVEShogeschool #ElektronicaICT"
+# TikTok (spec #145): videos Monday-Friday 17:00, the Weekly slideshow on
+# Friday 18:00, put together at Friday 12:00.
+DEFAULT_TIKTOK_WEEKDAYS = [0, 1, 2, 3, 4]
+DEFAULT_TIKTOK_TIMES = ["17:00"]
+DEFAULT_SLIDESHOW = (4, time(18, 0))
+DEFAULT_SLIDESHOW_CUTOFF = (4, time(12, 0))
 # At most two posts a day on a Channel (Q14).
 MAX_POSTING_TIMES = 2
 MAX_HASHTAGS = 10
@@ -55,14 +61,21 @@ class SocialForbiddenError(SocialError, Forbidden):
 
 @dataclass(frozen=True)
 class Settings:
-    """The Upload deadline (both None until set), Instagram's Posting times and
-    the Fixed hashtags."""
+    """The Upload deadline (both None until set), Instagram's Posting times,
+    the Fixed hashtags, TikTok's Posting times and the Weekly slideshow's
+    Posting time and cut-off."""
 
     upload_weekday: int | None
     upload_time: time | None
     instagram_weekdays: list[int]
     instagram_times: list[str]
     fixed_hashtags: str
+    tiktok_weekdays: list[int]
+    tiktok_times: list[str]
+    slideshow_weekday: int
+    slideshow_time: time
+    slideshow_cutoff_weekday: int
+    slideshow_cutoff_time: time
 
 
 def get_settings(session: Session) -> Settings:
@@ -74,6 +87,12 @@ def get_settings(session: Session) -> Settings:
             instagram_weekdays=DEFAULT_INSTAGRAM_WEEKDAYS,
             instagram_times=DEFAULT_INSTAGRAM_TIMES,
             fixed_hashtags=DEFAULT_FIXED_HASHTAGS,
+            tiktok_weekdays=DEFAULT_TIKTOK_WEEKDAYS,
+            tiktok_times=DEFAULT_TIKTOK_TIMES,
+            slideshow_weekday=DEFAULT_SLIDESHOW[0],
+            slideshow_time=DEFAULT_SLIDESHOW[1],
+            slideshow_cutoff_weekday=DEFAULT_SLIDESHOW_CUTOFF[0],
+            slideshow_cutoff_time=DEFAULT_SLIDESHOW_CUTOFF[1],
         )
     return Settings(
         upload_weekday=row.upload_weekday,
@@ -81,7 +100,22 @@ def get_settings(session: Session) -> Settings:
         instagram_weekdays=row.instagram_weekdays,
         instagram_times=row.instagram_times,
         fixed_hashtags=row.fixed_hashtags,
+        tiktok_weekdays=row.tiktok_weekdays,
+        tiktok_times=row.tiktok_times,
+        slideshow_weekday=row.slideshow_weekday,
+        slideshow_time=row.slideshow_time,
+        slideshow_cutoff_weekday=row.slideshow_cutoff_weekday,
+        slideshow_cutoff_time=row.slideshow_cutoff_time,
     )
+
+
+def _posting_times(channel: str, weekdays: list[int], times: list[str]):
+    if not weekdays:
+        raise SocialError(f"Choose at least one weekday for {channel}.")
+    unique = sorted(set(times))
+    if not 1 <= len(unique) <= MAX_POSTING_TIMES:
+        raise SocialError(f"Give 1 or {MAX_POSTING_TIMES} Posting times for {channel}.")
+    return sorted(set(weekdays)), unique
 
 
 def _check_hashtags(text: str) -> str:
@@ -105,29 +139,49 @@ def set_settings(
     instagram_weekdays: list[int],
     instagram_times: list[str],
     fixed_hashtags: str,
+    tiktok_weekdays: list[int] | None = None,
+    tiktok_times: list[str] | None = None,
+    slideshow: tuple[int, time] | None = None,
+    slideshow_cutoff: tuple[int, time] | None = None,
 ) -> Settings:
-    """Save the settings. A changed Upload deadline closes the open Upload week
-    at the next moment matching the new deadline."""
+    """Save the settings; TikTok's and the slideshow's are kept when not
+    given. A changed Upload deadline closes the open Upload week at the next
+    moment matching the new deadline."""
     if (upload_weekday is None) != (upload_time is None):
         raise SocialError("Give the Upload deadline's weekday and time together.")
-    if not instagram_weekdays:
-        raise SocialError("Choose at least one weekday for Instagram.")
-    times = sorted(set(instagram_times))
-    if not 1 <= len(times) <= MAX_POSTING_TIMES:
-        raise SocialError(f"Give 1 or {MAX_POSTING_TIMES} Posting times for Instagram.")
+    instagram_days, times = _posting_times(
+        "Instagram", instagram_weekdays, instagram_times
+    )
     hashtags = _check_hashtags(fixed_hashtags)
+    current = get_settings(session)
+    tiktok_days, tiktok_clock = _posting_times(
+        "TikTok",
+        current.tiktok_weekdays if tiktok_weekdays is None else tiktok_weekdays,
+        current.tiktok_times if tiktok_times is None else tiktok_times,
+    )
+    if slideshow is None:
+        slideshow = (current.slideshow_weekday, current.slideshow_time)
+    if slideshow_cutoff is None:
+        slideshow_cutoff = (
+            current.slideshow_cutoff_weekday,
+            current.slideshow_cutoff_time,
+        )
     # Locked until commit, so two changes cannot interleave.
     row = session.scalar(select(SocialSettings).with_for_update())
     if row is None:
         row = SocialSettings(id=1)
         session.add(row)
+    row.tiktok_weekdays = tiktok_days
+    row.tiktok_times = tiktok_clock
+    row.slideshow_weekday, row.slideshow_time = slideshow
+    row.slideshow_cutoff_weekday, row.slideshow_cutoff_time = slideshow_cutoff
     deadline_changed = (row.upload_weekday, row.upload_time) != (
         upload_weekday,
         upload_time,
     )
     row.upload_weekday = upload_weekday
     row.upload_time = upload_time
-    row.instagram_weekdays = sorted(set(instagram_weekdays))
+    row.instagram_weekdays = instagram_days
     row.instagram_times = times
     row.fixed_hashtags = hashtags
     if deadline_changed and upload_weekday is not None:

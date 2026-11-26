@@ -20,6 +20,12 @@ DEFAULTS = {
     "instagram_weekdays": [0, 1, 2, 3, 4],
     "instagram_times": ["12:00", "19:00"],
     "fixed_hashtags": "#VIVEShogeschool #ElektronicaICT",
+    "tiktok_weekdays": [0, 1, 2, 3, 4],
+    "tiktok_times": ["17:00"],
+    "slideshow_weekday": 4,
+    "slideshow_time": "18:00",
+    "slideshow_cutoff_weekday": 4,
+    "slideshow_cutoff_time": "12:00",
 }
 WEDNESDAY_17 = DEFAULTS | {"upload_weekday": 2, "upload_time": "17:00"}
 

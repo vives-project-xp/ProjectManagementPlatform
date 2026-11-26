@@ -23,6 +23,7 @@ from pmp_backend.services.github import (
 )
 from pmp_backend.services.instagram import ChannelError, Published, RefreshedToken
 from pmp_backend.services.post_ai import AiAnswer, AiError, AiRequest
+from pmp_backend.services.tiktok import CodeRefusedError, Tokens
 from pmp_backend.services.trello import (
     BoardInfo,
     CreatedBoard,
@@ -433,3 +434,47 @@ class FakeInstagram:
             token=f"refreshed-{len(self.refreshes)}",
             expires_at=now + timedelta(days=60),
         )
+
+
+class FakeTikTok:
+    """TikTok for tests (#146): any code works except those in `refused`;
+    `failing` makes every call fail as if TikTok were down, `refresh_failing`
+    only the refreshes. Records the codes and refresh tokens it got."""
+
+    ACCESS_LIFETIME = timedelta(hours=24)
+    REFRESH_LIFETIME = timedelta(days=365)
+
+    def __init__(self) -> None:
+        self.codes: list[str] = []
+        self.refreshes: list[str] = []
+        self.refused: set[str] = set()
+        self.failing = False
+        self.refresh_failing = False
+        self.name = "VIVES test"
+
+    def _tokens(self, number: int, now: datetime) -> Tokens:
+        return Tokens(
+            access_token=f"access-{number}",
+            expires_at=now + self.ACCESS_LIFETIME,
+            refresh_token=f"refresh-{number}",
+            refresh_expires_at=now + self.REFRESH_LIFETIME,
+        )
+
+    def exchange_code(self, code: str, now: datetime) -> Tokens:
+        if self.failing:
+            raise ChannelError("TikTok can't be reached: fake")
+        if code in self.refused:
+            raise CodeRefusedError("TikTok answered 400: invalid_grant")
+        self.codes.append(code)
+        return self._tokens(len(self.codes), now)
+
+    def refresh(self, refresh_token: str, now: datetime) -> Tokens:
+        self.refreshes.append(refresh_token)
+        if self.failing or self.refresh_failing:
+            raise ChannelError("TikTok answered 400: invalid_grant")
+        return self._tokens(100 + len(self.refreshes), now)
+
+    def account_name(self, access_token: str) -> str:
+        if self.failing:
+            raise ChannelError("TikTok can't be reached: fake")
+        return self.name

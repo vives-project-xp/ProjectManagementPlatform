@@ -15,13 +15,14 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from pmp_backend.models import PostSuggestion, User, WeeklyMedium, WeeklyUpdate
-from pmp_backend.services import publishing, social
+from pmp_backend.services import publishing, social, tiktok_connection
 from pmp_backend.services.instagram import Channel
 from pmp_backend.services.suggestions import (
     ReviewConflictError,
     locked,
     mark_reviewed,
 )
+from pmp_backend.services.tiktok import TikTok
 from pmp_backend.settings import Settings
 
 log = logging.getLogger(__name__)
@@ -171,14 +172,19 @@ async def run_forever(
     make_session: Callable[[], Session],
     channel_of: Callable[[], Channel],
     settings: Settings,
+    tiktok_of: Callable[[], TikTok] | None = None,
 ) -> None:
-    """Every minute: refresh the Channel's token when due, then publish (or
-    move) the due posts. `channel_of` so tests can swap in a FakeInstagram."""
+    """Every minute: refresh the Channels' tokens when due, then publish (or
+    move) the due posts. `channel_of` and `tiktok_of` so tests can swap in
+    fakes."""
 
     def run() -> None:
         now = datetime.now(BRUSSELS)
         with make_session() as session:
             publishing.refresh_token(session, channel_of(), settings, now)
+        if tiktok_of is not None:
+            with make_session() as session:
+                tiktok_connection.refresh_due(session, tiktok_of(), settings, now)
         with make_session() as session:
             run_once(session, now, channel_of(), settings)
 
