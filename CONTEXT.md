@@ -7,16 +7,32 @@ A web application for VIVES Project Experience in which staff set up and follow 
 ### People
 
 **User**:
-Anyone with a login on the platform. Every User has exactly one Role.
+Anyone with a login on the platform. Every User has exactly one Role. Once VIVES login is on, people exist only in Authentik: the platform's User appears automatically at their first login, and their name, email, Role (and a Student's Programme and Year) follow Authentik at every login.
 _Avoid_: Account, member (for people without a Project)
 
 **Role**:
-The platform-wide kind of User: Superuser, Teacher, Student or Client.
+The platform-wide kind of User: Superuser, Teacher, Student or Client. Once VIVES login is on it comes from the User's Role group in Authentik.
 _Avoid_: Permission level, user type
 
 **Superuser**:
-The only User who creates, edits, deactivates and deletes other Users and resets their passwords. The Superuser can never be deleted.
+The only User who edits, deactivates and deletes other Users; before VIVES login is on also the one who creates them and resets their passwords. The Superuser can never be deleted.
 _Avoid_: Admin
+
+**VIVES login**:
+Logging in through VIVES' Authentik (OpenID Connect) with "Log in with VIVES", for every Role. Set up by the Superuser on the VIVES login screen and switched on after a successful Setup test; once on there is no password login on the site at all (only the Break-glass link) and no Test login, and it can only be switched off on the VM.
+_Avoid_: SSO, Authentik login, single sign-on (in the UI)
+
+**Role group**:
+One of the four Authentik groups that give a Role: `pmp-superusers`, `pmp-teachers`, `pmp-students`, `pmp-clients` (names can be changed). A login with none or more than one of them is refused, as is a Role change while the old Role still has links (a Member, a Product Owner of Projects, a Client linked to Projects).
+_Avoid_: Authentik role, permission group
+
+**Setup test**:
+The Superuser's trial login on the VIVES login screen before switching it on: it shows what Authentik sent (email, name, groups, Programme, Year) and the Role it gives; switching on needs one that gave the Superuser Role, so nobody locks themselves out.
+_Avoid_: Test login (that is the password-less login for testing, DEV_LOGIN)
+
+**Break-glass link**:
+A one-time login link for a Superuser, printed by a command on the VM, valid 15 minutes and usable once, for when Authentik fails; every use is logged. The only way in without VIVES login once it is on.
+_Avoid_: Backdoor, admin password, emergency login
 
 **Teacher**:
 A VIVES staff member who creates and manages Projects.
@@ -27,7 +43,7 @@ A User who can work in a Project, described by their Programme and Year.
 _Avoid_: Pupil, participant
 
 **Client**:
-A User from outside VIVES (a company, a lab, another department) who follows one or more Projects the teams build for them: they see those Projects read-only (including their Weekly updates and repository link) and talk in their Chats, but have no rights to change anything. Created only by the Superuser; linked to Projects by any Teacher or the Superuser. Never a Project's Product Owner on the platform. "Guest access" to the platform means Clients.
+A User from outside VIVES (a company, a lab, another department) who follows one or more Projects the teams build for them: they see those Projects read-only (including their Weekly updates and repository link) and talk in their Chats, but have no rights to change anything. Created only by the Superuser (once VIVES login is on: invited into Authentik and in `pmp-clients`); linked to Projects by any Teacher or the Superuser. Never a Project's Product Owner on the platform. "Guest access" to the platform means Clients.
 _Avoid_: Customer, sponsor, external, guest (that is a Chat Guest)
 
 **Organisation**:
@@ -47,7 +63,7 @@ The GitHub account a User saved, confirmed by its profile picture and name and s
 _Avoid_: GitHub login, GitHub handle, GitHub account (for the saved name)
 
 **Temporary password**:
-A password the platform generates (different for every User) when the Superuser creates, imports or resets a User, shown to the Superuser only once; the User must replace it at their next login. Starting accounts use the one from `logins.txt`.
+A password the platform generates (different for every User) when the Superuser creates, imports or resets a User, shown to the Superuser only once; the User must replace it at their next login. Starting accounts use the one from `logins.txt`. Only while VIVES login is off.
 _Avoid_: Default password, reset code
 
 **Starting account**:
