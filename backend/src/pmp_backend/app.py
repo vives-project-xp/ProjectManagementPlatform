@@ -23,7 +23,7 @@ from pmp_backend.api import (
 )
 from pmp_backend.database import is_reachable, make_engine
 from pmp_backend.errors import Conflict, Forbidden, NotFound, Refused, Unavailable
-from pmp_backend.services import daily_email, mail, posting, suggestions
+from pmp_backend.services import daily_email, mail, posting, slideshows, suggestions
 from pmp_backend.services.auth import LoginGuard
 from pmp_backend.services.chat import TypingBoard, clean_up_forever
 from pmp_backend.services.github import HttpGitHub
@@ -79,12 +79,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 tiktok_of=lambda: app.state.tiktok,
             )
         )
+        # The Weekly slideshow at its cut-off, and its AI text (#149).
+        slideshow_writer = asyncio.create_task(
+            slideshows.run_forever(make_session, lambda: app.state.llm)
+        )
         # Never-posted Media go 4 months after their Upload week (#118).
         media_cleaner = asyncio.create_task(
             clean_up_media_forever(make_session, settings.social_media_dir)
         )
         yield
-        for task in (sender, cleaner, resumer, writer, poster, media_cleaner):
+        for task in (
+            sender,
+            cleaner,
+            resumer,
+            writer,
+            poster,
+            media_cleaner,
+            slideshow_writer,
+        ):
             if task is not None:
                 task.cancel()
                 with suppress(asyncio.CancelledError):

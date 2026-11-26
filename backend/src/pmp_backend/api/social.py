@@ -30,6 +30,7 @@ from pmp_backend.services import (
     post_ai,
     posting,
     publishing,
+    slideshows,
     social,
     suggestions,
     tiktok,
@@ -757,6 +758,157 @@ def mark_posted(
     """It was published by hand from the To post today list."""
     posting.mark_posted(session, user, suggestion_id)
     return _one(session, suggestion_id)
+
+
+# The Weekly slideshow (#149)
+
+
+class SlideshowPhotoOut(BaseModel):
+    project: ProjectRefOut
+    medium: MediumOut
+
+
+class SlideshowProjectOut(BaseModel):
+    project: ProjectRefOut
+    # Its photos, best first (the one on Instagram last), to swap with.
+    photos: list[MediumOut]
+
+
+class SlideshowOut(BaseModel):
+    id: int
+    # The Upload week it shows.
+    closes_at: datetime
+    # "generating", "waiting" (for Review), "failed" (write it yourself),
+    # "refused", or "none" (no Posted Project had a photo).
+    state: str
+    title: str | None
+    caption: str | None
+    attempts: int
+    last_error: str | None
+    reviewed_by: str | None
+    reviewed_at: datetime | None
+    refusal_reason: str | None
+    # In order.
+    photos: list[SlideshowPhotoOut]
+    # The week's Posted Projects with photos.
+    projects: list[SlideshowProjectOut]
+
+
+def _slideshow_out(view: slideshows.SlideshowView) -> SlideshowOut:
+    slideshow = view.slideshow
+
+    def ref(project) -> ProjectRefOut:
+        return ProjectRefOut(id=project.id, title=project.title)
+
+    return SlideshowOut(
+        id=slideshow.id,
+        closes_at=slideshow.closes_at,
+        state=slideshow.state,
+        title=slideshow.title,
+        caption=slideshow.caption,
+        attempts=slideshow.attempts,
+        last_error=slideshow.last_error,
+        reviewed_by=(
+            slideshow.reviewed_by.full_name if slideshow.reviewed_by else "Deleted user"
+        )
+        if slideshow.reviewed_at
+        else None,
+        reviewed_at=slideshow.reviewed_at,
+        refusal_reason=slideshow.refusal_reason,
+        photos=[
+            SlideshowPhotoOut(
+                project=ref(p.project), medium=MediumOut(**vars(p.medium))
+            )
+            for p in view.photos
+        ],
+        projects=[
+            SlideshowProjectOut(
+                project=ref(p.project),
+                photos=[MediumOut(**vars(m)) for m in p.photos],
+            )
+            for p in view.projects
+        ],
+    )
+
+
+def _latest_slideshow(session) -> SlideshowOut | None:
+    view = slideshows.latest(session)
+    session.commit()
+    return _slideshow_out(view) if view else None
+
+
+@router.get("/slideshows/latest")
+def latest_slideshow(
+    session: SessionDep, user: TeacherOrSuperuserDep
+) -> SlideshowOut | None:
+    """The newest Weekly slideshow, or null before the first cut-off."""
+    return _latest_slideshow(session)
+
+
+class SlideshowTextIn(BaseModel):
+    title: str
+    caption: str
+
+
+@router.put("/slideshows/{slideshow_id}")
+def edit_slideshow(
+    slideshow_id: int,
+    body: SlideshowTextIn,
+    session: SessionDep,
+    user: TeacherOrSuperuserDep,
+) -> SlideshowOut | None:
+    """Edit the text, or write it yourself when the AI couldn't."""
+    slideshows.edit(session, user, slideshow_id, title=body.title, caption=body.caption)
+    return _latest_slideshow(session)
+
+
+class SlideshowPhotosIn(BaseModel):
+    # The photos in their new order (swap, remove and reorder in one).
+    medium_ids: list[int]
+
+
+@router.put("/slideshows/{slideshow_id}/photos")
+def set_slideshow_photos(
+    slideshow_id: int,
+    body: SlideshowPhotosIn,
+    session: SessionDep,
+    user: TeacherOrSuperuserDep,
+) -> SlideshowOut | None:
+    slideshows.set_photos(session, user, slideshow_id, body.medium_ids)
+    return _latest_slideshow(session)
+
+
+@router.post("/slideshows/{slideshow_id}/generate")
+def generate_slideshow_again(
+    slideshow_id: int,
+    request: Request,
+    background: BackgroundTasks,
+    session: SessionDep,
+    user: TeacherOrSuperuserDep,
+) -> SlideshowOut | None:
+    """Put it together again (with Projects Posted since) and let the AI write
+    it again; the answer comes in the background."""
+    slideshows.generate_again(session, user, slideshow_id)
+    make_session, llm = request.app.state.sessionmaker, request.app.state.llm
+
+    def write() -> None:
+        with make_session() as fresh:
+            slideshows.attempt(fresh, llm, slideshow_id, datetime.now(posting.BRUSSELS))
+
+    background.add_task(write)
+    return _latest_slideshow(session)
+
+
+@router.post("/slideshows/{slideshow_id}/refuse")
+def refuse_slideshow(
+    slideshow_id: int,
+    body: RefusalIn,
+    session: SessionDep,
+    user: TeacherOrSuperuserDep,
+) -> SlideshowOut | None:
+    """No slideshow this week."""
+    slideshows.refuse(session, user, slideshow_id, body.reason)
+    return _latest_slideshow(session)
 
 
 class ChannelOut(BaseModel):

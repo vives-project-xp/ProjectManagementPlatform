@@ -49,3 +49,15 @@ At its Posting time the platform asks TikTok for the account's creator info and 
 
 **Before the audit** TikTok only lets the app post to a **private** account, and only as "Only me": set the account to Private in the TikTok app (Settings and privacy, Privacy, Private account). Otherwise TikTok refuses with `unaudited_client_can_only_post_to_private_accounts`, which the platform shows as a readable reason.
 
+## Weekly slideshow: put together and reviewed
+
+At the **Slideshow cut-off** (Friday 12:00 by default, Social media screen) the platform puts the Weekly slideshow together for the latest Upload week whose Post suggestions were made, from every Project whose suggestion was **Posted** (scheduled, published or posted by hand), in the order they were Posted:
+
+- per Project one photo: a different one than its Instagram post when it has one, otherwise the same;
+- with fewer than 4 photos, more photos of the same Projects (best first) until there are 4; never one photo twice; at most 35;
+- no Posted Project with a photo: no slideshow that week (the card says so).
+
+The AI (ADR 0009) then writes a title (at most 90 characters) and a Dutch caption from the Projects' titles only, with the Fixed hashtags; it gets no photos and no names. After 3 failed tries staff write it themselves.
+
+Any Teacher or the Superuser reviews it in the **Weekly slideshow** card at the top of **Post suggestions**: move photos earlier or later, swap one for another photo of the same Project, remove one, edit the title and caption, **Generate again** (puts it together again, also with Projects Posted after the cut-off) or **Refuse** (no slideshow that week). Posting it comes with #150.
+

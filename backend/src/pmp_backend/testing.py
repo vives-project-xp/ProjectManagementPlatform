@@ -376,6 +376,17 @@ class FakeLLM:
             return answer if isinstance(answer, AiAnswer) else AiAnswer(answer, "stop")
         labels = [medium.label for medium in request.media]
         fixed = " ".join(re.findall(r"#\w+", request.instructions))
+        if "chosen" not in request.schema.get("properties", {}):
+            # The Weekly slideshow's text (#149): no media to choose.
+            return AiAnswer(
+                json.dumps(
+                    {
+                        "title": "Deze week bij Elektronica-ICT 🔧",
+                        "caption": f"Drones, robots en meer! {fixed} #projecten",
+                    }
+                ),
+                "stop",
+            )
         return AiAnswer(
             json.dumps(
                 {
