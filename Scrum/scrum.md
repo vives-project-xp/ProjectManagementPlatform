@@ -4,6 +4,17 @@ Wekelijkse scrum van het team. De nieuwste week staat bovenaan, de oudste ondera
 
 ---
 
+## Scrum 26/11/2026
+
+**vorige keer**
+- ai agent in grote lijnen afgewerkt
+- demo
+- layout pagina verfijnd
+
+  **deze week**
+- ai agent details afwerken + testen
+- authentik starten
+
 ## Scrum 12/11/2026
 
 **vorige keer**
