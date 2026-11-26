@@ -19,6 +19,7 @@ from pmp_frontend import (
     top3_page,
     users_page,
     vives_login,
+    vives_login_page,
 )
 from pmp_frontend.github_username import github_username_card
 from pmp_frontend.shell import (
@@ -135,19 +136,23 @@ def register_pages() -> None:
                 return
             enter(new_token, user)
 
-        dev_users = await api.dev_login_users()
         vives = await api.vives_start()
+        # VIVES login on (#163): nothing else to log in with on the site.
+        vives_on = bool(vives and vives.get("configured"))
+        dev_users = None if vives_on else await api.dev_login_users()
 
         # Everything centered on the page (#108).
         with frame("Log in"), ui.column().classes("w-full items-center gap-6 pt-8"):
             with ui.column().classes("items-center gap-1 text-center"):
                 ui.label("Project Management Platform").classes("text-h4")
                 ui.label("VIVES Project Experience").classes("text-subtitle1")
+            if expired:
+                ui.label("Your session has expired. Please log in again.")
             vives_login.login_card(vives)
+            if vives_on:
+                return
             with ui.card().classes("w-full max-w-md"):
                 ui.label("Log in").classes("text-h6")
-                if expired:
-                    ui.label("Your session has expired. Please log in again.")
                 email = (
                     ui.input("Email")
                     .props("type=email")
@@ -212,12 +217,15 @@ def register_pages() -> None:
             ui.notify("Your password has been changed.")
             ui.navigate.to(home(user))
 
+        vives = await api.vives_start()
+        vives_on = bool(vives and vives.get("configured"))
         with page_frame("My account", user):
             ui.label("My account").classes("text-h4")
-            ui.label("Change your password").classes("text-h6")
-            if user.must_change_password:
+            if not vives_on:
+                ui.label("Change your password").classes("text-h6")
+            if user.must_change_password and not vives_on:
                 ui.label("Choose a new password of your own before you continue.")
-            with ui.card().classes("w-full max-w-md"):
+            with ui.card().classes("w-full max-w-md") as password_card:
                 current = (
                     ui.input("Current password", password=True)
                     .classes("w-full")
@@ -235,6 +243,8 @@ def register_pages() -> None:
                 )
                 error_message = ErrorMessage()
                 ui.button("Change password", on_click=submit).mark("change-password")
+            # The password lives in Authentik once VIVES login is on (#163).
+            password_card.set_visibility(not vives_on)
             # GitHub needs a password of your own first, like everything else;
             # Clients have no GitHub username and no Daily email (spec #132).
             if not user.must_change_password and user.role != "client":
@@ -254,6 +264,7 @@ def register_pages() -> None:
 
     users_page.register()
     vives_login.register()
+    vives_login_page.register()
     my_projects_page.register()
     projects_page.register()
     members_page.register()

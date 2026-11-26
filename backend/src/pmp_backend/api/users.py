@@ -7,7 +7,7 @@ from pmp_backend.api.deps import GitHubDep, SessionDep, SuperuserDep
 from pmp_backend.api.github import GitHubUsernameIn
 from pmp_backend.api.schemas import UserOut
 from pmp_backend.domain import Role, Year
-from pmp_backend.services import users
+from pmp_backend.services import users, vives_login
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 
@@ -81,6 +81,15 @@ class ImportOut(BaseModel):
 MAX_IMPORT_BYTES = 1024 * 1024
 
 
+def _not_with_vives_login(session) -> None:
+    """People and passwords live in Authentik once VIVES login is on (#163)."""
+    if vives_login.is_on(session):
+        raise users.UserConflictError(
+            "People are added in VIVES login (Authentik), not here, and have no "
+            "platform password."
+        )
+
+
 @router.get("")
 def list_users(
     session: SessionDep,
@@ -96,6 +105,7 @@ def list_users(
 def create_user(
     body: UserCreateIn, session: SessionDep, superuser: SuperuserDep
 ) -> UserCreatedOut:
+    _not_with_vives_login(session)
     user, password = users.create_user(
         session,
         role=Role(body.role),
@@ -123,6 +133,7 @@ def import_users(
 ) -> ImportOut:
     """One User per `Firstname,Lastname,email` line, Role, Programme, Year and
     a Client's Organisation the same for the whole file (#56, #133)."""
+    _not_with_vives_login(session)
     content = file.file.read(MAX_IMPORT_BYTES + 1)
     if len(content) > MAX_IMPORT_BYTES:
         raise users.UserError("The file is larger than 1 MB.")
@@ -161,6 +172,24 @@ def get_user(user_id: int, session: SessionDep, superuser: SuperuserDep) -> User
 def update_user(
     user_id: int, body: UserEditIn, session: SessionDep, superuser: SuperuserDep
 ) -> UserOut:
+    if vives_login.is_on(session):
+        # Name, email, Programme and Year come from VIVES login (#163).
+        current = users.get_user(session, user_id)
+        sent = {
+            "first_name": body.first_name,
+            "last_name": body.last_name,
+            "email": body.email.lower(),
+            "programme": body.programme,
+            "year": body.year,
+        }
+        if any(
+            (getattr(current, key) or None) != (value or None)
+            for key, value in sent.items()
+        ):
+            raise users.UserConflictError(
+                "Name, email, Programme and Year come from VIVES login: change "
+                "them in Authentik."
+            )
     user = users.update_user(session, user_id, **body.model_dump())
     return UserOut.model_validate(user)
 
@@ -189,6 +218,7 @@ def delete_user(user_id: int, session: SessionDep, superuser: SuperuserDep) -> R
 def reset_password(
     user_id: int, session: SessionDep, superuser: SuperuserDep
 ) -> TemporaryPasswordOut:
+    _not_with_vives_login(session)
     return TemporaryPasswordOut(
         temporary_password=users.reset_password(session, user_id)
     )

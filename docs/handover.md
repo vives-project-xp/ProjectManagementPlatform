@@ -107,6 +107,8 @@ The TikTok part (Weekly slideshow, Project videos) is the next spec. What exists
 
 ## 10. Logins and test data
 
+**VIVES login (Authentik) replaces all of this.** Follow [`authentik.md`](authentik.md): connect the platform to VIVES' Authentik on the **VIVES login** screen, test it and switch it on. From then on people exist only in Authentik (Role from a group, a Student's Programme and Year from attributes), there is no password login and no Test login on the site, and the way in when Authentik fails is `docker exec pmp-backend-1 pmp-break-glass` on the VM. The steps below are for before that switch.
+
 1. `/opt/pmp/logins.txt`: one line per Role, `role,email,password`, for the **first** Superuser, Teacher and Student. They're created only when there are no Users at all, and each must choose a new password at the first login. On an existing database this file changes nothing.
 2. **Switch off the Test login:** remove `DEV_LOGIN=true` from `/opt/pmp/.env` and recreate the backend (section 12). Until then anyone on the network can log in as any User.
 3. **Remove the team's test Users and data:** the dummy Students and Teachers (`…+studentNN` / `…+teacherNN` addresses of the team Gmail), test Projects, test Weekly updates and the demo Post suggestion. The Superuser can delete Users without links; others are deactivated.
@@ -132,6 +134,7 @@ Empty or missing optional settings switch that feature off (the platform keeps w
 | `INSTAGRAM_TOKEN`, `INSTAGRAM_API_URL`, `INSTAGRAM_ACCOUNT_ID`, `INSTAGRAM_REFRESH_URL` | | Section 8 |
 | `PUBLIC_MEDIA_URL` | | Section 2: the public address Instagram/TikTok download photos from |
 | `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET`, `TIKTOK_REDIRECT_URI` | | Section 9 |
+| `AUTHENTIK_ISSUER_URL`, `AUTHENTIK_CLIENT_ID`, `AUTHENTIK_CLIENT_SECRET` | | VIVES login, as an alternative to the VIVES login screen ([`authentik.md`](authentik.md)) |
 | `TIKTOK_VERIFICATION_FILE`, `TIKTOK_VERIFICATION_CONTENT` | | Section 9: TikTok's URL-prefix verification of `PUBLIC_MEDIA_URL/social/` |
 | `FOOTER_INSTAGRAM`, `FOOTER_TIKTOK`, `FOOTER_YOUTUBE`, `FOOTER_LINKEDIN`, `FOOTER_PRIVACY_URL`, `FOOTER_ADDRESS` | | The footer links; empty keeps the VIVES default, `none` hides one |
 | `BACKUP_PATH` | | Where backups go, default `/opt/pmp/backups` |

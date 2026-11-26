@@ -29,6 +29,7 @@ NAVIGATION: dict[str, list[tuple[str, str, str]]] = {
         ("Post suggestions", "/post-suggestions", "auto_awesome"),
         ("Scheduled posts", "/scheduled-posts", "schedule_send"),
         ("Social media", "/social-media", "campaign"),
+        ("VIVES login", "/vives-login", "key"),
     ],
     "teacher": [
         ("Projects", "/projects", "folder"),

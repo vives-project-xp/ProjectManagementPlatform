@@ -1,18 +1,39 @@
 """VIVES login on the login page and its callback (spec #160, #161)."""
 
+from datetime import UTC, datetime
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from nicegui import app
 from nicegui.testing import User
 
+from pmp_backend.models import VivesLoginSettings
 from pmp_frontend.vives_login import OLD_LINK, PENDING_KEY
 
 
+def switch_on(backend) -> None:
+    """VIVES login on, as after the Superuser's Switch on (#162)."""
+    with backend.state.sessionmaker() as session:
+        session.merge(
+            VivesLoginSettings(
+                id=1,
+                group_superuser="pmp-superusers",
+                group_teacher="pmp-teachers",
+                group_student="pmp-students",
+                group_client="pmp-clients",
+                programme_claim="programme",
+                year_claim="year",
+                enabled_at=datetime.now(UTC),
+            )
+        )
+        session.commit()
+
+
 @pytest.fixture
-def leaving(monkeypatch) -> list[str]:
+def leaving(monkeypatch, backend_in_process) -> list[str]:
     """The addresses the browser is sent to (Authentik's login page can't be
     opened in tests)."""
+    switch_on(backend_in_process)
     sent: list[str] = []
     # By name: the app (and this module) is loaded again for every test.
     monkeypatch.setattr("pmp_frontend.vives_login.leave", sent.append)
@@ -84,3 +105,10 @@ async def test_a_refused_login_shows_why(
 
     await user.should_see("You have no role on the platform", retries=30)
     assert PENDING_KEY not in app.storage.user
+
+
+async def test_no_button_while_vives_login_is_off(user: User) -> None:
+    await user.open("/login")
+    await user.should_see(marker="log-in")
+
+    await user.should_not_see(marker="vives-log-in")

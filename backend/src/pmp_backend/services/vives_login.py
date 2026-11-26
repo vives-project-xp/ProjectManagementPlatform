@@ -6,6 +6,7 @@ created at the first login, then linked by Authentik's `sub`. The Role comes
 from exactly one Role group, a Student's Programme and Year from attributes;
 name and email follow Authentik at every login."""
 
+import hashlib
 import logging
 import secrets
 import time
@@ -19,7 +20,7 @@ from sqlalchemy.orm import Session
 
 from pmp_backend.domain import Role, Year
 from pmp_backend.errors import Forbidden, Unavailable
-from pmp_backend.models import Programme, User
+from pmp_backend.models import Programme, User, VivesLoginSettings
 from pmp_backend.security import hash_password
 from pmp_backend.services.users import why_linked
 from pmp_backend.settings import Settings
@@ -58,22 +59,84 @@ class Config:
     year_claim: str = "year"
 
 
-def config_from(settings: Settings) -> Config | None:
-    """The connection from AUTHENTIK_* in the environment, or None. (The
-    Superuser's setup screen comes with #162.)"""
+def from_environment(settings: Settings) -> bool:
+    """Whether AUTHENTIK_* in the environment sets the connection (it then
+    wins over the screen)."""
     secret = settings.authentik_client_secret
-    if not (
+    return bool(
         settings.authentik_issuer_url
         and settings.authentik_client_id
         and secret
         and secret.get_secret_value()
-    ):
+    )
+
+
+def _row(session: Session) -> VivesLoginSettings | None:
+    return session.get(VivesLoginSettings, 1)
+
+
+def _names_of(row: VivesLoginSettings | None) -> tuple[dict[str, str], str, str]:
+    if row is None:
+        return dict(DEFAULT_GROUPS), "programme", "year"
+    return (
+        {
+            Role.SUPERUSER.value: row.group_superuser,
+            Role.TEACHER.value: row.group_teacher,
+            Role.STUDENT.value: row.group_student,
+            Role.CLIENT.value: row.group_client,
+        },
+        row.programme_claim,
+        row.year_claim,
+    )
+
+
+def config_from(settings: Settings, session: Session | None = None) -> Config | None:
+    """The connection, from AUTHENTIK_* in the environment or else the
+    Superuser's VIVES login screen; None while it isn't set up."""
+    row = _row(session) if session is not None else None
+    groups, programme, year = _names_of(row)
+    if from_environment(settings):
+        return Config(
+            issuer=settings.authentik_issuer_url,
+            client_id=settings.authentik_client_id,
+            client_secret=settings.authentik_client_secret.get_secret_value(),
+            groups=groups,
+            programme_claim=programme,
+            year_claim=year,
+        )
+    if row is None or not (row.issuer_url and row.client_id and row.client_secret):
         return None
     return Config(
-        issuer=settings.authentik_issuer_url,
-        client_id=settings.authentik_client_id,
-        client_secret=secret.get_secret_value(),
+        issuer=row.issuer_url,
+        client_id=row.client_id,
+        client_secret=row.client_secret,
+        groups=groups,
+        programme_claim=programme,
+        year_claim=year,
     )
+
+
+def locked_row(session: Session) -> VivesLoginSettings | None:
+    """The settings row, locked until commit."""
+    return session.scalar(
+        select(VivesLoginSettings)
+        .where(VivesLoginSettings.id == 1)
+        .with_for_update(of=VivesLoginSettings)
+    )
+
+
+def is_on(session: Session) -> bool:
+    """Whether VIVES login is switched on (from then on the only login)."""
+    row = _row(session)
+    return row is not None and row.enabled_at is not None
+
+
+def fingerprint(config: Config) -> str:
+    """Changes whenever anything a Setup test depends on changes."""
+    parts = [config.issuer, config.client_id, config.client_secret]
+    parts += [config.groups[role] for role in sorted(config.groups)]
+    parts += [config.programme_claim, config.year_claim]
+    return hashlib.sha256("\x1f".join(parts).encode()).hexdigest()
 
 
 def redirect_uri(settings: Settings) -> str:
@@ -376,3 +439,228 @@ def log_in(
         oidc, config, settings, code=code, code_verifier=code_verifier, nonce=nonce
     )
     return user_for(session, identity(config, claims))
+
+
+# The VIVES login screen (#162)
+
+GROUP_FIELDS = {
+    Role.SUPERUSER.value: "group_superuser",
+    Role.TEACHER.value: "group_teacher",
+    Role.STUDENT.value: "group_student",
+    Role.CLIENT.value: "group_client",
+}
+SWITCHED_ON = "VIVES login is on: it can only be switched off on the server."
+
+
+@dataclass(frozen=True)
+class Screen:
+    """What the Superuser sees (never the secret)."""
+
+    redirect_uri: str
+    scope: str
+    from_environment: bool
+    issuer_url: str | None
+    client_id: str | None
+    secret_set: bool
+    groups: dict[str, str]
+    programme_claim: str
+    year_claim: str
+    tested_at: object
+    tested_role: str | None
+    # The last Setup test was done with the settings as they are now.
+    test_is_current: bool
+    enabled_at: object
+    enabled_by: str | None
+
+
+def screen(session: Session, settings: Settings) -> Screen:
+    row = _row(session)
+    groups, programme, year = _names_of(row)
+    config = config_from(settings, session)
+    env = from_environment(settings)
+    current = (
+        config is not None
+        and row is not None
+        and row.tested_fingerprint == fingerprint(config)
+    )
+    return Screen(
+        redirect_uri=redirect_uri(settings),
+        scope=SCOPES,
+        from_environment=env,
+        issuer_url=settings.authentik_issuer_url
+        if env
+        else (row.issuer_url if row else None),
+        client_id=settings.authentik_client_id
+        if env
+        else (row.client_id if row else None),
+        secret_set=env or bool(row and row.client_secret),
+        groups=groups,
+        programme_claim=programme,
+        year_claim=year,
+        tested_at=row.tested_at if row else None,
+        tested_role=row.tested_role if row else None,
+        test_is_current=current,
+        enabled_at=row.enabled_at if row else None,
+        enabled_by=(row.enabled_by.full_name if row and row.enabled_by else None),
+    )
+
+
+class SetupError(VivesLoginError):
+    """A change on the VIVES login screen was refused."""
+
+
+def save(
+    session: Session,
+    settings: Settings,
+    *,
+    issuer_url: str | None,
+    client_id: str | None,
+    client_secret: str | None,
+    groups: dict[str, str],
+    programme_claim: str,
+    year_claim: str,
+) -> None:
+    """Save the screen; an empty secret keeps the stored one. Refused once
+    VIVES login is on."""
+    row = locked_row(session)
+    if row is not None and row.enabled_at is not None:
+        raise SetupError(SWITCHED_ON)
+    names = [name.strip() for name in groups.values()]
+    if set(groups) != set(GROUP_FIELDS) or any(not n for n in names):
+        raise SetupError("Give a group name for every Role.")
+    if len(set(names)) != len(names):
+        raise SetupError("Every Role needs its own group.")
+    if not programme_claim.strip() or not year_claim.strip():
+        raise SetupError("Give the names of the programme and year attributes.")
+    issuer = (issuer_url or "").strip()
+    if issuer and not issuer.startswith("https://"):
+        raise SetupError("The Issuer URL starts with https://.")
+    if row is None:
+        row = VivesLoginSettings(id=1)
+        session.add(row)
+    if not from_environment(settings):
+        row.issuer_url = issuer or None
+        row.client_id = (client_id or "").strip() or None
+        if client_secret and client_secret.strip():
+            row.client_secret = client_secret.strip()
+    for role, field_name in GROUP_FIELDS.items():
+        setattr(row, field_name, groups[role].strip())
+    row.programme_claim = programme_claim.strip()
+    row.year_claim = year_claim.strip()
+    session.commit()
+
+
+def check(session: Session, oidc: Oidc, settings: Settings) -> str:
+    """Fetch the Issuer's configuration and keys; what was found, or
+    VivesLoginUnavailableError / SetupError saying what failed."""
+    config = config_from(settings, session)
+    if config is None:
+        raise SetupError("Fill in the Issuer URL, Client ID and Client secret first.")
+    found = oidc.discovery(config.issuer)
+    missing = [
+        key
+        for key in ("authorization_endpoint", "token_endpoint", "jwks_uri")
+        if not found.get(key)
+    ]
+    if missing:
+        raise SetupError(
+            "The Issuer URL doesn't point to an OpenID provider "
+            f"(missing {', '.join(missing)})."
+        )
+    keys = oidc.jwks(found["jwks_uri"]).get("keys") or []
+    if not keys:
+        raise SetupError(
+            "Authentik publishes no signing keys: choose a signing key in the provider."
+        )
+    issuer = found.get("issuer", config.issuer)
+    return f"Connected to {issuer}: {len(keys)} signing key(s)."
+
+
+@dataclass(frozen=True)
+class TestReport:
+    """What a Setup test received and what it would mean; no User is made."""
+
+    email: str | None
+    name: str | None
+    groups: list[str]
+    programme: str | None
+    year: str | None
+    role: str | None
+    refusal: str | None
+
+
+def setup_test(
+    session: Session,
+    oidc: Oidc,
+    settings: Settings,
+    tester: User,
+    *,
+    code: str,
+    code_verifier: str,
+    nonce: str,
+) -> TestReport:
+    """The Superuser's trial login: checked like a real one, but only
+    reported (and remembered for Switch on)."""
+    config = config_from(settings, session)
+    if config is None:
+        raise SetupError("Fill in the Issuer URL, Client ID and Client secret first.")
+    if is_on(session):
+        raise SetupError(SWITCHED_ON)
+    claims = claims_of(
+        oidc, config, settings, code=code, code_verifier=code_verifier, nonce=nonce
+    )
+    raw = claims.get("groups")
+    groups = [str(g) for g in raw] if isinstance(raw, list) else []
+    try:
+        found = identity(config, claims)
+        role, refusal = found.role, None
+    except VivesLoginError as error:
+        role, refusal = None, str(error)
+    row = locked_row(session)
+    if row is None:
+        groups_now, programme, year = _names_of(None)
+        row = VivesLoginSettings(id=1, programme_claim=programme, year_claim=year)
+        for name, field_name in GROUP_FIELDS.items():
+            setattr(row, field_name, groups_now[name])
+        session.add(row)
+    row.tested_at = session.scalar(select(func.now()))
+    row.tested_by_id = tester.id
+    row.tested_role = role
+    row.tested_fingerprint = fingerprint(config)
+    session.commit()
+    return TestReport(
+        email=claims.get("email"),
+        name=claims.get("name")
+        or " ".join(
+            p for p in (claims.get("given_name"), claims.get("family_name")) if p
+        )
+        or None,
+        groups=groups,
+        programme=str(claims.get(config.programme_claim) or "") or None,
+        year=str(claims.get(config.year_claim) or "") or None,
+        role=role,
+        refusal=refusal,
+    )
+
+
+def switch_on(session: Session, settings: Settings, user: User) -> None:
+    """From now on VIVES login only: needs a Setup test with the settings as
+    they are, that gave the Superuser Role."""
+    row = locked_row(session)
+    config = config_from(settings, session)
+    if row is not None and row.enabled_at is not None:
+        raise SetupError("VIVES login is already on.")
+    if (
+        row is None
+        or config is None
+        or row.tested_role != Role.SUPERUSER.value
+        or row.tested_fingerprint != fingerprint(config)
+    ):
+        raise SetupError(
+            "Do a Test login with the settings as they are now first: it must "
+            "give you the Superuser Role, so you can always get back in."
+        )
+    row.enabled_at = session.scalar(select(func.now()))
+    row.enabled_by_id = user.id
+    session.commit()
+    log.warning("VIVES login was switched on by User %s", user.id)
