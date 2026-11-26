@@ -17,10 +17,10 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from pmp_backend.api.deps import CurrentUserDep, SessionDep, SettingsDep
-from pmp_backend.api.schemas import PersonOut
+from pmp_backend.api.schemas import PersonOut, UserOut
 from pmp_backend.domain import ProjectStatus
 from pmp_backend.models import CHAT_REACTIONS, ChatFile, ChatMessage, User
-from pmp_backend.services import chat
+from pmp_backend.services import chat, users
 
 router = APIRouter(prefix="/api", tags=["chat"])
 
@@ -487,6 +487,59 @@ def list_chats(
         )
         for summary in chat.chats(session, user, mine=mine)
     ]
+
+
+class ChatNotificationOut(BaseModel):
+    message_id: int
+    project_id: int
+    project_title: str
+    author: str
+    # The first 100 characters of the message.
+    text: str
+    mentions_me: bool
+
+
+class NotificationsOut(BaseModel):
+    # The newest message id: the next call's `since`.
+    latest: int
+    # New messages of others in the User's own Chats after `since` (none on
+    # the first call, without `since`, or with Chat notifications off).
+    chat: list[ChatNotificationOut]
+
+
+@router.get("/notifications")
+def notifications(
+    session: SessionDep, user: CurrentUserDep, since: int | None = None
+) -> NotificationsOut:
+    """What a browser notification should show since the last look (#148);
+    pages ask every minute."""
+    latest = chat.latest_message_id(session)
+    found = [] if since is None else chat.notifications(session, user, since)
+    return NotificationsOut(
+        latest=latest,
+        chat=[ChatNotificationOut(**vars(item)) for item in found],
+    )
+
+
+class NotificationSwitchesIn(BaseModel):
+    # Left out: kept as it is.
+    chat_notifications: bool | None = None
+    tiktok_alerts: bool | None = None
+
+
+@router.put("/me/notifications")
+def set_notifications(
+    body: NotificationSwitchesIn, session: SessionDep, user: CurrentUserDep
+) -> UserOut:
+    """Switch your own browser notifications on or off."""
+    return UserOut.model_validate(
+        users.set_notifications(
+            session,
+            user.id,
+            chat=body.chat_notifications,
+            tiktok=body.tiktok_alerts,
+        )
+    )
 
 
 @router.get("/chats/unread")

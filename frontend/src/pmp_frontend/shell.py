@@ -1,5 +1,6 @@
 """What every logged-in page shares: the session, the page guard and the header."""
 
+import json
 from collections.abc import Awaitable, Callable
 from contextlib import suppress
 from typing import Any
@@ -109,6 +110,8 @@ def navigation(user: api.CurrentUser) -> None:
                     _unread_badge(
                         link, hide_without_chat=user.role in ("student", "client")
                     )
+        if not user.must_change_password:
+            _browser_notifications()
         ui.space()
         ui.separator()
         if not user.must_change_password:
@@ -138,6 +141,78 @@ def _navigation_link(label: str, path: str, icon: str, current: str) -> ui.link:
         ui.icon(icon, color="dark")
         ui.label(label).classes("grow")
     return link
+
+
+# How often a page looks for something to show as a browser notification.
+NOTIFY_SECONDS = 60.0
+# Shows browser notifications for new Chat messages (#148): never twice for
+# the same message (across tabs, through localStorage), never for the Chat
+# open in a visible tab (window.pmpOpenChat, set by the Chat page), and a
+# click opens that Chat.
+NOTIFY_SCRIPT = """<script>
+window.pmpNotify = function (items) {
+  if (!("Notification" in window)) return;
+  if (Notification.permission !== "granted") return;
+  let last = 0;
+  try {
+    last = Number(localStorage.getItem("pmpLastNotified") || 0);
+  } catch (e) {}
+  for (const item of items) {
+    if (item.id <= last) continue;
+    last = Math.max(last, item.id);
+    const visible = document.visibilityState === "visible";
+    if (visible && window.pmpOpenChat === item.project) continue;
+    const shown = new Notification(item.title, {
+      body: item.body,
+      tag: "pmp-chat-" + item.id,
+    });
+    shown.onclick = function () {
+      window.focus();
+      window.location.href = item.url;
+      shown.close();
+    };
+  }
+  try {
+    localStorage.setItem("pmpLastNotified", String(last));
+  } catch (e) {}
+};
+</script>"""
+
+
+def notification_items(chat: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """What pmpNotify shows for new Chat messages."""
+    return [
+        {
+            "id": message["message_id"],
+            "project": message["project_id"],
+            "title": f"{message['author']} in {message['project_title']}",
+            "body": ("@ " if message["mentions_me"] else "") + message["text"],
+            "url": f"/chats/{message['project_id']}",
+        }
+        for message in chat
+    ]
+
+
+def _browser_notifications() -> None:
+    """Every minute, show new Chat messages as Windows/Mac notifications, when
+    the browser allows them (#148)."""
+    ui.add_body_html(NOTIFY_SCRIPT)
+    seen: dict[str, int | None] = {"since": None}
+
+    async def look() -> None:
+        try:
+            found = await api.notifications(token(), seen["since"])
+        except api.ApiError:
+            return
+        seen["since"] = found["latest"]
+        items = notification_items(found["chat"])
+        if items:
+            ui.run_javascript(
+                f"window.pmpNotify && window.pmpNotify({json.dumps(items)})"
+            )
+
+    ui.timer(0.5, look, once=True)
+    ui.timer(NOTIFY_SECONDS, look)
 
 
 def _unread_badge(link: ui.link, *, hide_without_chat: bool) -> None:

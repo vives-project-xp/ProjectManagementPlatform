@@ -30,6 +30,54 @@ from pmp_frontend.shell import (
 from pmp_frontend.theme import frame
 
 
+def _notifications_card(user: api.CurrentUser) -> None:
+    """Browser notifications (#148): allow them in this browser, and the
+    switch for Chat messages."""
+
+    async def allow() -> None:
+        answer = await ui.run_javascript(
+            "('Notification' in window)"
+            " ? Notification.requestPermission() : 'unsupported'",
+            timeout=60,
+        )
+        state.text = PERMISSION.get(answer, PERMISSION["default"])
+
+    async def change(event) -> None:
+        try:
+            await api.set_notifications(token(), chat_notifications=event.value)
+        except api.ApiError as error:
+            ui.notify(error.message, type="negative")
+            return
+        ui.notify(
+            "You'll get a notification for new chat messages."
+            if event.value
+            else "No more notifications for chat messages."
+        )
+
+    with ui.card().classes("w-full max-w-md").mark("notifications-card"):
+        ui.label("Notifications").classes("text-h6")
+        ui.label(
+            "A Windows or Mac notification for new messages in your chats, while "
+            "a tab of this site is open (also in the background)."
+        ).classes("text-caption")
+        ui.button(
+            "Allow notifications in this browser", icon="notifications", on_click=allow
+        ).props("outline color=dark").mark("allow-notifications")
+        state = ui.label().classes("text-caption").mark("notification-permission")
+        ui.switch(
+            "Chat notifications", value=user.chat_notifications, on_change=change
+        ).mark("chat-notifications")
+
+
+PERMISSION = {
+    "granted": "This browser shows notifications.",
+    "denied": "This browser blocks notifications: allow them in the site settings "
+    "(the icon left of the address).",
+    "unsupported": "This browser can't show notifications.",
+    "default": "Notifications aren't allowed yet.",
+}
+
+
 def _daily_email_card(on: bool) -> None:
     """The switch for the 08:30 Daily email (spec #68)."""
 
@@ -190,6 +238,8 @@ def register_pages() -> None:
                     user.github_username,
                     lambda username: api.set_my_github_username(token(), username),
                 )
+            if not user.must_change_password:
+                _notifications_card(user)
             # The Superuser is on no Project, so never gets the Daily email.
             if not user.must_change_password and user.role not in (
                 "superuser",
