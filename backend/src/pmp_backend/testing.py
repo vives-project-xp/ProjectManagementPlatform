@@ -23,7 +23,12 @@ from pmp_backend.services.github import (
 )
 from pmp_backend.services.instagram import ChannelError, Published, RefreshedToken
 from pmp_backend.services.post_ai import AiAnswer, AiError, AiRequest
-from pmp_backend.services.tiktok import CodeRefusedError, Tokens
+from pmp_backend.services.tiktok import (
+    CodeRefusedError,
+    CreatorInfo,
+    Tokens,
+    VideoPost,
+)
 from pmp_backend.services.trello import (
     BoardInfo,
     CreatedBoard,
@@ -436,10 +441,19 @@ class FakeInstagram:
         )
 
 
+@dataclass
+class FakeTikTokPost:
+    token: str
+    video: str
+    post: VideoPost
+
+
 class FakeTikTok:
-    """TikTok for tests (#146): any code works except those in `refused`;
-    `failing` makes every call fail as if TikTok were down, `refresh_failing`
-    only the refreshes. Records the codes and refresh tokens it got."""
+    """TikTok for tests (#146, #147): any code works except those in
+    `refused`; `failing` makes every call fail as if TikTok were down,
+    `refresh_failing` only the refreshes, `publish_failures` the next video
+    posts. Records the codes, refresh tokens and videos it got; `info` is the
+    account's creator info (like the sandbox: only "Only me")."""
 
     ACCESS_LIFETIME = timedelta(hours=24)
     REFRESH_LIFETIME = timedelta(days=365)
@@ -451,6 +465,16 @@ class FakeTikTok:
         self.failing = False
         self.refresh_failing = False
         self.name = "VIVES test"
+        self.posts: list[FakeTikTokPost] = []
+        self.publish_failures = 0
+        self.info = CreatorInfo(
+            nickname="VIVES test",
+            privacy_levels=["SELF_ONLY"],
+            comment_disabled=False,
+            duet_disabled=False,
+            stitch_disabled=False,
+            max_video_seconds=600,
+        )
 
     def _tokens(self, number: int, now: datetime) -> Tokens:
         return Tokens(
@@ -478,3 +502,18 @@ class FakeTikTok:
         if self.failing:
             raise ChannelError("TikTok can't be reached: fake")
         return self.name
+
+    def creator_info(self, access_token: str) -> CreatorInfo:
+        if self.failing:
+            raise ChannelError("TikTok can't be reached: fake")
+        return self.info
+
+    def publish_video(self, access_token: str, video: Path, post: VideoPost) -> str:
+        assert video.is_file(), video
+        if self.failing:
+            raise ChannelError("TikTok can't be reached: fake")
+        if self.publish_failures > 0:
+            self.publish_failures -= 1
+            raise ChannelError("TikTok answered 500: Fake failure")
+        self.posts.append(FakeTikTokPost(access_token, str(video), post))
+        return ""

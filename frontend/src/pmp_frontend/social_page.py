@@ -131,6 +131,20 @@ def _outcome(week: dict[str, Any]) -> None:
             ui.link("View on Instagram", week["published_url"], new_tab=True).mark(
                 "instagram-link"
             )
+    if week.get("tiktok_state"):
+        with ui.row().classes("items-center gap-2").mark("tiktok-outcome"):
+            ui.icon("music_note", color="dark")
+            ui.label(tiktok_outcome(week))
+
+
+def tiktok_outcome(week: dict[str, Any]) -> str:
+    """Where the week's video stands on TikTok (#147)."""
+    state = week["tiktok_state"]
+    if state in ("scheduled", "to_post_by_hand"):
+        return f"Also on TikTok: scheduled for {shown(week['tiktok_scheduled_for'])}."
+    if state == "published":
+        return "Also on TikTok: published."
+    return f"Also on TikTok: posted on {shown(week['tiktok_posted_at'])}."
 
 
 def disk_warning(storage: dict[str, Any]) -> None:

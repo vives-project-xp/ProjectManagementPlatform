@@ -95,7 +95,7 @@ The TikTok part (Weekly slideshow, Project videos) is the next spec. What exists
 
 1. A TikTok developer **organisation** for VIVES, with an app (type **Other**): products **Login Kit** and **Content Posting API** (Direct Post), scopes `user.info.basic`, `video.upload`, `video.publish`.
 2. Terms of Service and Privacy Policy: [`legal/terms-of-service.md`](legal/terms-of-service.md) and [`legal/privacy-policy.md`](legal/privacy-policy.md) (adapt the contact to VIVES). TikTok wants **verified URLs** (URL properties) for production. Put them on the VIVES domain, or verify a GitHub Pages address.
-3. Until TikTok's **audit** is approved, everything an app posts is visible only to the account itself. The audit needs a demo video of the working flow.
+3. Until TikTok's **audit** is approved, everything an app posts is visible only to the account itself, and the account must be set to **Private** in the TikTok app (otherwise TikTok refuses every post). The audit needs a demo video of the working flow.
 4. **Settings** in `/opt/pmp/.env` (see [`tiktok.md`](tiktok.md)):
    - `TIKTOK_CLIENT_KEY` and `TIKTOK_CLIENT_SECRET`: the VIVES app's **Client key** and **Client secret** (app page, "Credentials");
    - `TIKTOK_REDIRECT_URI`: the redirect URI registered under Login Kit. Today it's the GitHub repo's address; with a hostname it can be any page of the VIVES site. The value in `.env` must match the registered one exactly.

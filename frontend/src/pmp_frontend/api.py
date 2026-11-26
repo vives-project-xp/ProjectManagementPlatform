@@ -967,11 +967,38 @@ async def generate_suggestion(token: str, suggestion_id: int) -> dict[str, Any]:
     )
 
 
-async def post_suggestion(token: str, suggestion_id: int) -> dict[str, Any]:
-    """Accept it: it gets Instagram's next free Posting time (scheduled_for)."""
+async def post_suggestion(
+    token: str, suggestion_id: int, tiktok: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    """Accept it: it gets Instagram's next free Posting time (scheduled_for).
+    `tiktok` (#147): also_on_tiktok, privacy_level, allow_comment, allow_duet
+    and allow_stitch; its video then also gets TikTok's next free time."""
     return await _request(
-        "POST", f"/api/post-suggestions/{suggestion_id}/post", token=token
+        "POST",
+        f"/api/post-suggestions/{suggestion_id}/post",
+        token=token,
+        json=tiktok,
     )
+
+
+async def pull_back_tiktok(token: str, suggestion_id: int) -> dict[str, Any]:
+    """Take the video out of TikTok's line; the Instagram post stays."""
+    return await _request(
+        "POST", f"/api/post-suggestions/{suggestion_id}/tiktok/pull-back", token=token
+    )
+
+
+async def mark_tiktok_posted(token: str, suggestion_id: int) -> dict[str, Any]:
+    return await _request(
+        "POST", f"/api/post-suggestions/{suggestion_id}/tiktok/posted", token=token
+    )
+
+
+async def tiktok_creator_info(token: str) -> dict[str, Any]:
+    """What the TikTok account may post (Teachers, Superuser): connected,
+    nickname, privacy_levels ({TikTok name: shown}), comment_disabled,
+    duet_disabled, stitch_disabled and error."""
+    return await _request("GET", "/api/social/tiktok/creator-info", token=token)
 
 
 async def pull_back_suggestion(token: str, suggestion_id: int) -> dict[str, Any]:

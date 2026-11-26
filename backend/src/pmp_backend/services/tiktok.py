@@ -1,12 +1,14 @@
-"""TikTok as a Channel (spec #145): Login Kit for the account's tokens and,
-later, the Content Posting API.
+"""TikTok as a Channel (spec #145): Login Kit for the account's tokens and the
+Content Posting API (Direct Post) for videos.
 
 The access token lives 24 hours, the refresh token a year; both come from
 TikTok's OAuth endpoint (`/v2/oauth/token/`), first for the code the Superuser
 pastes after logging in on TikTok, then for every refresh."""
 
+import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Protocol
 from urllib.parse import urlencode
 
@@ -17,6 +19,30 @@ from pmp_backend.settings import Settings
 
 TIMEOUT_SECONDS = 60
 SCOPES = "user.info.basic,video.upload,video.publish"
+# Who can see a post, as TikTok names it; creator info says which the account
+# may use (only SELF_ONLY until the app passed TikTok's audit).
+PRIVACY_LEVELS = {
+    "PUBLIC_TO_EVERYONE": "Everyone",
+    "MUTUAL_FOLLOW_FRIENDS": "Friends",
+    "FOLLOWER_OF_CREATOR": "Followers",
+    "SELF_ONLY": "Only me",
+}
+# A video goes up in one piece up to this size, otherwise in 10 MB pieces
+# (TikTok: 5-64 MB per piece, the last one takes the rest).
+SINGLE_UPLOAD_BYTES = 64 * 1000 * 1000
+CHUNK_BYTES = 10 * 1000 * 1000
+# How long TikTok may take to process an uploaded video.
+PROCESSING_SECONDS = 300
+POLL_SECONDS = 5
+# TikTok's error codes that need a person, with what to do.
+KNOWN_ERRORS = {
+    "unaudited_client_can_only_post_to_private_accounts": (
+        "Until TikTok's audit, the app can only post to a private account: set "
+        "the TikTok account to Private (TikTok app, Settings and privacy, "
+        "Privacy, Private account)."
+    ),
+    "spam_risk_too_many_posts": "TikTok's daily post limit for the account is reached.",
+}
 
 
 class CodeRefusedError(ChannelError):
@@ -31,6 +57,27 @@ class Tokens:
     refresh_expires_at: datetime
 
 
+@dataclass(frozen=True)
+class CreatorInfo:
+    """What TikTok allows this account to post (asked before every post)."""
+
+    nickname: str
+    privacy_levels: list[str]
+    comment_disabled: bool
+    duet_disabled: bool
+    stitch_disabled: bool
+    max_video_seconds: int
+
+
+@dataclass(frozen=True)
+class VideoPost:
+    caption: str
+    privacy_level: str
+    allow_comment: bool
+    allow_duet: bool
+    allow_stitch: bool
+
+
 class TikTok(Protocol):
     def exchange_code(self, code: str, now: datetime) -> Tokens:
         """The tokens for a Login Kit code; CodeRefusedError when TikTok
@@ -43,6 +90,16 @@ class TikTok(Protocol):
 
     def account_name(self, access_token: str) -> str:
         """The account's display name; ChannelError on failure."""
+        ...
+
+    def creator_info(self, access_token: str) -> CreatorInfo:
+        """What the account may post; ChannelError on failure."""
+        ...
+
+    def publish_video(self, access_token: str, video: Path, post: VideoPost) -> str:
+        """Post the video file (Direct Post) and wait until TikTok is done; the
+        post's address when TikTok gives one (only public posts), else "".
+        ChannelError on failure."""
         ...
 
 
@@ -155,3 +212,120 @@ class HttpTikTok:
             return response.json()["data"]["user"]["display_name"]
         except (KeyError, TypeError, ValueError) as error:
             raise ChannelError("TikTok gave no account name.") from error
+
+    def _post(self, url: str, access_token: str, body: dict) -> dict:
+        """A Content Posting API call; its `data`. TikTok answers every call
+        with an `error` whose code is "ok" when it worked."""
+        try:
+            response = self._client.post(
+                url,
+                json=body,
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                    "Content-Type": "application/json; charset=UTF-8",
+                },
+            )
+        except httpx.HTTPError as error:
+            raise ChannelError(f"TikTok can't be reached: {error}") from error
+        try:
+            answer = response.json()
+        except ValueError:
+            answer = {}
+        code = (answer.get("error") or {}).get("code", "ok")
+        if response.status_code >= 400 or code != "ok":
+            if code in KNOWN_ERRORS:
+                raise ChannelError(KNOWN_ERRORS[code])
+            message = (answer.get("error") or {}).get("message") or response.text[:200]
+            raise ChannelError(
+                f"TikTok answered {response.status_code} ({code}): {message}"
+            )
+        return answer.get("data") or {}
+
+    def creator_info(self, access_token: str) -> CreatorInfo:
+        data = self._post("/v2/post/publish/creator_info/query/", access_token, {})
+        try:
+            return CreatorInfo(
+                nickname=data.get("creator_nickname") or data["creator_username"],
+                privacy_levels=list(data["privacy_level_options"]),
+                comment_disabled=bool(data.get("comment_disabled")),
+                duet_disabled=bool(data.get("duet_disabled")),
+                stitch_disabled=bool(data.get("stitch_disabled")),
+                max_video_seconds=int(data.get("max_video_post_duration_sec") or 0),
+            )
+        except (KeyError, TypeError, ValueError) as error:
+            raise ChannelError("TikTok gave no creator info.") from error
+
+    def publish_video(self, access_token: str, video: Path, post: VideoPost) -> str:
+        size = video.stat().st_size
+        if size <= SINGLE_UPLOAD_BYTES:
+            chunk, count = size, 1
+        else:
+            chunk, count = CHUNK_BYTES, size // CHUNK_BYTES
+        started = self._post(
+            "/v2/post/publish/video/init/",
+            access_token,
+            {
+                "post_info": {
+                    "title": post.caption,
+                    "privacy_level": post.privacy_level,
+                    "disable_comment": not post.allow_comment,
+                    "disable_duet": not post.allow_duet,
+                    "disable_stitch": not post.allow_stitch,
+                },
+                "source_info": {
+                    "source": "FILE_UPLOAD",
+                    "video_size": size,
+                    "chunk_size": chunk,
+                    "total_chunk_count": count,
+                },
+            },
+        )
+        try:
+            publish_id, upload_url = started["publish_id"], started["upload_url"]
+        except KeyError as error:
+            raise ChannelError("TikTok gave no upload address.") from error
+        with video.open("rb") as file:
+            for number in range(count):
+                start = number * chunk
+                # The last piece takes the rest of the file.
+                end = size - 1 if number == count - 1 else start + chunk - 1
+                file.seek(start)
+                piece = file.read(end - start + 1)
+                try:
+                    uploaded = httpx.put(
+                        upload_url,
+                        content=piece,
+                        headers={
+                            "Content-Type": "video/mp4",
+                            "Content-Range": f"bytes {start}-{end}/{size}",
+                        },
+                        timeout=PROCESSING_SECONDS,
+                    )
+                except httpx.HTTPError as error:
+                    raise ChannelError(f"The video upload failed: {error}") from error
+                if uploaded.status_code >= 400:
+                    raise ChannelError(
+                        f"The video upload failed: {uploaded.status_code} "
+                        f"{uploaded.text[:200]}"
+                    )
+        return self._wait_until_posted(access_token, publish_id)
+
+    def _wait_until_posted(self, access_token: str, publish_id: str) -> str:
+        deadline = time.monotonic() + PROCESSING_SECONDS
+        while True:
+            data = self._post(
+                "/v2/post/publish/status/fetch/",
+                access_token,
+                {"publish_id": publish_id},
+            )
+            status = data.get("status")
+            if status == "PUBLISH_COMPLETE":
+                ids = data.get("publicaly_available_post_id") or []
+                return f"https://www.tiktok.com/video/{ids[0]}" if ids else ""
+            if status == "FAILED":
+                raise ChannelError(
+                    f"TikTok couldn't post the video ({data.get('fail_reason')})."
+                )
+            if time.monotonic() > deadline:
+                raise ChannelError("TikTok took too long to process the video.")
+            time.sleep(POLL_SECONDS)

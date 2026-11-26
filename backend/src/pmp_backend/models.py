@@ -685,6 +685,57 @@ class PostSuggestion(Base):
     posted_by: Mapped[User | None] = relationship(
         lazy="joined", foreign_keys=[posted_by_id]
     )
+    # Its post on TikTok when the reviewer ticked Also on TikTok (#147).
+    tiktok_post: Mapped["TikTokPost | None"] = relationship(
+        lazy="selectin", viewonly=True
+    )
+
+
+class TikTokPost(Base):
+    """A Post suggestion's video on TikTok (spec #145, #147): Posted with Also
+    on TikTok ticked, with its own Posting time and state next to the
+    Instagram post. Pulled back means the row is deleted."""
+
+    __tablename__ = "tiktok_posts"
+    __table_args__ = (
+        CheckConstraint(
+            "state IN ('scheduled', 'published', 'to_post_by_hand', 'posted_by_hand')",
+            name="ck_tiktok_posts_state",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    suggestion_id: Mapped[int] = mapped_column(
+        ForeignKey("post_suggestions.id", ondelete="CASCADE"), unique=True
+    )
+    # The Weekly update's video; null once it was deleted.
+    medium_id: Mapped[int | None] = mapped_column(
+        ForeignKey("weekly_media.id", ondelete="SET NULL")
+    )
+    state: Mapped[str] = mapped_column(String(20), default="scheduled")
+    # The reviewer's choices for TikTok (from TikTok's creator info).
+    privacy_level: Mapped[str] = mapped_column(String(40))
+    allow_comment: Mapped[bool] = mapped_column(default=True)
+    allow_duet: Mapped[bool] = mapped_column(default=False)
+    allow_stitch: Mapped[bool] = mapped_column(default=False)
+    # Its place in TikTok's line and the Posting time it got.
+    queued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    scheduled_for: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Publishing: failed tries, the retry, the last error, TikTok's publish id
+    # and the post's link once public.
+    attempts: Mapped[int] = mapped_column(default=0)
+    retry_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    error: Mapped[str | None] = mapped_column(String(500))
+    publish_id: Mapped[str | None] = mapped_column(String(100))
+    published_url: Mapped[str | None] = mapped_column(String(500))
+    # Published automatically (posted_at) or by hand (posted_by too).
+    posted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    posted_by_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
+
+    suggestion: Mapped[PostSuggestion] = relationship(lazy="joined")
+    posted_by: Mapped[User | None] = relationship(lazy="joined")
 
 
 class PublishLink(Base):

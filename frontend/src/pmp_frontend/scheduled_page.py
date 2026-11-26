@@ -7,7 +7,7 @@ from typing import Any
 from nicegui import ui
 
 from pmp_frontend import api
-from pmp_frontend.review_page import SuggestionCard
+from pmp_frontend.review_page import SuggestionCard, tiktok_text
 from pmp_frontend.shell import ErrorMessage, confirm, role_page, token
 from pmp_frontend.social_page import media_grid, medium_url
 from pmp_frontend.times import shown
@@ -110,6 +110,122 @@ def _published_row(post: dict[str, Any]) -> None:
             )
 
 
+def _tiktok_to_post_card(post: dict[str, Any], reload) -> None:
+    """A TikTok video whose Posting time has come and that wasn't published
+    automatically (#147): download it, copy the caption, post it by hand."""
+    tiktok = post["tiktok"]
+
+    async def posted() -> None:
+        if not await confirm(f"Did you post {post['title']} on TikTok?", "Posted"):
+            return
+        try:
+            await api.mark_tiktok_posted(token(), post["id"])
+        except api.ApiError as problem:
+            error.show(problem.message)
+            return
+        ui.notify("Marked as posted on TikTok.")
+        await reload()
+
+    def copy() -> None:
+        ui.clipboard.write(post_text(post))
+        ui.notify("The caption was copied.")
+
+    with ui.card().classes("w-full max-w-3xl").mark(f"tiktok-to-post-{post['id']}"):
+        with ui.row().classes("w-full items-center"):
+            ui.label(post["project"]["title"]).classes("text-h6")
+            ui.label(f"Posting time {shown(tiktok['scheduled_for'])}").classes(
+                "text-caption"
+            )
+        ui.label(post["title"]).classes("font-medium")
+        ui.label(post["caption"]).classes("whitespace-pre-wrap")
+        ui.label(
+            "Who can see it: "
+            + {
+                "PUBLIC_TO_EVERYONE": "Everyone",
+                "MUTUAL_FOLLOW_FRIENDS": "Friends",
+                "FOLLOWER_OF_CREATOR": "Followers",
+                "SELF_ONLY": "Only me",
+            }.get(tiktok["privacy_level"], tiktok["privacy_level"])
+        ).classes("text-caption")
+        if tiktok["error"]:
+            with ui.row().classes("items-center gap-2 no-wrap").mark("tiktok-error"):
+                ui.icon("warning", color="primary")
+                ui.label(tiktok["error"])
+        error = ErrorMessage()
+        with ui.row().classes("items-center gap-2"):
+            if tiktok["medium_id"]:
+                ui.button(
+                    "Download video",
+                    icon="download",
+                    on_click=lambda: ui.download(
+                        medium_url({"id": tiktok["medium_id"]}),
+                        f"{post['project']['title']}-{tiktok['medium_id']}.mp4",
+                    ),
+                ).props("outline color=dark").mark("download-tiktok-video")
+            ui.button("Copy caption", icon="content_copy", on_click=copy).props(
+                "outline color=dark"
+            ).mark("copy-tiktok-caption")
+            ui.button("Posted", icon="done", on_click=posted).mark("mark-tiktok-posted")
+
+
+def _tiktok_scheduled_row(post: dict[str, Any], reload) -> None:
+    async def pull_back() -> None:
+        try:
+            await api.pull_back_tiktok(token(), post["id"])
+        except api.ApiError as problem:
+            ui.notify(problem.message, type="negative")
+            return
+        ui.notify("The video was taken off TikTok's line.")
+        await reload()
+
+    with ui.row().classes("items-center gap-2").mark(f"tiktok-scheduled-{post['id']}"):
+        ui.icon("schedule", color="dark")
+        ui.label(f"{post['project']['title']}: {post['title']}").classes("font-medium")
+        ui.label(tiktok_text(post["tiktok"])).classes("text-caption")
+        ui.button("Pull back", icon="undo", on_click=pull_back).props(
+            "flat dense color=dark"
+        ).mark(f"tiktok-row-pull-back-{post['id']}")
+
+
+def _tiktok_lists(found: dict[str, Any], reload) -> None:
+    ui.label("TikTok videos").classes("text-h5")
+    if not found["tiktok_automatic"]:
+        with ui.row().classes("items-center gap-2 no-wrap").mark("tiktok-notice"):
+            ui.icon("info", color="dark")
+            ui.label(
+                found["tiktok_error"]
+                or "TikTok isn't connected (Social media screen): publish the videos "
+                "yourself, then press Posted."
+            )
+    ui.label("To post today on TikTok").classes("text-h6")
+    if not found["tiktok_to_post"]:
+        ui.label("Nothing to post on TikTok right now.").mark("nothing-on-tiktok")
+    for post in found["tiktok_to_post"]:
+        _tiktok_to_post_card(post, reload)
+    ui.label("Scheduled on TikTok").classes("text-h6")
+    if not found["tiktok_scheduled"]:
+        ui.label("No TikTok videos scheduled.")
+    for post in found["tiktok_scheduled"]:
+        _tiktok_scheduled_row(post, reload)
+    if found["tiktok_published"]:
+        ui.label("Published on TikTok").classes("text-h6")
+        for post in found["tiktok_published"]:
+            with (
+                ui.row()
+                .classes("items-center gap-2")
+                .mark(f"tiktok-published-{post['id']}")
+            ):
+                ui.icon("check_circle", color="dark")
+                ui.label(f"{post['project']['title']}: {post['title']}").classes(
+                    "font-medium"
+                )
+                ui.label(shown(post["tiktok"]["posted_at"])).classes("text-caption")
+                if post["tiktok"]["published_url"]:
+                    ui.link(
+                        "View on TikTok", post["tiktok"]["published_url"], new_tab=True
+                    )
+
+
 def register() -> None:
     @role_page("/scheduled-posts", "Scheduled posts", {"superuser", "teacher"})
     async def scheduled_page(user: api.CurrentUser) -> None:
@@ -144,5 +260,6 @@ def register() -> None:
                 ui.label("Published").classes("text-h6")
                 for post in found["published"]:
                     _published_row(post)
+            _tiktok_lists(found, lists.refresh)
 
         await lists()

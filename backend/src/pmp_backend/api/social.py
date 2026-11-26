@@ -34,7 +34,9 @@ from pmp_backend.services import (
     suggestions,
     tiktok,
     tiktok_connection,
+    tiktok_posts,
 )
+from pmp_backend.services.instagram import ChannelError
 from pmp_backend.services.social import MyWeeklyUpdate, WeekView
 
 router = APIRouter(prefix="/api", tags=["social"])
@@ -232,6 +234,11 @@ class WeeklyUpdateOut(BaseModel):
     published_url: str | None
     # Set once the never-posted Media were deleted, 4 months after the week.
     media_removed_at: datetime | None
+    # Its video on TikTok (#147): "scheduled", "published", "to_post_by_hand"
+    # or "posted_by_hand"; null when it isn't on TikTok.
+    tiktok_state: str | None
+    tiktok_scheduled_for: datetime | None
+    tiktok_posted_at: datetime | None
 
     @classmethod
     def of(cls, week: WeekView) -> "WeeklyUpdateOut":
@@ -451,6 +458,52 @@ class SuggestionOut(BaseModel):
     # when it gave up), and the post on Instagram once "published".
     publish_error: str | None
     published_url: str | None
+    # Whether the Weekly update has a ready video (Also on TikTok, #147), and
+    # its TikTok post once there is one.
+    has_video: bool
+    tiktok: "TikTokPostOut | None"
+
+
+class TikTokPostOut(BaseModel):
+    # "scheduled", "published", "to_post_by_hand" or "posted_by_hand".
+    state: str
+    scheduled_for: datetime | None
+    # Who can see it (TikTok's name, e.g. "SELF_ONLY") and the reviewer's
+    # other choices.
+    privacy_level: str
+    allow_comment: bool
+    allow_duet: bool
+    allow_stitch: bool
+    # Why the last try failed (on To post today when it gave up).
+    error: str | None
+    # The video file (GET /api/weekly-media/{id}); null once it was deleted.
+    medium_id: int | None
+    posted_by: str | None
+    posted_at: datetime | None
+    published_url: str | None
+
+
+SuggestionOut.model_rebuild()
+
+
+def _tiktok_out(post) -> TikTokPostOut | None:
+    if post is None:
+        return None
+    return TikTokPostOut(
+        state=post.state,
+        scheduled_for=post.scheduled_for,
+        privacy_level=post.privacy_level,
+        allow_comment=post.allow_comment,
+        allow_duet=post.allow_duet,
+        allow_stitch=post.allow_stitch,
+        error=post.error,
+        medium_id=post.medium_id,
+        posted_by=(post.posted_by.full_name if post.posted_by else "Deleted user")
+        if post.state == "posted_by_hand"
+        else None,
+        posted_at=post.posted_at,
+        published_url=post.published_url,
+    )
 
 
 @router.get("/post-suggestions")
@@ -508,6 +561,8 @@ def _suggestions_out(views: list[suggestions.SuggestionView]) -> list[Suggestion
                 posted_at=suggestion.posted_at,
                 publish_error=suggestion.publish_error,
                 published_url=suggestion.published_url,
+                has_video=tiktok_posts.video_of(suggestion) is not None,
+                tiktok=_tiktok_out(suggestion.tiktok_post),
             )
         )
     return found
@@ -583,13 +638,107 @@ def generate_again(
     return _one(session, suggestion_id)
 
 
+class PostIn(BaseModel):
+    # Also on TikTok (#147): the video too, with who can see it (one of
+    # TikTok's privacy levels) and the interaction switches.
+    also_on_tiktok: bool = False
+    privacy_level: str | None = None
+    allow_comment: bool = True
+    allow_duet: bool = False
+    allow_stitch: bool = False
+
+
 @router.post("/post-suggestions/{suggestion_id}/post")
 def post_suggestion(
+    suggestion_id: int,
+    session: SessionDep,
+    user: TeacherOrSuperuserDep,
+    body: PostIn | None = None,
+) -> SuggestionOut:
+    """Accept it: it gets Instagram's next free Posting time (no "right now"),
+    and its video TikTok's when Also on TikTok is ticked."""
+    choice = None
+    if body is not None and body.also_on_tiktok:
+        choice = tiktok_posts.Choice(
+            privacy_level=body.privacy_level or "",
+            allow_comment=body.allow_comment,
+            allow_duet=body.allow_duet,
+            allow_stitch=body.allow_stitch,
+        )
+    posting.post(session, user, suggestion_id, tiktok=choice)
+    return _one(session, suggestion_id)
+
+
+@router.post("/post-suggestions/{suggestion_id}/tiktok/pull-back")
+def pull_back_tiktok(
     suggestion_id: int, session: SessionDep, user: TeacherOrSuperuserDep
 ) -> SuggestionOut:
-    """Accept it: it gets Instagram's next free Posting time (no "right now")."""
-    posting.post(session, user, suggestion_id)
+    """Take the video out of TikTok's line; the Instagram post stays."""
+    tiktok_posts.pull_back(session, suggestion_id)
     return _one(session, suggestion_id)
+
+
+@router.post("/post-suggestions/{suggestion_id}/tiktok/posted")
+def mark_tiktok_posted(
+    suggestion_id: int, session: SessionDep, user: TeacherOrSuperuserDep
+) -> SuggestionOut:
+    """The video was posted on TikTok by hand from To post today."""
+    tiktok_posts.mark_posted(session, user, suggestion_id)
+    return _one(session, suggestion_id)
+
+
+class CreatorInfoOut(BaseModel):
+    # Whether the TikTok account is connected; without it the options are
+    # TikTok's usual ones and the post goes to To post today.
+    connected: bool
+    nickname: str | None
+    # Who can see a post: TikTok's name and how it is shown.
+    privacy_levels: dict[str, str]
+    comment_disabled: bool
+    duet_disabled: bool
+    stitch_disabled: bool
+    # Why the account's options couldn't be fetched.
+    error: str | None
+
+
+@router.get("/social/tiktok/creator-info")
+def creator_info(
+    request: Request,
+    session: SessionDep,
+    settings: SettingsDep,
+    user: TeacherOrSuperuserDep,
+) -> CreatorInfoOut:
+    """What the account may post, for the Also on TikTok choices in Review."""
+    now = datetime.now(posting.BRUSSELS)
+    token = tiktok_connection.access_token(session, settings, now)
+    session.commit()
+    fallback = CreatorInfoOut(
+        connected=False,
+        nickname=None,
+        privacy_levels=dict(tiktok.PRIVACY_LEVELS),
+        comment_disabled=False,
+        duet_disabled=False,
+        stitch_disabled=False,
+        error=None,
+    )
+    if token is None:
+        return fallback
+    try:
+        info = request.app.state.tiktok.creator_info(token)
+    except ChannelError as error:
+        return fallback.model_copy(update={"error": str(error)})
+    return CreatorInfoOut(
+        connected=True,
+        nickname=info.nickname,
+        privacy_levels={
+            level: tiktok.PRIVACY_LEVELS.get(level, level)
+            for level in info.privacy_levels
+        },
+        comment_disabled=info.comment_disabled,
+        duet_disabled=info.duet_disabled,
+        stitch_disabled=info.stitch_disabled,
+        error=None,
+    )
 
 
 @router.post("/post-suggestions/{suggestion_id}/pull-back")
@@ -627,6 +776,13 @@ class ScheduledPostsOut(BaseModel):
     # The last posts published automatically, newest first (#117).
     published: list[SuggestionOut]
     channel: ChannelOut
+    # TikTok videos (#147), the same three lists for the suggestions' TikTok
+    # posts, and whether they are published automatically.
+    tiktok_to_post: list[SuggestionOut]
+    tiktok_scheduled: list[SuggestionOut]
+    tiktok_published: list[SuggestionOut]
+    tiktok_automatic: bool
+    tiktok_error: str | None
 
 
 @router.get("/scheduled-posts")
@@ -638,9 +794,19 @@ def scheduled_posts(
     by_id = {
         found.id: found for found in _suggestions_out(suggestions.suggestions(session))
     }
+    tiktok_to_post, tiktok_scheduled, tiktok_published = tiktok_posts.lists(session)
+    connection = tiktok_connection.status(
+        session, settings, datetime.now(posting.BRUSSELS)
+    )
+    session.commit()
     return ScheduledPostsOut(
         to_post=[by_id[i] for i in to_post],
         scheduled=[by_id[i] for i in scheduled],
         published=[by_id[i] for i in published],
         channel=ChannelOut(**vars(publishing.status(session, settings))),
+        tiktok_to_post=[by_id[i] for i in tiktok_to_post],
+        tiktok_scheduled=[by_id[i] for i in tiktok_scheduled],
+        tiktok_published=[by_id[i] for i in tiktok_published],
+        tiktok_automatic=connection.connected,
+        tiktok_error=connection.error,
     )
