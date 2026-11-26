@@ -102,6 +102,15 @@ class TikTok(Protocol):
         ChannelError on failure."""
         ...
 
+    def send_photos_to_inbox(
+        self, access_token: str, photo_urls: list[str], title: str, caption: str
+    ) -> str:
+        """Send a photo post to the account's TikTok inbox (upload mode, #150):
+        TikTok downloads the photos from the links; a person picks the song and
+        posts it in the app. Waits until it is in the inbox; the publish id.
+        ChannelError on failure."""
+        ...
+
 
 def is_configured(settings: Settings) -> bool:
     return bool(
@@ -310,7 +319,37 @@ class HttpTikTok:
                     )
         return self._wait_until_posted(access_token, publish_id)
 
-    def _wait_until_posted(self, access_token: str, publish_id: str) -> str:
+    def send_photos_to_inbox(
+        self, access_token: str, photo_urls: list[str], title: str, caption: str
+    ) -> str:
+        started = self._post(
+            "/v2/post/publish/content/init/",
+            access_token,
+            {
+                "post_info": {
+                    "title": title,
+                    "description": caption,
+                    "auto_add_music": True,
+                },
+                "source_info": {
+                    "source": "PULL_FROM_URL",
+                    "photo_cover_index": 0,
+                    "photo_images": photo_urls,
+                },
+                "post_mode": "MEDIA_UPLOAD",
+                "media_type": "PHOTO",
+            },
+        )
+        try:
+            publish_id = started["publish_id"]
+        except KeyError as error:
+            raise ChannelError("TikTok gave no publish id.") from error
+        self._wait_until_posted(access_token, publish_id, inbox=True)
+        return publish_id
+
+    def _wait_until_posted(
+        self, access_token: str, publish_id: str, *, inbox: bool = False
+    ) -> str:
         deadline = time.monotonic() + PROCESSING_SECONDS
         while True:
             data = self._post(
@@ -319,6 +358,8 @@ class HttpTikTok:
                 {"publish_id": publish_id},
             )
             status = data.get("status")
+            if inbox and status == "SEND_TO_USER_INBOX":
+                return ""
             if status == "PUBLISH_COMPLETE":
                 ids = data.get("publicaly_available_post_id") or []
                 return f"https://www.tiktok.com/video/{ids[0]}" if ids else ""

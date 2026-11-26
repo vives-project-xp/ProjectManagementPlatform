@@ -6,7 +6,7 @@ import re
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, PlainTextResponse
 
 from pmp_backend.api.deps import SessionDep, SettingsDep
 from pmp_backend.errors import NotFound
@@ -19,6 +19,16 @@ _CODE = re.compile(r"^[A-Za-z0-9_-]{32,64}$")
 
 @router.get("/social/{code}")
 def linked_medium(code: str, session: SessionDep, settings: SettingsDep):
+    # TikTok's URL-prefix verification file (#150), when set.
+    if (
+        settings.tiktok_verification_file
+        and code == settings.tiktok_verification_file
+        and settings.tiktok_verification_content
+    ):
+        return PlainTextResponse(
+            settings.tiktok_verification_content,
+            headers={"X-Content-Type-Options": "nosniff"},
+        )
     if not _CODE.match(code):
         raise HTTPException(status_code=404, detail=publishing.NO_LINK)
     try:

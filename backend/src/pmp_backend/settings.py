@@ -71,6 +71,11 @@ class Settings(DatabaseSettings):
     )
     tiktok_api_url: str = "https://open.tiktokapis.com"
     tiktok_auth_url: str = "https://www.tiktok.com/v2/auth/authorize/"
+    # TikTok's URL-prefix verification (#150): the file name TikTok gives (e.g.
+    # "tiktokAbC123.txt") and its content, served at PUBLIC_MEDIA_URL/social/
+    # so TikTok accepts the Weekly slideshow's photo links from there.
+    tiktok_verification_file: str | None = None
+    tiktok_verification_content: str | None = None
     # The mailbox for the 08:30 daily email (spec #68); without SMTP_HOST no
     # email is sent. Only in /opt/pmp/.env.
     smtp_host: str | None = None

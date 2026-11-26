@@ -81,7 +81,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
         # The Weekly slideshow at its cut-off, and its AI text (#149).
         slideshow_writer = asyncio.create_task(
-            slideshows.run_forever(make_session, lambda: app.state.llm)
+            slideshows.run_forever(
+                make_session,
+                lambda: app.state.llm,
+                lambda: app.state.tiktok,
+                settings,
+            )
         )
         # Never-posted Media go 4 months after their Upload week (#118).
         media_cleaner = asyncio.create_task(

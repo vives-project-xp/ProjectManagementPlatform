@@ -5,7 +5,8 @@ or writes them, lets the AI start over, or refuses it."""
 
 from typing import Any
 
-from nicegui import ui
+from nicegui import app, ui
+from starlette.responses import Response
 
 from pmp_frontend import api
 from pmp_frontend.shell import ErrorMessage, SaveButton, confirm, token
@@ -18,7 +19,13 @@ STATES = {
     "failed": ("Write it yourself", "primary"),
     "refused": ("Refused", "grey-7"),
     "none": ("No slideshow", "grey-7"),
+    "scheduled": ("Scheduled", "positive"),
+    "in_inbox": ("In the TikTok app", "primary"),
+    "to_post_by_hand": ("To post by hand", "primary"),
+    "posted": ("Posted", "positive"),
+    "dropped": ("Not posted in time", "grey-7"),
 }
+SONG_CHECK = "I listened to the song and posted it in the TikTok app"
 MAX_TITLE = 90
 
 
@@ -66,6 +73,118 @@ class SlideshowCard:
 
     def _other(self) -> None:
         self._photos(editable=False)
+
+    # Posting (#150)
+
+    def _scheduled(self) -> None:
+        ui.label(
+            "Goes to the TikTok app on "
+            f"{shown(self.slideshow['scheduled_for'])}; you can pull it back "
+            "until then."
+        ).mark("slideshow-scheduled")
+        if self.slideshow["publish_error"]:
+            self._problem(self.slideshow["publish_error"])
+        self._photos(editable=False)
+        self._text()
+        ui.button("Pull back", icon="undo", on_click=self._pull_back).props(
+            "outline color=dark"
+        ).mark("pull-back-slideshow")
+
+    def _in_inbox(self) -> None:
+        ui.label(
+            "In the TikTok app: choose the song. Open TikTok on the VIVES account, "
+            "find the slideshow in your inbox, pick and listen to a song, post it, "
+            "then press Posted here."
+        ).mark("slideshow-in-inbox")
+        self._photos(editable=False)
+        self._text()
+        self._finish()
+
+    def _to_post_by_hand(self) -> None:
+        ui.label(
+            "Post it yourself: download the photos, copy the caption, make a photo "
+            "post in the TikTok app with a song, then press Posted here."
+        ).mark("slideshow-by-hand")
+        if self.slideshow["publish_error"]:
+            self._problem(self.slideshow["publish_error"])
+        self._photos(editable=False)
+        self._text()
+        with ui.row().classes("items-center gap-2"):
+            ui.button(
+                "Download photos",
+                icon="download",
+                on_click=lambda: ui.download(f"/slideshow-photos/{self._id}.zip"),
+            ).props("outline color=dark").mark("download-slideshow")
+            ui.button("Copy caption", icon="content_copy", on_click=self._copy).props(
+                "outline color=dark"
+            ).mark("copy-slideshow-caption")
+        self._finish()
+
+    def _posted(self) -> None:
+        ui.label(
+            f"Posted by {self.slideshow['posted_by']} on "
+            f"{shown(self.slideshow['posted_at'])}."
+        ).mark("slideshow-posted")
+        self._photos(editable=False)
+
+    def _dropped(self) -> None:
+        ui.label(self.slideshow["publish_error"] or "Not posted in time.").mark(
+            "slideshow-dropped"
+        )
+
+    def _problem(self, text: str) -> None:
+        with ui.row().classes("items-center gap-2 no-wrap").mark("slideshow-problem"):
+            ui.icon("warning", color="primary")
+            ui.label(text)
+
+    def _text(self) -> None:
+        with ui.column().classes("gap-1"):
+            ui.label(self.slideshow["title"] or "").classes("font-medium")
+            ui.label(self.slideshow["caption"] or "").classes("whitespace-pre-wrap")
+
+    def _copy(self) -> None:
+        ui.clipboard.write(f"{self.slideshow['title']}\n\n{self.slideshow['caption']}")
+        ui.notify("The caption was copied.")
+
+    def _finish(self) -> None:
+        """The Song check, then Posted (only once ticked)."""
+        check = ui.checkbox(SONG_CHECK).mark("song-check")
+        ui.button(
+            "Posted", icon="done", on_click=lambda: self._mark_posted(check.value)
+        ).bind_enabled_from(check, "value").mark("mark-slideshow-posted")
+
+    async def _mark_posted(self, checked: bool) -> None:
+        try:
+            await api.mark_slideshow_posted(token(), self._id, bool(checked))
+        except api.ApiError as problem:
+            self.error.show(problem.message)
+            return
+        ui.notify("The slideshow is marked as posted.")
+        await self.reload()
+
+    async def _post(self) -> None:
+        question = (
+            "Post the slideshow? It goes to TikTok at its Posting time (or within a "
+            "minute when that has passed); you can pull it back until then."
+        )
+        if not await confirm(question, "Post"):
+            return
+        try:
+            done = await api.post_slideshow(token(), self._id)
+        except api.ApiError as problem:
+            self.error.show(problem.message)
+            return
+        ui.notify(f"The slideshow goes out on {shown(done['scheduled_for'])}.")
+        await self.reload()
+
+    async def _pull_back(self) -> None:
+        try:
+            await api.pull_back_slideshow(token(), self._id)
+        except api.ApiError as problem:
+            self.error.show(problem.message)
+            return
+        ui.notify("The slideshow was pulled back to Review.")
+        await self.reload()
 
     def _failed(self) -> None:
         ui.label(
@@ -210,7 +329,13 @@ class SlideshowCard:
                 f"{shown(slideshow['reviewed_at'])}."
             ).classes("text-caption")
         with ui.row().classes("items-center gap-2"):
-            SaveButton([title, caption], save).button.mark("save-slideshow")
+            save_button = SaveButton([title, caption], save)
+            save_button.button.mark("save-slideshow")
+            if slideshow["state"] == "waiting":
+                # What is posted is what is saved: save changes first.
+                ui.button("Post", icon="send", on_click=self._post).bind_enabled_from(
+                    save_button.button, "enabled", backward=lambda unsaved: not unsaved
+                ).mark("post-slideshow")
             ui.button("Refuse", on_click=self._refuse).props("outline color=dark").mark(
                 "refuse-slideshow"
             )
@@ -258,3 +383,24 @@ class SlideshowCard:
             return
         ui.notify("The slideshow was refused.")
         await self.reload()
+
+
+def register() -> None:
+    @app.get("/slideshow-photos/{slideshow_id}.zip")
+    async def slideshow_photos(slideshow_id: int) -> Response:
+        """The Weekly slideshow's photos as one zip, fetched with the User's
+        token (#150)."""
+        if not token():
+            return Response(status_code=401)
+        try:
+            found = await api.slideshow_zip(token(), slideshow_id)
+        except api.ApiError as error:
+            return Response(status_code=error.status_code)
+        return Response(
+            found.content,
+            media_type="application/zip",
+            headers={
+                "Content-Disposition": found.headers["content-disposition"],
+                "Cache-Control": "no-store",
+            },
+        )

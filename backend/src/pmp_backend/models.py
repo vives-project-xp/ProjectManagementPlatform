@@ -626,6 +626,10 @@ class WeeklyMedium(Base):
     posted: Mapped[bool] = mapped_column(default=False, server_default=false())
 
     uploaded_by: Mapped[User | None] = relationship(lazy="joined")
+    # The Weekly slideshows it is in (#150).
+    slideshow_photos: Mapped[list["WeeklySlideshowPhoto"]] = relationship(
+        lazy="selectin", viewonly=True
+    )
 
 
 class PostSuggestion(Base):
@@ -753,7 +757,8 @@ class WeeklySlideshow(Base):
     __tablename__ = "weekly_slideshows"
     __table_args__ = (
         CheckConstraint(
-            "state IN ('generating', 'waiting', 'failed', 'refused', 'none')",
+            "state IN ('generating', 'waiting', 'failed', 'refused', 'none', "
+            "'scheduled', 'in_inbox', 'to_post_by_hand', 'posted', 'dropped')",
             name="ck_weekly_slideshows_state",
         ),
     )
@@ -761,7 +766,10 @@ class WeeklySlideshow(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     closes_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), unique=True)
     # "generating" (the AI is writing), "waiting" (for Review), "failed" (the
-    # AI couldn't), "refused", or "none" (no Posted Project had a photo).
+    # AI couldn't), "refused", or "none" (no Posted Project had a photo); once
+    # Posted (#150): "scheduled", "in_inbox" (waiting in the TikTok app for
+    # its song), "to_post_by_hand", "posted"; "dropped" when it wasn't Posted
+    # by the next cut-off.
     state: Mapped[str] = mapped_column(String(20))
     title: Mapped[str | None] = mapped_column(String(200))
     caption: Mapped[str | None] = mapped_column(Text)
@@ -776,13 +784,31 @@ class WeeklySlideshow(Base):
     )
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     refusal_reason: Mapped[str | None] = mapped_column(String(500))
+    # Posting (#150): when it was Posted and its Posting time; publishing tries,
+    # the retry, the last error and TikTok's publish id; who marked it posted
+    # (after the Song check), and when.
+    queued_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    scheduled_for: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    publish_attempts: Mapped[int] = mapped_column(default=0, server_default="0")
+    publish_retry_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    publish_error: Mapped[str | None] = mapped_column(String(500))
+    publish_id: Mapped[str | None] = mapped_column(String(100))
+    posted_by_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
+    posted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     photos: Mapped[list["WeeklySlideshowPhoto"]] = relationship(
         lazy="selectin",
         order_by="WeeklySlideshowPhoto.position",
         viewonly=True,
     )
-    reviewed_by: Mapped[User | None] = relationship(lazy="joined")
+    reviewed_by: Mapped[User | None] = relationship(
+        lazy="joined", foreign_keys=[reviewed_by_id]
+    )
+    posted_by: Mapped[User | None] = relationship(
+        lazy="joined", foreign_keys=[posted_by_id]
+    )
 
 
 class WeeklySlideshowPhoto(Base):
@@ -801,6 +827,8 @@ class WeeklySlideshowPhoto(Base):
     )
     position: Mapped[int] = mapped_column()
 
+    slideshow: Mapped[WeeklySlideshow] = relationship(lazy="joined", viewonly=True)
+
 
 class PublishLink(Base):
     """A short-lived public link to one Medium of one Scheduled post, for the
@@ -811,8 +839,12 @@ class PublishLink(Base):
 
     # Random, at least 128 bits (secrets.token_urlsafe).
     code: Mapped[str] = mapped_column(String(64), primary_key=True)
-    suggestion_id: Mapped[int] = mapped_column(
+    # A Scheduled post's, or (#150) a Weekly slideshow's.
+    suggestion_id: Mapped[int | None] = mapped_column(
         ForeignKey("post_suggestions.id", ondelete="CASCADE"), index=True
+    )
+    slideshow_id: Mapped[int | None] = mapped_column(
+        ForeignKey("weekly_slideshows.id", ondelete="CASCADE"), index=True
     )
     medium_id: Mapped[int] = mapped_column(
         ForeignKey("weekly_media.id", ondelete="CASCADE")

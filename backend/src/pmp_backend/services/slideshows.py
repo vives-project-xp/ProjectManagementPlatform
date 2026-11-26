@@ -8,8 +8,12 @@ from the Projects' titles; any Teacher or the Superuser reviews it. Posting it
 comes with #150."""
 
 import asyncio
+import io
 import json
 import logging
+import re
+import secrets
+import zipfile
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -22,19 +26,28 @@ from sqlalchemy.orm import Session
 from pmp_backend.models import (
     PostSuggestion,
     Project,
+    PublishLink,
     User,
     WeeklyMedium,
     WeeklySlideshow,
     WeeklySlideshowPhoto,
     WeeklyUpdate,
 )
-from pmp_backend.services import post_ai, social, suggestions
+from pmp_backend.services import (
+    post_ai,
+    posting,
+    social,
+    suggestions,
+    tiktok_connection,
+)
+from pmp_backend.services.instagram import ChannelError
 from pmp_backend.services.post_ai import LLM, AiError, AiRequest
 from pmp_backend.services.suggestions import (
     ReviewConflictError,
     ReviewError,
     ReviewNotFoundError,
 )
+from pmp_backend.settings import Settings
 
 log = logging.getLogger(__name__)
 
@@ -50,6 +63,22 @@ EVERY_SECONDS = 60
 POSTED = ("scheduled", "published", "to_post_by_hand", "posted_by_hand")
 # How many recent Upload weeks are looked at for the latest one.
 RECENT_WEEKS = 10
+# Posting (#150): a failure is tried again once 10 minutes later.
+PUBLISH_RETRY = timedelta(minutes=10)
+MAX_PUBLISH_ATTEMPTS = 2
+LINK_LIFETIME = timedelta(hours=1)
+# Not Posted by the next cut-off: dropped, so only one slideshow ever waits.
+STILL_IN_REVIEW = ("generating", "waiting", "failed")
+NOT_IN_TIME = "Not posted in time: the next Weekly slideshow was put together."
+# Sent or to send by hand: staff still have to finish it.
+TO_FINISH = ("in_inbox", "to_post_by_hand")
+NOT_AUTOMATIC = (
+    "The slideshow goes to TikTok automatically only once the site is reachable "
+    "from the internet and TikTok is connected: post it yourself."
+)
+NEEDS_SONG_CHECK = (
+    "Tick that you listened to the song and posted it in the TikTok app first."
+)
 
 INSTRUCTIONS = """\
 You write the text of one TikTok photo slideshow for VIVES University of
@@ -195,6 +224,17 @@ def build_due(session: Session, now: datetime) -> int | None:
         # Another round made it at the same moment.
         session.rollback()
         return None
+    # An older one that still wasn't Posted is dropped (#150).
+    for old in session.scalars(
+        select(WeeklySlideshow)
+        .where(
+            WeeklySlideshow.id != slideshow.id,
+            WeeklySlideshow.state.in_(STILL_IN_REVIEW),
+        )
+        .with_for_update(of=WeeklySlideshow)
+    ):
+        old.state, old.next_attempt_at = "dropped", None
+        old.publish_error = NOT_IN_TIME
     _fill(session, slideshow, pick(posted(session, week)))
     session.commit()
     return slideshow.id
@@ -264,7 +304,17 @@ def attempt(session: Session, llm: LLM, slideshow_id: int, now: datetime) -> Non
     session.commit()
 
 
-def run_once(session: Session, llm: LLM, now: datetime) -> None:
+def run_once(
+    session: Session,
+    llm: LLM,
+    now: datetime,
+    tiktok=None,
+    settings: Settings | None = None,
+) -> None:
+    """Put together a due slideshow, let the AI write, and (#150) send a
+    Posted slideshow whose Posting time has come."""
+    if settings is not None:
+        publish_due(session, tiktok, settings, now)
     build_due(session, now)
     due = session.scalars(
         select(WeeklySlideshow.id).where(
@@ -278,12 +328,19 @@ def run_once(session: Session, llm: LLM, now: datetime) -> None:
         attempt(session, llm, slideshow_id, now)
 
 
-async def run_forever(make_session: Callable[[], Session], llm_of) -> None:
-    """Every minute: put together a due slideshow and let the AI write."""
+async def run_forever(
+    make_session: Callable[[], Session],
+    llm_of,
+    tiktok_of=None,
+    settings: Settings | None = None,
+) -> None:
+    """Every minute: send a due slideshow, put together a new one, and let
+    the AI write."""
 
     def run() -> None:
         with make_session() as session:
-            run_once(session, llm_of(), datetime.now(BRUSSELS))
+            tiktok = tiktok_of() if tiktok_of else None
+            run_once(session, llm_of(), datetime.now(BRUSSELS), tiktok, settings)
 
     while True:
         try:
@@ -326,8 +383,10 @@ def latest(session: Session) -> SlideshowView | None:
         .limit(1)
         .execution_options(populate_existing=True)
     )
-    if slideshow is None:
-        return None
+    return view_of(session, slideshow) if slideshow else None
+
+
+def view_of(session: Session, slideshow: WeeklySlideshow) -> SlideshowView:
     now = _now(session)
     media: dict[int, social.MediumView] = {}
     projects: list[ProjectPhotos] = []
@@ -441,3 +500,200 @@ def refuse(session: Session, user: User, slideshow_id: int, reason: str | None) 
     slideshow.refusal_reason = (reason or "").strip()[:500] or None
     _reviewed(session, slideshow, user)
     session.commit()
+
+
+# Posting (#150)
+
+
+def posting_time(session: Session, slideshow: WeeklySlideshow) -> datetime:
+    """Its Posting time: the first slideshow Posting time after it was put
+    together (Friday 18:00 after the Friday 12:00 cut-off)."""
+    settings = social.get_settings(session)
+    return next(
+        posting.posting_times(
+            [settings.slideshow_weekday],
+            [settings.slideshow_time.strftime("%H:%M")],
+            slideshow.created_at,
+        )
+    )
+
+
+def post(session: Session, user: User, slideshow_id: int) -> None:
+    """Accept it: it waits for its Posting time, or goes out within a minute
+    when that has passed."""
+    slideshow = _locked(session, slideshow_id, {"waiting"})
+    if not slideshow.photos:
+        raise ReviewError("The slideshow has no photos.")
+    now = _now(session)
+    slideshow.state = "scheduled"
+    slideshow.queued_at = now
+    slideshow.scheduled_for = max(posting_time(session, slideshow), now)
+    slideshow.publish_attempts, slideshow.publish_error = 0, None
+    slideshow.publish_retry_at = None
+    _reviewed(session, slideshow, user)
+    session.commit()
+
+
+def pull_back(session: Session, user: User, slideshow_id: int) -> None:
+    """Back to Review, until it goes out."""
+    slideshow = _locked(session, slideshow_id, {"scheduled"})
+    slideshow.state = "waiting"
+    slideshow.queued_at = slideshow.scheduled_for = None
+    _reviewed(session, slideshow, user)
+    session.commit()
+
+
+def mark_posted(
+    session: Session, user: User, slideshow_id: int, song_checked: bool
+) -> None:
+    """Someone chose the song and posted it in the TikTok app."""
+    if not song_checked:
+        raise ReviewError(NEEDS_SONG_CHECK)
+    slideshow = _locked(session, slideshow_id, set(TO_FINISH))
+    slideshow.state = "posted"
+    slideshow.posted_by_id = user.id
+    slideshow.posted_at = _now(session)
+    for photo in slideshow.photos:
+        medium = session.get(WeeklyMedium, photo.medium_id)
+        if medium is not None:
+            medium.posted = True
+    session.commit()
+
+
+def _to_post_by_hand(slideshow: WeeklySlideshow, reason: str) -> None:
+    slideshow.state = "to_post_by_hand"
+    slideshow.publish_error = reason[:500]
+    slideshow.publish_retry_at = None
+
+
+def _links(
+    session: Session, settings: Settings, slideshow: WeeklySlideshow, now: datetime
+) -> list[str]:
+    """A fresh Publish link per photo, in order, committed before TikTok is
+    asked to download them."""
+    session.execute(delete(PublishLink).where(PublishLink.slideshow_id == slideshow.id))
+    urls = []
+    for photo in slideshow.photos:
+        link = PublishLink(
+            code=secrets.token_urlsafe(24),
+            slideshow_id=slideshow.id,
+            medium_id=photo.medium_id,
+            expires_at=now + LINK_LIFETIME,
+        )
+        session.add(link)
+        urls.append(f"{settings.public_media_url.rstrip('/')}/social/{link.code}")
+    return urls
+
+
+def publish_due(
+    session: Session, tiktok, settings: Settings, now: datetime
+) -> list[int]:
+    """Send every Posted slideshow whose Posting time (or retry) has come to
+    the TikTok inbox, or to To post today when that can't be done
+    automatically; the ids sent to the inbox."""
+    token = tiktok_connection.access_token(session, settings, now)
+    session.commit()
+    due = session.scalars(
+        select(WeeklySlideshow.id).where(
+            WeeklySlideshow.state == "scheduled",
+            WeeklySlideshow.scheduled_for <= now,
+            WeeklySlideshow.publish_retry_at.is_(None)
+            | (WeeklySlideshow.publish_retry_at <= now),
+        )
+    ).all()
+    sent = []
+    for slideshow_id in due:
+        slideshow = session.scalar(
+            select(WeeklySlideshow)
+            .where(
+                WeeklySlideshow.id == slideshow_id,
+                WeeklySlideshow.state == "scheduled",
+            )
+            .execution_options(populate_existing=True)
+        )
+        if slideshow is None:
+            continue
+        if token is None or tiktok is None or not settings.public_media_url:
+            _to_post_by_hand(slideshow, NOT_AUTOMATIC)
+            session.commit()
+            continue
+        urls = _links(session, settings, slideshow, now)
+        # The links must exist before TikTok downloads the photos.
+        session.commit()
+        try:
+            slideshow.publish_id = tiktok.send_photos_to_inbox(
+                token, urls, slideshow.title or "", slideshow.caption or ""
+            )
+        except ChannelError as error:
+            log.warning("Sending slideshow %s failed: %s", slideshow_id, error)
+            slideshow.publish_attempts += 1
+            if slideshow.publish_attempts >= MAX_PUBLISH_ATTEMPTS:
+                _to_post_by_hand(slideshow, f"Sending to TikTok failed: {error}")
+            else:
+                slideshow.publish_error = str(error)[:500]
+                slideshow.publish_retry_at = now + PUBLISH_RETRY
+        else:
+            slideshow.state = "in_inbox"
+            slideshow.publish_error = slideshow.publish_retry_at = None
+            sent.append(slideshow_id)
+        # Its links stop working once TikTok has them (or gave up).
+        session.execute(
+            delete(PublishLink).where(PublishLink.slideshow_id == slideshow_id)
+        )
+        session.commit()
+    return sent
+
+
+@dataclass(frozen=True)
+class Lists:
+    """For Scheduled posts: slideshows to finish (in the TikTok inbox or to
+    post by hand), Scheduled, and lately posted."""
+
+    to_finish: list[SlideshowView]
+    scheduled: list[SlideshowView]
+    posted: list[SlideshowView]
+
+
+def lists(session: Session) -> Lists:
+    def found(*states, order) -> list[SlideshowView]:
+        return [
+            view_of(session, slideshow)
+            for slideshow in session.scalars(
+                select(WeeklySlideshow)
+                .where(WeeklySlideshow.state.in_(states))
+                .order_by(order)
+                .limit(10)
+                .execution_options(populate_existing=True)
+            )
+        ]
+
+    return Lists(
+        to_finish=found(*TO_FINISH, order=WeeklySlideshow.scheduled_for),
+        scheduled=found("scheduled", order=WeeklySlideshow.scheduled_for),
+        posted=found("posted", order=WeeklySlideshow.posted_at.desc()),
+    )
+
+
+def _file_name(position: int, title: str) -> str:
+    slug = re.sub(r"[^A-Za-z0-9]+", "-", title).strip("-").lower() or "project"
+    return f"{position:02d}-{slug[:40]}.jpg"
+
+
+def photos_zip(session: Session, media_dir, slideshow_id: int) -> tuple[str, bytes]:
+    """The slideshow's photos in order as one zip, to post by hand."""
+    slideshow = session.get(WeeklySlideshow, slideshow_id)
+    if slideshow is None:
+        raise ReviewNotFoundError("This Weekly slideshow doesn't exist (any more).")
+    settings_dir = media_dir
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_STORED) as archive:
+        for position, photo in enumerate(slideshow.photos, start=1):
+            medium = session.get(WeeklyMedium, photo.medium_id)
+            project = session.get(Project, photo.project_id)
+            if medium is None or project is None:
+                continue
+            path = social.medium_path(settings_dir, project.id, medium)
+            if path.is_file():
+                archive.write(path, _file_name(position, project.title))
+    day = slideshow.closes_at.astimezone(BRUSSELS).strftime("%Y-%m-%d")
+    return f"weekly-slideshow-{day}.zip", buffer.getvalue()

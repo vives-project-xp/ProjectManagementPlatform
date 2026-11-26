@@ -59,6 +59,9 @@ services:
       TIKTOK_CLIENT_KEY: ${TIKTOK_CLIENT_KEY:-}
       TIKTOK_CLIENT_SECRET: ${TIKTOK_CLIENT_SECRET:-}
       TIKTOK_REDIRECT_URI: ${TIKTOK_REDIRECT_URI:-https://github.com/vives-project-xp/ProjectManagementPlatform}
+      # TikTok's URL-prefix verification file for PUBLIC_MEDIA_URL/social/ (#150).
+      TIKTOK_VERIFICATION_FILE: ${TIKTOK_VERIFICATION_FILE:-}
+      TIKTOK_VERIFICATION_CONTENT: ${TIKTOK_VERIFICATION_CONTENT:-}
       # The 08:30 daily email (spec #68): the mailbox it is sent from. Without
       # SMTP_HOST no email is sent.
       SMTP_HOST: ${SMTP_HOST:-}

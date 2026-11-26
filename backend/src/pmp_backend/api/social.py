@@ -25,6 +25,7 @@ from pmp_backend.api.deps import (
     TeacherOrSuperuserDep,
 )
 from pmp_backend.api.schemas import ProjectRefOut
+from pmp_backend.models import WeeklySlideshow
 from pmp_backend.services import (
     clients,
     post_ai,
@@ -240,6 +241,8 @@ class WeeklyUpdateOut(BaseModel):
     tiktok_state: str | None
     tiktok_scheduled_for: datetime | None
     tiktok_posted_at: datetime | None
+    # The Posting time of the Weekly slideshow with one of its photos (#150).
+    slideshow_at: datetime | None
 
     @classmethod
     def of(cls, week: WeekView) -> "WeeklyUpdateOut":
@@ -788,6 +791,12 @@ class SlideshowOut(BaseModel):
     reviewed_by: str | None
     reviewed_at: datetime | None
     refusal_reason: str | None
+    # Posting (#150): its Posting time once Posted; why sending failed (or
+    # "Not posted in time" when dropped); who marked it posted, and when.
+    scheduled_for: datetime | None
+    publish_error: str | None
+    posted_by: str | None
+    posted_at: datetime | None
     # In order.
     photos: list[SlideshowPhotoOut]
     # The week's Posted Projects with photos.
@@ -815,6 +824,14 @@ def _slideshow_out(view: slideshows.SlideshowView) -> SlideshowOut:
         else None,
         reviewed_at=slideshow.reviewed_at,
         refusal_reason=slideshow.refusal_reason,
+        scheduled_for=slideshow.scheduled_for,
+        publish_error=slideshow.publish_error,
+        posted_by=(
+            slideshow.posted_by.full_name if slideshow.posted_by else "Deleted user"
+        )
+        if slideshow.state == "posted"
+        else None,
+        posted_at=slideshow.posted_at,
         photos=[
             SlideshowPhotoOut(
                 project=ref(p.project), medium=MediumOut(**vars(p.medium))
@@ -897,6 +914,84 @@ def generate_slideshow_again(
 
     background.add_task(write)
     return _latest_slideshow(session)
+
+
+@router.post("/slideshows/{slideshow_id}/post")
+def post_slideshow(
+    slideshow_id: int, session: SessionDep, user: TeacherOrSuperuserDep
+) -> SlideshowOut:
+    """Accept it: it waits for its Posting time, or goes out within a minute
+    when that has passed (#150)."""
+    slideshows.post(session, user, slideshow_id)
+    return _slideshow_out(_view(session, slideshow_id))
+
+
+@router.post("/slideshows/{slideshow_id}/pull-back")
+def pull_back_slideshow(
+    slideshow_id: int, session: SessionDep, user: TeacherOrSuperuserDep
+) -> SlideshowOut:
+    slideshows.pull_back(session, user, slideshow_id)
+    return _slideshow_out(_view(session, slideshow_id))
+
+
+class SongCheckIn(BaseModel):
+    # "I listened to the song and posted it in the TikTok app."
+    song_checked: bool = False
+
+
+@router.post("/slideshows/{slideshow_id}/posted")
+def mark_slideshow_posted(
+    slideshow_id: int,
+    body: SongCheckIn,
+    session: SessionDep,
+    user: TeacherOrSuperuserDep,
+) -> SlideshowOut:
+    """Posted in the TikTok app, after the Song check."""
+    slideshows.mark_posted(session, user, slideshow_id, body.song_checked)
+    return _slideshow_out(_view(session, slideshow_id))
+
+
+@router.get("/slideshows/{slideshow_id}/photos.zip")
+def slideshow_photos_zip(
+    slideshow_id: int,
+    session: SessionDep,
+    settings: SettingsDep,
+    user: TeacherOrSuperuserDep,
+) -> Response:
+    """The photos in order (01-<project>.jpg …), to post by hand."""
+    name, data = slideshows.photos_zip(session, settings.social_media_dir, slideshow_id)
+    return Response(
+        data,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{name}"'},
+    )
+
+
+class SlideshowListsOut(BaseModel):
+    # In the TikTok inbox or to post by hand; Scheduled; lately posted.
+    to_finish: list[SlideshowOut]
+    scheduled: list[SlideshowOut]
+    posted: list[SlideshowOut]
+
+
+@router.get("/slideshows")
+def slideshow_lists(
+    session: SessionDep, user: TeacherOrSuperuserDep
+) -> SlideshowListsOut:
+    found = slideshows.lists(session)
+    session.commit()
+    return SlideshowListsOut(
+        to_finish=[_slideshow_out(v) for v in found.to_finish],
+        scheduled=[_slideshow_out(v) for v in found.scheduled],
+        posted=[_slideshow_out(v) for v in found.posted],
+    )
+
+
+def _view(session, slideshow_id: int) -> slideshows.SlideshowView:
+    slideshow = session.get(WeeklySlideshow, slideshow_id, populate_existing=True)
+    view = slideshows.view_of(session, slideshow)
+    session.commit()
+    return view
 
 
 @router.post("/slideshows/{slideshow_id}/refuse")
