@@ -34,6 +34,7 @@ from pmp_backend.services.social import clean_up_forever as clean_up_media_forev
 from pmp_backend.services.social import resume_processing
 from pmp_backend.services.tiktok import HttpTikTok
 from pmp_backend.services.trello import HttpTrello
+from pmp_backend.services.vives_login import HttpOidc
 from pmp_backend.settings import Settings
 
 
@@ -126,6 +127,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.instagram = HttpInstagram(settings)
     # TikTok as a Channel (spec #145); tests replace it with testing.FakeTikTok.
     app.state.tiktok = HttpTikTok(settings)
+    # VIVES login's Authentik (ADR 0011); tests use testing.FakeAuthentik.
+    app.state.oidc = HttpOidc()
     app.include_router(auth.router)
     app.include_router(users.router)
     app.include_router(programmes.router)

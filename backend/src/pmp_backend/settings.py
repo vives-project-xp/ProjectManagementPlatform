@@ -71,6 +71,13 @@ class Settings(DatabaseSettings):
     )
     tiktok_api_url: str = "https://open.tiktokapis.com"
     tiktok_auth_url: str = "https://www.tiktok.com/v2/auth/authorize/"
+    # VIVES login through Authentik (spec #160, ADR 0011): the application's
+    # Issuer URL (it ends with /application/o/<slug>/), Client ID and secret.
+    # Without all three VIVES login is off; the setup screen (#162) is the other
+    # way to set them. The redirect URI is SITE_URL + /auth/callback.
+    authentik_issuer_url: str | None = None
+    authentik_client_id: str | None = None
+    authentik_client_secret: SecretStr | None = None
     # TikTok's URL-prefix verification (#150): the file name TikTok gives (e.g.
     # "tiktokAbC123.txt") and its content, served at PUBLIC_MEDIA_URL/social/
     # so TikTok accepts the Weekly slideshow's photo links from there.

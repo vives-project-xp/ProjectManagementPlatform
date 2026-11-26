@@ -59,6 +59,12 @@ services:
       TIKTOK_CLIENT_KEY: ${TIKTOK_CLIENT_KEY:-}
       TIKTOK_CLIENT_SECRET: ${TIKTOK_CLIENT_SECRET:-}
       TIKTOK_REDIRECT_URI: ${TIKTOK_REDIRECT_URI:-https://github.com/vives-project-xp/ProjectManagementPlatform}
+      # VIVES login through Authentik (spec #160, ADR 0011): the application's
+      # Issuer URL, Client ID and secret; empty means VIVES login is off (or set
+      # on the Superuser's VIVES login screen).
+      AUTHENTIK_ISSUER_URL: ${AUTHENTIK_ISSUER_URL:-}
+      AUTHENTIK_CLIENT_ID: ${AUTHENTIK_CLIENT_ID:-}
+      AUTHENTIK_CLIENT_SECRET: ${AUTHENTIK_CLIENT_SECRET:-}
       # TikTok's URL-prefix verification file for PUBLIC_MEDIA_URL/social/ (#150).
       TIKTOK_VERIFICATION_FILE: ${TIKTOK_VERIFICATION_FILE:-}
       TIKTOK_VERIFICATION_CONTENT: ${TIKTOK_VERIFICATION_CONTENT:-}

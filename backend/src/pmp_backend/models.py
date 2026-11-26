@@ -65,6 +65,8 @@ class User(Base):
     last_name: Mapped[str] = mapped_column(String(100))
     email: Mapped[str] = mapped_column(String(254), unique=True)
     password_hash: Mapped[str] = mapped_column(String(255))
+    # Authentik's fixed id for this person, once they used VIVES login (#161).
+    authentik_sub: Mapped[str | None] = mapped_column(String(255), unique=True)
     # As GitHub spells it (spec #49); None until the User saves one.
     github_username: Mapped[str | None] = mapped_column(String(39))
     # The 08:30 Daily email on days with deadlines or meetings (spec #68).

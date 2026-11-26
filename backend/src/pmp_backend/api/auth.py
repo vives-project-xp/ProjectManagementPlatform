@@ -8,7 +8,7 @@ from pmp_backend.api.deps import SessionDep, TemporaryPasswordUserDep, get_setti
 from pmp_backend.api.schemas import UserOut
 from pmp_backend.models import User
 from pmp_backend.security import issue_token
-from pmp_backend.services import auth
+from pmp_backend.services import auth, vives_login
 from pmp_backend.settings import Settings
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -90,3 +90,60 @@ def logout(user: TemporaryPasswordUserDep) -> Response:
     # Tokens are stateless; the frontend forgets the token. Kept as an explicit
     # endpoint so logging out works the same way for every client.
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# VIVES login (spec #160, ADR 0011)
+
+
+class VivesStartOut(BaseModel):
+    # False while VIVES login isn't set up: the login page shows no button.
+    configured: bool
+    authorization_endpoint: str | None = None
+    client_id: str | None = None
+    scope: str | None = None
+    redirect_uri: str | None = None
+
+
+@router.get("/vives/start")
+def vives_start(
+    request: Request, settings: Annotated[Settings, Depends(get_settings)]
+) -> VivesStartOut:
+    """What the frontend needs to send the browser to Authentik (it adds its
+    own state, nonce and PKCE challenge)."""
+    config = vives_login.config_from(settings)
+    if config is None:
+        return VivesStartOut(configured=False)
+    found = vives_login.start(request.app.state.oidc, config, settings)
+    return VivesStartOut(configured=True, **vars(found))
+
+
+class VivesLoginIn(BaseModel):
+    code: str
+    code_verifier: str
+    nonce: str
+
+
+@router.post("/vives")
+def vives(
+    body: VivesLoginIn,
+    request: Request,
+    session: SessionDep,
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> LoginOut:
+    """Finish a VIVES login: the code Authentik gave the browser, the PKCE
+    verifier and nonce the frontend kept; the usual session token."""
+    config = vives_login.config_from(settings)
+    if config is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="VIVES login isn't set up."
+        )
+    user = vives_login.log_in(
+        session,
+        request.app.state.oidc,
+        config,
+        settings,
+        code=body.code,
+        code_verifier=body.code_verifier,
+        nonce=body.nonce,
+    )
+    return login_out(user, settings)

@@ -259,7 +259,7 @@ def reactivate_user(session: Session, user_id: int) -> User:
     return user
 
 
-def _why_not_deletable(session: Session, user: User) -> str | None:
+def why_linked(session: Session, user: User) -> str | None:
     """Why this User is linked to a Project, or None when they are not."""
     if user.project is not None:
         return f"is a Member of {user.project.title}"
@@ -290,7 +290,7 @@ def delete_user(session: Session, user_id: int) -> None:
         raise UserNotFoundError("This User does not exist.")
     if user.role == Role.SUPERUSER.value:
         raise UserConflictError("The Superuser cannot be deleted.")
-    reason = _why_not_deletable(session, user)
+    reason = why_linked(session, user)
     if reason is not None:
         raise UserConflictError(
             f"{user.full_name} {reason}, so they cannot be deleted. "
