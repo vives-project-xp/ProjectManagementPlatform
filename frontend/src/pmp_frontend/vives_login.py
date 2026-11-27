@@ -16,6 +16,8 @@ from pmp_frontend.shell import TOKEN_KEY, ErrorMessage, home
 from pmp_frontend.theme import frame
 
 PENDING_KEY = "vives_login"
+# The Setup test's report, shown once on the VIVES login screen (#162).
+TEST_REPORT_KEY = "vives_login_test_report"
 OLD_LINK = "This login link is old or was already used. Try again."
 
 
@@ -24,8 +26,9 @@ def _challenge(verifier: str) -> str:
     return base64.urlsafe_b64encode(digest).rstrip(b"=").decode()
 
 
-def authorize_url(start: dict[str, Any]) -> str:
-    """Authentik's login page for a fresh login, remembering its secrets."""
+def authorize_url(start: dict[str, Any], purpose: str = "login") -> str:
+    """Authentik's login page for a fresh login (or the Superuser's Setup
+    test, #162), remembering its secrets."""
     state = secrets.token_urlsafe(24)
     nonce = secrets.token_urlsafe(24)
     verifier = secrets.token_urlsafe(48)
@@ -33,6 +36,7 @@ def authorize_url(start: dict[str, Any]) -> str:
         "state": state,
         "nonce": nonce,
         "verifier": verifier,
+        "purpose": purpose,
     }
     query = urlencode(
         {
@@ -71,6 +75,21 @@ def login_card(start: dict[str, Any] | None) -> None:
 
 
 def register() -> None:
+    @ui.page("/auth/break-glass")
+    async def break_glass(code: str | None = None) -> None:
+        """A one-time login link made on the VM (#163)."""
+        with frame("Log in"), ui.column().classes("w-full items-center gap-4 pt-8"):
+            with ui.card().classes("w-full max-w-md").mark("break-glass"):
+                ui.label("One-time login").classes("text-h6")
+                problem = ErrorMessage()
+            try:
+                token, user = await api.break_glass(code or "")
+            except api.ApiError as failure:
+                problem.show(failure.message)
+                return
+            app.storage.user[TOKEN_KEY] = token
+            ui.navigate.to(home(user))
+
     @ui.page("/auth/callback")
     async def callback(
         code: str | None = None,
@@ -89,6 +108,20 @@ def register() -> None:
                 return
             if not pending or not code or state != pending["state"]:
                 problem.show(OLD_LINK)
+                return
+            if pending.get("purpose") == "test":
+                try:
+                    report = await api.vives_login_setup_test(
+                        app.storage.user.get(TOKEN_KEY, ""),
+                        code,
+                        pending["verifier"],
+                        pending["nonce"],
+                    )
+                except api.ApiError as failure:
+                    problem.show(failure.message)
+                    return
+                app.storage.user[TEST_REPORT_KEY] = report
+                ui.navigate.to("/vives-login")
                 return
             try:
                 token, user = await api.vives_login(

@@ -1,14 +1,35 @@
 """VIVES login through Authentik (spec #160, #161), against testing.FakeAuthentik."""
 
+from datetime import UTC, datetime
+
 import pytest
 from fastapi.testclient import TestClient
 
-from pmp_backend.models import Programme, User
+from pmp_backend.models import Programme, User, VivesLoginSettings
 from pmp_backend.testing import FakeAuthentik
 from tests.conftest import add_member, auth, create_project, ready_to_work
 
 
+def switch_on(client: TestClient) -> None:
+    """VIVES login on (the screen's Switch on is tested in its own file)."""
+    with client.app.state.sessionmaker() as session:
+        session.merge(
+            VivesLoginSettings(
+                id=1,
+                group_superuser="pmp-superusers",
+                group_teacher="pmp-teachers",
+                group_student="pmp-students",
+                group_client="pmp-clients",
+                programme_claim="programme",
+                year_claim="year",
+                enabled_at=datetime.now(UTC),
+            )
+        )
+        session.commit()
+
+
 def log_in(client: TestClient, authentik: FakeAuthentik, nonce="nonce-1", **claims):
+    switch_on(client)
     code = authentik.issue(authentik.claims(**claims), nonce=nonce)
     return client.post(
         "/api/auth/vives",
@@ -30,6 +51,7 @@ def stored(client: TestClient, email: str) -> User:
 
 
 def test_start_gives_what_the_frontend_needs(client: TestClient):
+    switch_on(client)
     found = client.get("/api/auth/vives/start").json()
 
     assert found == {
@@ -178,8 +200,8 @@ def test_a_role_change_is_applied_without_links(
 def test_a_role_change_with_links_is_refused(
     client: TestClient, authentik: FakeAuthentik
 ):
-    student = logged_in(client, authentik)["user"]
     staff = ready_to_work(client, "superuser")
+    student = logged_in(client, authentik)["user"]
     project = create_project(client, staff, "Drone")
     add_member(client, staff, project, student["id"])
 
@@ -194,8 +216,8 @@ def test_a_role_change_with_links_is_refused(
 
 
 def test_a_deactivated_user_is_refused(client: TestClient, authentik: FakeAuthentik):
-    student = logged_in(client, authentik)["user"]
     staff = ready_to_work(client, "superuser")
+    student = logged_in(client, authentik)["user"]
     client.post(f"/api/users/{student['id']}/deactivate", headers=staff)
 
     response = log_in(client, authentik)
@@ -231,6 +253,7 @@ def test_untrusted_tokens_are_refused(
     elif trick == "other nonce":
         nonce = "someone-elses-nonce"
     if trick == "used code":
+        switch_on(client)
         code = authentik.issue(authentik.claims())
         body = {"code": code, "code_verifier": "v", "nonce": "nonce-1"}
         assert client.post("/api/auth/vives", json=body).status_code == 200
@@ -245,10 +268,22 @@ def test_untrusted_tokens_are_refused(
 
 
 def test_authentik_down_is_a_503(client: TestClient, authentik: FakeAuthentik):
+    switch_on(client)
     authentik.unreachable = True
 
     assert client.get("/api/auth/vives/start").status_code == 503
     assert log_in(client, authentik).status_code == 503
+
+
+def test_while_off_there_is_no_vives_login(client: TestClient):
+    switch_on(client)
+    with client.app.state.sessionmaker() as session:
+        session.get(VivesLoginSettings, 1).enabled_at = None
+        session.commit()
+
+    assert client.get("/api/auth/vives/start").json()["configured"] is False
+    body = {"code": "x", "code_verifier": "v", "nonce": "n"}
+    assert client.post("/api/auth/vives", json=body).status_code == 404
 
 
 def test_without_settings_there_is_no_vives_login(settings, authentik):

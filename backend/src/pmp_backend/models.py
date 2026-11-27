@@ -854,6 +854,59 @@ class PublishLink(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
+class VivesLoginSettings(Base):
+    """The VIVES login connection (spec #160, #162), one row, set by the
+    Superuser on the VIVES login screen; AUTHENTIK_* in the environment wins.
+    The secret is never returned by the API."""
+
+    __tablename__ = "vives_login_settings"
+    __table_args__ = (CheckConstraint("id = 1", name="ck_vives_login_single"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    issuer_url: Mapped[str | None] = mapped_column(String(500))
+    client_id: Mapped[str | None] = mapped_column(String(255))
+    client_secret: Mapped[str | None] = mapped_column(Text)
+    group_superuser: Mapped[str] = mapped_column(String(100))
+    group_teacher: Mapped[str] = mapped_column(String(100))
+    group_student: Mapped[str] = mapped_column(String(100))
+    group_client: Mapped[str] = mapped_column(String(100))
+    programme_claim: Mapped[str] = mapped_column(String(100))
+    year_claim: Mapped[str] = mapped_column(String(100))
+    # The last Setup test: when, by whom, the Role it gave (null when it was
+    # refused) and a fingerprint of the settings it was done with.
+    tested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    tested_by_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
+    tested_role: Mapped[str | None] = mapped_column(String(20))
+    tested_fingerprint: Mapped[str | None] = mapped_column(String(64))
+    # Switched on: from then on VIVES login only (#163).
+    enabled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    enabled_by_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
+
+    enabled_by: Mapped[User | None] = relationship(
+        lazy="joined", foreign_keys=[enabled_by_id]
+    )
+
+
+class BreakGlassCode(Base):
+    """A one-time login link for a Superuser, made on the VM (#163): only the
+    hash of its code, valid 15 minutes, used once."""
+
+    __tablename__ = "break_glass_codes"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    code_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class ChannelToken(Base):
     """A Channel's long-lived access token (#117), refreshed before it expires;
     never returned by the API. First taken from the settings (INSTAGRAM_TOKEN)."""

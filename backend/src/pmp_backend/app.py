@@ -21,6 +21,7 @@ from pmp_backend.api import (
     trello,
     users,
 )
+from pmp_backend.api import vives_login as vives_login_api
 from pmp_backend.database import is_reachable, make_engine
 from pmp_backend.errors import Conflict, Forbidden, NotFound, Refused, Unavailable
 from pmp_backend.services import daily_email, mail, posting, slideshows, suggestions
@@ -130,6 +131,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # VIVES login's Authentik (ADR 0011); tests use testing.FakeAuthentik.
     app.state.oidc = HttpOidc()
     app.include_router(auth.router)
+    app.include_router(vives_login_api.router)
     app.include_router(users.router)
     app.include_router(programmes.router)
     app.include_router(projects.router)

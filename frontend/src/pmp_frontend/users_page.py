@@ -90,6 +90,9 @@ def register() -> None:
     @role_page("/users", "Users", {"superuser"})
     async def users_page(user: api.CurrentUser) -> None:
         programmes = await api.programmes(token())
+        vives = await api.vives_start()
+        # People are added in VIVES login (Authentik) once it is on (#163).
+        vives_on = bool(vives and vives.get("configured"))
 
         async def refresh() -> None:
             listed = await api.list_users(
@@ -160,8 +163,14 @@ def register() -> None:
         with ui.row().classes("w-full items-center"):
             ui.label("Users").classes("text-h4")
             ui.space()
-            import_button(programmes, refresh)
-            ui.button("New user", on_click=open_dialog).mark("new-user")
+            if vives_on:
+                ui.label(
+                    "People are added in VIVES login (Authentik): they appear here "
+                    "after their first login."
+                ).classes("text-caption").mark("users-from-vives-login")
+            else:
+                import_button(programmes, refresh)
+                ui.button("New user", on_click=open_dialog).mark("new-user")
         with ui.row().classes("items-center gap-4"):
             role_filter = ui.select(
                 ROLE_FILTER, value="", label="Role", on_change=refresh
@@ -196,6 +205,8 @@ def register() -> None:
                 ui.label(error.message)
                 return None
             programmes = await api.programmes(token())
+            vives = await api.vives_start()
+            vives_on = bool(vives and vives.get("configured"))
             is_student = shown["role"] == "student"
             is_client = shown["role"] == "client"
 
@@ -299,6 +310,13 @@ def register() -> None:
                 ).classes("w-full")
                 organisation.mark("edit-organisation")
                 organisation.set_visibility(is_client)
+                if vives_on:
+                    # These come from VIVES login (#163).
+                    for field in (first_name, last_name, email, programme, year):
+                        field.disable()
+                    ui.label(
+                        "Name, email, Programme and Year come from VIVES login."
+                    ).classes("text-caption")
                 error_message = ErrorMessage()
                 save_button = SaveButton(
                     [first_name, last_name, email, programme, year, organisation], save
@@ -311,13 +329,14 @@ def register() -> None:
                 status_button = ui.button(on_click=toggle_active).mark("toggle-active")
                 show_status()
 
-            with ui.card().classes("w-full max-w-lg"):
+            with ui.card().classes("w-full max-w-lg") as reset_card:
                 ui.label("Reset password").classes("text-h6")
                 ui.label("Generates a new Temporary password, shown once.").classes(
                     "text-caption"
                 )
                 reset_error = ErrorMessage()
                 ui.button("Reset password", on_click=reset).mark("reset-password")
+            reset_card.set_visibility(not vives_on)
 
             # Clients have no GitHub username (spec #132).
             if not is_client:

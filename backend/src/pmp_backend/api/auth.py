@@ -8,10 +8,12 @@ from pmp_backend.api.deps import SessionDep, TemporaryPasswordUserDep, get_setti
 from pmp_backend.api.schemas import UserOut
 from pmp_backend.models import User
 from pmp_backend.security import issue_token
-from pmp_backend.services import auth, vives_login
+from pmp_backend.services import auth, break_glass, vives_login
 from pmp_backend.settings import Settings
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
+
+VIVES_ONLY = "Log in with VIVES."
 
 
 class LoginIn(BaseModel):
@@ -48,6 +50,9 @@ def login(
     session: SessionDep,
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> LoginOut:
+    # VIVES login on: no password login on the site at all (ADR 0011).
+    if vives_login.is_on(session):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=VIVES_ONLY)
     guard: auth.LoginGuard = request.app.state.login_guard
     # Checked before the password, so a locked email learns nothing more.
     if guard.is_locked(body.email):
@@ -76,6 +81,8 @@ def me(user: TemporaryPasswordUserDep) -> UserOut:
 def change_password(
     body: ChangePasswordIn, user: TemporaryPasswordUserDep, session: SessionDep
 ) -> Response:
+    if vives_login.is_on(session):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=VIVES_ONLY)
     try:
         auth.change_password(session, user, body.current_password, body.new_password)
     except auth.PasswordChangeError as error:
@@ -96,7 +103,7 @@ def logout(user: TemporaryPasswordUserDep) -> Response:
 
 
 class VivesStartOut(BaseModel):
-    # False while VIVES login isn't set up: the login page shows no button.
+    # False until VIVES login is switched on: the login page shows no button.
     configured: bool
     authorization_endpoint: str | None = None
     client_id: str | None = None
@@ -106,12 +113,15 @@ class VivesStartOut(BaseModel):
 
 @router.get("/vives/start")
 def vives_start(
-    request: Request, settings: Annotated[Settings, Depends(get_settings)]
+    request: Request,
+    session: SessionDep,
+    settings: Annotated[Settings, Depends(get_settings)],
 ) -> VivesStartOut:
     """What the frontend needs to send the browser to Authentik (it adds its
-    own state, nonce and PKCE challenge)."""
-    config = vives_login.config_from(settings)
-    if config is None:
+    own state, nonce and PKCE challenge); only once VIVES login is switched
+    on (#162)."""
+    config = vives_login.config_from(settings, session)
+    if config is None or not vives_login.is_on(session):
         return VivesStartOut(configured=False)
     found = vives_login.start(request.app.state.oidc, config, settings)
     return VivesStartOut(configured=True, **vars(found))
@@ -132,10 +142,10 @@ def vives(
 ) -> LoginOut:
     """Finish a VIVES login: the code Authentik gave the browser, the PKCE
     verifier and nonce the frontend kept; the usual session token."""
-    config = vives_login.config_from(settings)
-    if config is None:
+    config = vives_login.config_from(settings, session)
+    if config is None or not vives_login.is_on(session):
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="VIVES login isn't set up."
+            status_code=status.HTTP_404_NOT_FOUND, detail="VIVES login isn't on."
         )
     user = vives_login.log_in(
         session,
@@ -147,3 +157,17 @@ def vives(
         nonce=body.nonce,
     )
     return login_out(user, settings)
+
+
+class BreakGlassIn(BaseModel):
+    code: str
+
+
+@router.post("/break-glass")
+def use_break_glass(
+    body: BreakGlassIn,
+    session: SessionDep,
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> LoginOut:
+    """Log in with a one-time Break-glass link made on the VM (#163)."""
+    return login_out(break_glass.use(session, body.code), settings)

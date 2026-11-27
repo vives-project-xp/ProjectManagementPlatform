@@ -176,6 +176,50 @@ async def vives_login(
     return body["access_token"], CurrentUser.of(body["user"])
 
 
+async def break_glass(code: str) -> tuple[str, CurrentUser]:
+    """Log in with a one-time Break-glass link (#163)."""
+    body = await _request("POST", "/api/auth/break-glass", json={"code": code})
+    return body["access_token"], CurrentUser.of(body["user"])
+
+
+async def vives_login_screen(token: str) -> dict[str, Any]:
+    """The VIVES login screen (#162, Superuser): redirect_uri, scope,
+    from_environment, issuer_url, client_id, secret_set, groups, programme_claim,
+    year_claim, tested_at, tested_role, test_is_current, enabled_at, enabled_by."""
+    return await _request("GET", "/api/vives-login", token=token)
+
+
+async def save_vives_login(token: str, body: dict[str, Any]) -> dict[str, Any]:
+    return await _request("PUT", "/api/vives-login", token=token, json=body)
+
+
+async def check_vives_login(token: str) -> dict[str, Any]:
+    """Fetch Authentik's configuration and keys; {"message": …}."""
+    return await _request("POST", "/api/vives-login/check", token=token)
+
+
+async def vives_login_test_start(token: str) -> dict[str, Any]:
+    """Where to send the browser for a Setup test (like vives_start)."""
+    return await _request("POST", "/api/vives-login/test-start", token=token)
+
+
+async def vives_login_setup_test(
+    token: str, code: str, code_verifier: str, nonce: str
+) -> dict[str, Any]:
+    """What a Setup test received: email, name, groups, programme, year, and
+    the role it gives or the refusal."""
+    return await _request(
+        "POST",
+        "/api/vives-login/setup-test",
+        token=token,
+        json={"code": code, "code_verifier": code_verifier, "nonce": nonce},
+    )
+
+
+async def switch_on_vives_login(token: str) -> dict[str, Any]:
+    return await _request("POST", "/api/vives-login/switch-on", token=token)
+
+
 async def dev_login_users() -> list[dict[str, Any]] | None:
     """The Users the test login offers (id, name, role), or None when it is off
     (or the backend cannot be reached)."""
